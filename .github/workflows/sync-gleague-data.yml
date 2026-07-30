@@ -1,0 +1,50 @@
+name: Sync G League history
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/**'
+      - '.github/workflows/sync-gleague-data.yml'
+      - 'site.tar.gz'
+permissions:
+  contents: write
+concurrency:
+  group: gleague-history-sync
+  cancel-in-progress: false
+jobs:
+  sync:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Unpack prebuilt site
+        run: |
+          rm -rf site site.tar.gz
+          mkdir -p site
+          cat site.tar.gz.b64.part* | base64 --decode > site.tar.gz
+          tar -xzf site.tar.gz -C site
+      - name: Build all-season G League cards
+        run: node scripts/sync-gleague-data.mjs
+      - name: Audit team reachability and card integrity
+        run: node scripts/audit-gleague-data.mjs
+      - name: Repack deployable site
+        run: |
+          tar -czf site.tar.gz -C site .
+          rm -f site.tar.gz.b64.part*
+          base64 -w 0 site.tar.gz | split -b 260000 -d -a 2 - site.tar.gz.b64.part
+      - name: Commit refreshed historical database
+        run: |
+          git config user.name "TulipBasketball Data Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add site.tar.gz.b64.part* scripts/gleague-data-summary.json
+          if git diff --cached --quiet; then
+            echo "No data changes"
+          else
+            git commit -m "Sync complete G League player-season history"
+            git push
+          fi
