@@ -1,4 +1,5 @@
 name: Sync G League history
+# Explicit default-branch trigger after workflow installation.
 on:
   workflow_dispatch:
   push:
