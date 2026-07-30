@@ -1,6 +1,8 @@
 node_modules/
-dist/
+site/
 .DS_Store
 *.log
 .env
 *.tsbuildinfo
+scripts/nba-career-games.json
+scripts/nba-player-index.json
