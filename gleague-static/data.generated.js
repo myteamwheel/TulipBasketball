@@ -1,0 +1,1 @@
+window.GLEAGUE_DATA={generatedAt:null,complete:false,source:"Historical player-season database is being generated from official sources.",dataCutoff:null,seasons:[],missingSeasons:[],missingTeams:[],counts:{},cards:[]};

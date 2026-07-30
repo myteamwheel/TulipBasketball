@@ -1,0 +1,43 @@
+name: Sync G League history
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/**'
+      - 'gleague-static/**'
+      - '.github/workflows/sync-gleague-data.yml'
+permissions:
+  contents: write
+concurrency:
+  group: gleague-history-sync
+  cancel-in-progress: false
+jobs:
+  sync:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Preserve current NBA site and overlay G League mode
+        run: node scripts/mirror-live-site.mjs
+      - name: Build all-season G League cards
+        run: node scripts/sync-gleague-data.mjs
+      - name: Audit team reachability and card integrity
+        run: node scripts/audit-gleague-data.mjs
+      - name: Package deployable site
+        run: tar -czf site.tar.gz -C site .
+      - name: Commit refreshed historical database
+        run: |
+          git config user.name "TulipBasketball Data Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -f site.tar.gz scripts/gleague-data-summary.json
+          if git diff --cached --quiet; then
+            echo "No data changes"
+          else
+            git commit -m "Sync complete G League player-season history"
+            git push
+          fi

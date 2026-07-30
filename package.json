@@ -1,0 +1,8 @@
+{
+  "name":"tulip-basketball-deployment",
+  "version":"1.0.0",
+  "private":true,
+  "type":"module",
+  "scripts":{"start":"node bootstrap.mjs","sync:gleague":"node scripts/sync-gleague-data.mjs","audit:gleague":"node scripts/audit-gleague-data.mjs"},
+  "engines":{"node":">=20"}
+}
