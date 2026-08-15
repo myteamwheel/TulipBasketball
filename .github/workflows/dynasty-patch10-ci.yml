@@ -27,7 +27,13 @@ jobs:
             fs.mkdirSync(path.dirname(dest),{recursive:true});
             fs.writeFileSync(dest,item.encoding==='base64'?Buffer.from(item.data,'base64'):item.data);
           }
-          console.log(`Reconstructed ${Object.keys(payload).length} files`);
+          const market=path.join('/tmp/dynasty-patch10','src/lib/marketSources.ts');
+          let source=fs.readFileSync(market,'utf8');
+          const before='if (statuses.find((s)=>s.source==="KTC")?.ok && statuses.find((s)=>s.source==="STATSGUY")?.ok) {';
+          const after='if (ktcResult.status === "fulfilled" && sgResult.status === "fulfilled" && statuses.find((s)=>s.source==="KTC")?.ok && statuses.find((s)=>s.source==="STATSGUY")?.ok) {';
+          if(!source.includes(before)) throw new Error('Patch 10 TypeScript hotfix target not found');
+          fs.writeFileSync(market,source.replace(before,after));
+          console.log(`Reconstructed ${Object.keys(payload).length} files and applied settled-result narrowing fix`);
           NODE
       - name: Install dependencies
         working-directory: /tmp/dynasty-patch10
