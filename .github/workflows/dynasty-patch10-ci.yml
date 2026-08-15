@@ -1,0 +1,45 @@
+name: Dynasty Patch 10 CI
+
+on:
+  push:
+    branches: [dynasty-patch10-deploy]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Reconstruct Patch 10 source
+        run: |
+          node <<'NODE'
+          const fs=require('fs'),path=require('path'),zlib=require('zlib');
+          const parts=['payload.0.txt','payload.1.txt','payload.2a.txt','payload.2b.txt','payload.3.txt','payload.4.txt','payload.5.txt','payload.6.txt','payload.7.txt'];
+          let packed='';
+          for (const part of parts) packed += fs.readFileSync(path.join('dynasty-patch10',part),'utf8').trim();
+          if (packed.length !== 75328) throw new Error(`payload length ${packed.length} != 75328`);
+          const payload=JSON.parse(zlib.brotliDecompressSync(Buffer.from(packed,'base64')).toString('utf8'));
+          fs.mkdirSync('/tmp/dynasty-patch10',{recursive:true});
+          for(const [rel,item] of Object.entries(payload)){
+            const dest=path.join('/tmp/dynasty-patch10',rel);
+            fs.mkdirSync(path.dirname(dest),{recursive:true});
+            fs.writeFileSync(dest,item.encoding==='base64'?Buffer.from(item.data,'base64'):item.data);
+          }
+          console.log(`Reconstructed ${Object.keys(payload).length} files`);
+          NODE
+      - name: Install dependencies
+        working-directory: /tmp/dynasty-patch10
+        run: npm ci
+      - name: Generate Prisma client
+        working-directory: /tmp/dynasty-patch10
+        run: npx prisma generate
+      - name: TypeScript validation
+        working-directory: /tmp/dynasty-patch10
+        run: npx tsc --noEmit
+      - name: Next.js build validation
+        working-directory: /tmp/dynasty-patch10
+        env:
+          DATABASE_URL: postgresql://user:pass@127.0.0.1:5432/placeholder
+        run: npx next build
