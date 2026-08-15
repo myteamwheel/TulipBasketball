@@ -31,7 +31,7 @@ jobs:
           NODE
       - name: Install dependencies
         working-directory: /tmp/dynasty-patch10
-        run: npm ci
+        run: npm install
       - name: Generate Prisma client
         working-directory: /tmp/dynasty-patch10
         run: npx prisma generate
