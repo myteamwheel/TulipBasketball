@@ -28,5 +28,5 @@ jobs:
           check '/settings' 'DECISION CENTER + QOL PATCH 11'
           check '/' 'decision dashboard'
           check '/league' 'Power board'
-          check '/players' 'Waiver Radar'
+          check '/players' 'Search + opportunity radar'
           check '/refresh-history' 'Data Health'
