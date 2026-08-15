@@ -8,18 +8,21 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Probe live and Patch 10 URLs
+      - name: Probe production aliases
         shell: bash
         run: |
           set +e
           for url in \
-            'https://dynasty-boys-dashboard.vercel.app' \
-            'https://dynasty-boys-dashboard-jlndv9cdx-myteamwheel-8058s-projects.vercel.app' \
-            'https://dynasty-boys-dashboard-febm8uby3-myteamwheel-8058s-projects.vercel.app' \
-            'https://dynasty-patch10-diagnostic-2apzr5mnl-myteamwheel-8058s-projects.vercel.app'; do
+            'https://dynasty-boys-dashboard.vercel.app/settings' \
+            'https://dynasty-boys-dashboard-myteamwheel-8058s-projects.vercel.app/settings' \
+            'https://dynasty-boys-dashboard-jlndv9cdx-myteamwheel-8058s-projects.vercel.app/settings' \
+            'https://dynasty-boys-dashboard-febm8uby3-myteamwheel-8058s-projects.vercel.app/settings'; do
             echo "===== $url ====="
             curl -sS -L --max-time 20 -o /tmp/body -w 'HTTP=%{http_code} FINAL=%{url_effective}\n' "$url"
-            head -c 1200 /tmp/body || true
+            echo '--- markers ---'
+            grep -oE 'PICK VALUES[^<]{0,120}|PATCH [0-9A-Z+ -]{1,100}|FantasyCalc[^<]{0,100}|Stats Guy[^<]{0,100}' /tmp/body | head -20 || true
+            echo '--- first bytes ---'
+            head -c 500 /tmp/body || true
             echo
             echo
           done
