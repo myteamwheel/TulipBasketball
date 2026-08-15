@@ -1,0 +1,25 @@
+name: Check Vercel Patch 10
+
+on:
+  push:
+    branches: [dynasty-patch10-deploy]
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe live and Patch 10 URLs
+        shell: bash
+        run: |
+          set +e
+          for url in \
+            'https://dynasty-boys-dashboard.vercel.app' \
+            'https://dynasty-boys-dashboard-jlndv9cdx-myteamwheel-8058s-projects.vercel.app' \
+            'https://dynasty-boys-dashboard-febm8uby3-myteamwheel-8058s-projects.vercel.app' \
+            'https://dynasty-patch10-diagnostic-2apzr5mnl-myteamwheel-8058s-projects.vercel.app'; do
+            echo "===== $url ====="
+            curl -sS -L --max-time 20 -o /tmp/body -w 'HTTP=%{http_code} FINAL=%{url_effective}\n' "$url"
+            head -c 1200 /tmp/body || true
+            echo
+            echo
+          done
