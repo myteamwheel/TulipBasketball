@@ -3,6 +3,6 @@
   "version": "0.14.0",
   "private": true,
   "scripts": {
-    "vercel-build": "cp -R recovered-app/. . && npm install && npm run build"
+    "vercel-build": "cp -R recovered-app/. . && npm ci --ignore-scripts && DATABASE_URL=${DATABASE_URL:-postgresql://user:pass@localhost:5432/postgres} npx prisma generate && DATABASE_URL=${DATABASE_URL:-postgresql://user:pass@localhost:5432/postgres} BACKUP_DATABASE_URL=${BACKUP_DATABASE_URL:-postgresql://user:pass@localhost:5432/postgres} npm run build"
   }
 }
