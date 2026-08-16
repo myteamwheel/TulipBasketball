@@ -1,0 +1,48 @@
+name: Dynasty Patch 11 CI
+
+on:
+  push:
+    branches: [dynasty-patch11-command-center]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Reconstruct live Patch 10 and apply Patch 11
+        run: |
+          node <<'NODE'
+          const fs=require('fs'),path=require('path'),zlib=require('zlib');
+          const baseParts=['payload.0.txt','payload.1.txt','payload.2a.txt','payload.2b.txt','payload.3.txt','payload.4.txt','payload.5.txt','payload.6.txt','payload.7.txt'];
+          let packed=''; for(const p of baseParts) packed+=fs.readFileSync(path.join('dynasty-patch10',p),'utf8').trim();
+          if(packed.length!==75328) throw new Error(`Patch 10 payload length ${packed.length}`);
+          const base=JSON.parse(zlib.brotliDecompressSync(Buffer.from(packed,'base64')).toString('utf8'));
+          const root='/tmp/dynasty-patch11'; fs.rmSync(root,{recursive:true,force:true}); fs.mkdirSync(root,{recursive:true});
+          for(const [rel,item] of Object.entries(base)){ const dest=path.join(root,rel); fs.mkdirSync(path.dirname(dest),{recursive:true}); fs.writeFileSync(dest,item.encoding==='base64'?Buffer.from(item.data,'base64'):item.data); }
+          const market=path.join(root,'src/lib/marketSources.ts'); let source=fs.readFileSync(market,'utf8');
+          const before='if (statuses.find((s)=>s.source==="KTC")?.ok && statuses.find((s)=>s.source==="STATSGUY")?.ok) {';
+          const after='if (ktcResult.status === "fulfilled" && sgResult.status === "fulfilled" && statuses.find((s)=>s.source==="KTC")?.ok && statuses.find((s)=>s.source==="STATSGUY")?.ok) {';
+          if(source.includes(before)) fs.writeFileSync(market,source.replace(before,after));
+          let overlayPacked=''; for(let i=0;i<5;i++) overlayPacked+=fs.readFileSync(`dynasty-patch11/overlay.${i}.txt`,'utf8').trim();
+          if(overlayPacked.length!==34076) throw new Error(`Patch 11 overlay length ${overlayPacked.length}`);
+          const overlay=JSON.parse(zlib.brotliDecompressSync(Buffer.from(overlayPacked,'base64')).toString('utf8'));
+          for(const [rel,item] of Object.entries(overlay)){ const dest=path.join(root,rel); fs.mkdirSync(path.dirname(dest),{recursive:true}); fs.writeFileSync(dest,item.encoding==='base64'?Buffer.from(item.data,'base64'):item.data); }
+          console.log(`Reconstructed ${Object.keys(base).length} base files + ${Object.keys(overlay).length} Patch 11 files`);
+          NODE
+      - name: Install dependencies
+        working-directory: /tmp/dynasty-patch11
+        run: npm install
+      - name: Generate Prisma client
+        working-directory: /tmp/dynasty-patch11
+        run: npx prisma generate
+      - name: TypeScript validation
+        working-directory: /tmp/dynasty-patch11
+        run: npx tsc --noEmit
+      - name: Next.js production build
+        working-directory: /tmp/dynasty-patch11
+        env:
+          DATABASE_URL: postgresql://user:pass@127.0.0.1:5432/placeholder
+        run: npx next build
