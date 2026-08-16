@@ -6,32 +6,27 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Verify Patch 13 QOL production
+      - name: Inspect current production and backup health
         shell: bash
         run: |
           set +e
           BASE='https://dynasty-boys-dashboard.vercel.app'
-          echo 'Waiting for Patch 13 production...'
-          for i in {1..18}; do
-            code=$(curl -L --max-time 30 -sS -o /tmp/root -w '%{http_code}' "$BASE/")
-            echo "attempt=$i status=$code"
-            if [ "$code" = "200" ] && grep -q 'Decision Desk' /tmp/root; then break; fi
-            sleep 10
-          done
-          echo '===== ROOT ====='
-          curl -L --max-time 30 -sS -D /tmp/h "$BASE/" -o /tmp/root
-          cat /tmp/h
-          grep -o 'Decision Desk' /tmp/root | head || true
-          grep -o '≥2 fresh sources required' /tmp/root | head || true
-          echo '===== PLAYERS ====='
-          curl -L --max-time 30 -sS "$BASE/players" -o /tmp/players
-          grep -o 'Sell high' /tmp/players | head || true
-          grep -o 'Cut / exit' /tmp/players | head || true
-          echo '===== SETTINGS ====='
           curl -L --max-time 30 -sS "$BASE/settings" -o /tmp/settings
+          curl -L --max-time 30 -sS "$BASE/" -o /tmp/root
+          echo '===== BUILD MARKERS ====='
+          grep -o 'DECISION CENTER + QOL PATCH 11' /tmp/settings | head || true
           grep -o 'SOURCE TRUST + WAIVER CALIBRATION PATCH 12' /tmp/settings | head || true
-          grep -o 'Independent automatic backup' /tmp/settings | head || true
-          grep -o '8:00 AM Eastern' /tmp/settings | head || true
+          grep -o 'Decision Desk' /tmp/root | head || true
+          echo '===== BACKUP HEALTH TEXT ====='
+          python3 - <<'PY'
+          import re, html
+          s=html.unescape(open('/tmp/settings',errors='ignore').read())
+          s=re.sub(r'<[^>]+>',' ',s)
+          s=re.sub(r'\s+',' ',s)
+          for needle in ['Independent automatic backup','Healthy · last copy','Independent backup is healthy','Configured; waiting','not configured','30 daily recovery points']:
+              i=s.find(needle)
+              if i>=0: print(s[max(0,i-250):i+500])
+          PY
           echo '===== REFRESH STATUS ====='
           curl -L --max-time 30 -sS "$BASE/api/refresh" || true
           echo
