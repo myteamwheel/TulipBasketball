@@ -1,0 +1,15 @@
+name: immediate-recovery-audit
+on:
+  push:
+    branches: [dynasty-db-diagnostic-probe-20260816]
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Audit recovery endpoints now
+        run: |
+          BASE='https://dynasty-boys-dashboard.vercel.app'
+          echo OLD_DB
+          curl -L --max-time 45 -sS -w '\nHTTP=%{http_code}\n' "$BASE/api/recovery-old-db-audit" || true
+          echo BACKUP_DB
+          curl -L --max-time 45 -sS -w '\nHTTP=%{http_code}\n' "$BASE/api/recovery-backup-audit" || true
