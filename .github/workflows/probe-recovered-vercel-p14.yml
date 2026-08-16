@@ -6,21 +6,17 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Probe prior-deployment Neon redeploy
+      - name: Fingerprint live team-scoped Dynasty dashboard
         run: |
           set +e
-          for base in \
-            'https://dynasty-boys-dashboard-myteamwheel-8058s-projects.vercel.app' \
-            'https://dynasty-boys-dashboard.vercel.app'; do
-            echo "######## ${base} ########"
-            for i in $(seq 1 12); do
-              echo "===== attempt $i ====="
-              h=$(curl -sS -L --max-time 30 -o /tmp/health -w '%{http_code}' "${base}/healthz?probe=$(date +%s%N)" || true)
-              d=$(curl -sS -L --max-time 30 -o /tmp/debug -w '%{http_code}' "${base}/api/debug-home?probe=$(date +%s%N)" || true)
-              s=$(curl -sS -L --max-time 30 -o /tmp/settings -w '%{http_code}' "${base}/settings?probe=$(date +%s%N)" || true)
-              echo "health=$h debug=$d settings=$s debug_body=$(head -c 900 /tmp/debug 2>/dev/null | tr '\n' ' ' || true)"
-              if [ "$h" = 200 ] && [ "$d" = 200 ] && grep -q '"ok":true' /tmp/debug; then echo "HEALTHY_BASE=$base"; exit 0; fi
-              sleep 10
+          base='https://dynasty-boys-dashboard-myteamwheel-8058s-projects.vercel.app'
+          for p in '/' '/settings' '/refresh-history' '/players' '/league' '/api/debug-home' '/api/export' '/api/refresh'; do
+            echo "===== $p ====="
+            curl -sS -L --max-time 30 -D /tmp/h -o /tmp/b "${base}${p}?probe=$(date +%s%N)"
+            echo "status=$(awk 'toupper($1) ~ /^HTTP\// {c=$2} END {print c}' /tmp/h) content_type=$(grep -i '^content-type:' /tmp/h | tail -1 | tr -d '\r')"
+            for marker in 'PATCH 14' 'PATCH 13' 'PATCH 12' 'PATCH 11' 'Tradyr' 'Stats Guy' 'June 7' 'June 21' 'Biggest KTC changes' 'Data Health' 'Power board' 'decision dashboard' 'Orlando Oswalds'; do
+              if grep -Fqi "$marker" /tmp/b; then echo "FOUND: $marker"; fi
             done
+            echo "BODY_PREFIX=$(head -c 1200 /tmp/b | tr '\n' ' ')"
+            echo
           done
-          exit 1
