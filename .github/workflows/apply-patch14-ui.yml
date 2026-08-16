@@ -1,0 +1,42 @@
+name: apply-patch14-ui
+on:
+  push:
+    branches: [dynasty-patch14-market-integrity-20260816]
+    paths:
+      - recovery/apply_patch14_ui.py
+      - .github/workflows/apply-patch14-ui.yml
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply UI patch
+        run: python3 recovery/apply_patch14_ui.py
+      - name: Validate production build
+        working-directory: recovered-app
+        env:
+          DATABASE_URL: postgresql://user:pass@localhost:5432/postgres
+          BACKUP_DATABASE_URL: postgresql://user:pass@localhost:5432/postgres
+          FANTASYCALC_REFRESH_ENABLED: "true"
+          STATSGUY_REFRESH_ENABLED: "false"
+        run: |
+          npm install --ignore-scripts
+          npx prisma generate
+          npx tsc --noEmit
+          npm run build
+      - name: Commit UI changes
+        run: |
+          git config user.name 'ChatGPT Market Integrity'
+          git config user.email 'actions@users.noreply.github.com'
+          git add recovered-app
+          if git diff --cached --quiet; then
+            echo 'No UI changes to commit'
+          else
+            git commit -m 'Patch 14: clarify source trust and disagreement UI'
+            git push
+          fi
