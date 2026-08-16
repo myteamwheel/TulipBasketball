@@ -1,0 +1,51 @@
+name: Patch 11 Vercel Wrapper CI
+
+on:
+  push:
+    branches: [dynasty-patch11-command-center]
+
+jobs:
+  wrapper:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Create exact Vercel wrapper
+        run: |
+          mkdir -p /tmp/patch11-wrapper
+          cat > /tmp/patch11-wrapper/package.json <<'JSON'
+          {
+            "name":"dynasty-boys-dashboard","version":"0.1.0","private":true,
+            "scripts":{"preinstall":"node bootstrap.mjs","postinstall":"prisma generate","vercel-build":"next build","build":"next build","start":"next start"},
+            "dependencies":{"@prisma/adapter-pg":"^7.9.1","@prisma/client":"^7.9.1","date-fns":"^4.4.0","iron-session":"^8.0.4","next":"16.3.1","papaparse":"^5.6.0","pg":"^8.23.0","prisma":"^7.9.1","react":"19.2.8","react-dom":"19.2.8","recharts":"^3.10.1","zod":"^4.4.3"},
+            "devDependencies":{"@tailwindcss/postcss":"^4","@types/node":"^20","@types/papaparse":"^5.5.2","@types/pg":"^8.21.0","@types/react":"^19","@types/react-dom":"^19","eslint":"^9","eslint-config-next":"16.3.1","tailwindcss":"^4","tsx":"^4.23.12","typescript":"^5","vercel":"^59.0.0","dotenv":"^17.3.1"}
+          }
+          JSON
+          cat > /tmp/patch11-wrapper/bootstrap.mjs <<'NODE'
+          import fs from 'node:fs'; import path from 'node:path'; import zlib from 'node:zlib';
+          const root=process.cwd();
+          const readRemote=async url=>{const r=await fetch(url,{cache:'no-store'});if(!r.ok)throw new Error(`fetch ${r.status}: ${url}`);return (await r.text()).trim();};
+          const baseNames=['payload.0.txt','payload.1.txt','payload.2a.txt','payload.2b.txt','payload.3.txt','payload.4.txt','payload.5.txt','payload.6.txt','payload.7.txt'];
+          let basePacked='';for(const name of baseNames)basePacked+=await readRemote(`https://raw.githubusercontent.com/myteamwheel/TulipBasketball/dynasty-patch10-deploy/dynasty-patch10/${name}`);
+          if(basePacked.length!==75328)throw new Error(`base ${basePacked.length}`);
+          const base=JSON.parse(zlib.brotliDecompressSync(Buffer.from(basePacked,'base64')).toString('utf8'));
+          for(const [rel,item] of Object.entries(base)){if(rel==='package.json'||rel==='vercel.json')continue;const dest=path.join(root,rel);fs.mkdirSync(path.dirname(dest),{recursive:true});fs.writeFileSync(dest,item.encoding==='base64'?Buffer.from(item.data,'base64'):item.data);}
+          const market=path.join(root,'src/lib/marketSources.ts');let s=fs.readFileSync(market,'utf8');const before='if (statuses.find((s)=>s.source==="KTC")?.ok && statuses.find((s)=>s.source==="STATSGUY")?.ok) {';const after='if (ktcResult.status === "fulfilled" && sgResult.status === "fulfilled" && statuses.find((s)=>s.source==="KTC")?.ok && statuses.find((s)=>s.source==="STATSGUY")?.ok) {';if(s.includes(before))fs.writeFileSync(market,s.replace(before,after));
+          let op='';for(let i=0;i<5;i++)op+=await readRemote(`https://raw.githubusercontent.com/myteamwheel/TulipBasketball/dynasty-patch11-command-center/dynasty-patch11/overlay.${i}.txt`);if(op.length!==34076)throw new Error(`overlay ${op.length}`);const overlay=JSON.parse(zlib.brotliDecompressSync(Buffer.from(op,'base64')).toString('utf8'));for(const [rel,item] of Object.entries(overlay)){const dest=path.join(root,rel);fs.mkdirSync(path.dirname(dest),{recursive:true});fs.writeFileSync(dest,item.encoding==='base64'?Buffer.from(item.data,'base64'):item.data);}
+          const health=path.join(root,'src/app/(app)/refresh-history/page.tsx');let h=fs.readFileSync(health,'utf8');h=h.replace('sub={`last success ${timeAgo(lastSuccess)}`}','sub={`last success ${timeAgo(lastSuccess?.toISOString()??null)}`}');fs.writeFileSync(health,h);
+          if(!fs.readFileSync(path.join(root,'src/app/(app)/settings/page.tsx'),'utf8').includes('COMMAND CENTER + UX PATCH 11'))throw new Error('marker missing');
+          console.log('wrapper bootstrap complete');
+          NODE
+      - name: Run exact install/bootstrap
+        working-directory: /tmp/patch11-wrapper
+        run: npm install
+      - name: TypeScript
+        working-directory: /tmp/patch11-wrapper
+        run: npx tsc --noEmit
+      - name: Exact Vercel build command
+        working-directory: /tmp/patch11-wrapper
+        env:
+          DATABASE_URL: postgresql://user:pass@127.0.0.1:5432/placeholder
+        run: npm run vercel-build
