@@ -1,0 +1,34 @@
+name: reconstruct-dynasty-dashboard
+on:
+  push:
+    branches: [dynasty-db-recovery-20260816]
+jobs:
+  reconstruct:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reconstruct Patch 10 source
+        shell: bash
+        run: |
+          mkdir -p recovered-app
+          node <<'NODE'
+          const fs=require('fs'), path=require('path'), zlib=require('zlib');
+          const dir='deploy/dynasty-patch10';
+          const chunks=fs.readdirSync(dir).filter(f=>/^payload\.\d+\.txt$/.test(f)).sort((a,b)=>Number(a.split('.')[1])-Number(b.split('.')[1]));
+          const packed=chunks.map(f=>fs.readFileSync(path.join(dir,f),'utf8').trim()).join('');
+          const payload=JSON.parse(zlib.brotliDecompressSync(Buffer.from(packed,'base64')).toString('utf8'));
+          for(const [rel,item] of Object.entries(payload)){
+            const dest=path.join('recovered-app',rel);
+            fs.mkdirSync(path.dirname(dest),{recursive:true});
+            fs.writeFileSync(dest,item.encoding==='base64'?Buffer.from(item.data,'base64'):item.data);
+          }
+          console.log(`Recovered ${Object.keys(payload).length} files from ${chunks.length} chunks`);
+          NODE
+          echo '--- recovered root ---'
+          find recovered-app -maxdepth 2 -type f | sort | head -100
+      - name: Upload reconstructed source
+        uses: actions/upload-artifact@v4
+        with:
+          name: dynasty-patch10-recovered-source
+          path: recovered-app
+          include-hidden-files: true
