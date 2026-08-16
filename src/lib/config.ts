@@ -41,8 +41,10 @@ export const SECONDARY_KTC_DIVERGENCE_LIMIT = Number(process.env.SECONDARY_KTC_D
 export const KTC_AUTHORIZED_FEED_URL = process.env.KTC_AUTHORIZED_FEED_URL?.trim() || null;
 export const KTC_AUTHORIZED_FEED_TOKEN = process.env.KTC_AUTHORIZED_FEED_TOKEN?.trim() || null;
 
-// Anchored to Eastern-Time midnight (EDT, UTC-4 in June).
-export const ORLANDO_BASELINE_DATE = "2026-06-21T04:00:00.000Z";
+// Permanent Orlando comparison baseline: June 7, 2026 at Eastern-Time midnight.
+// June 21 remains a historical checkpoint in the observation series, not the baseline.
+export const ORLANDO_BASELINE_DATE = "2026-06-07T04:00:00.000Z";
+// Legacy alias retained for any older code/imports that still reference it.
 export const PRE_BASELINE_DATE = "2026-06-07T04:00:00.000Z";
 export const DISPLAY_TIMEZONE = "America/New_York";
 

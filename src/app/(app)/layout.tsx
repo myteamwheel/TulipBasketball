@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { isAuthenticated, authRequired } from "@/lib/auth";
+import { ensureOrlandoHistoryBackfill } from "@/lib/orlandoHistoryBackfill";
 import RefreshButton from "@/components/RefreshButton";
 
 // Every page under this layout reads live DB/session state; never
@@ -19,6 +20,10 @@ const NAV = [
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
   if (!(await isAuthenticated())) redirect("/login");
+
+  // Idempotent one-time repair: completes the exact June 7 baseline and full
+  // August 13 Orlando checkpoint in production, then reduces to one cheap count.
+  await ensureOrlandoHistoryBackfill();
 
   return (
     <div className="flex min-h-screen flex-col">
