@@ -1,8 +1,16 @@
 {
-  "name":"tulip-basketball-deployment",
-  "version":"1.0.0",
-  "private":true,
-  "type":"module",
-  "scripts":{"start":"node bootstrap.mjs","sync:gleague":"node scripts/sync-gleague-data.mjs","audit:gleague":"node scripts/audit-gleague-data.mjs"},
-  "engines":{"node":">=20"}
+  "name": "tulip-basketball-deployment",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "npm --prefix recovered-app install && npm --prefix recovered-app run build",
+    "prestart": "test -d recovered-app/.next || (npm --prefix recovered-app install && npm --prefix recovered-app run build)",
+    "start": "npm --prefix recovered-app run start",
+    "sync:gleague": "node scripts/sync-gleague-data.mjs",
+    "audit:gleague": "node scripts/audit-gleague-data.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  }
 }
