@@ -2,7 +2,7 @@ import Link from "next/link";
 import { getAllCurrentRosterEntries } from "@/lib/queries";
 import { computeMarketDataForPlayers } from "@/lib/metrics";
 import { computeAllTeamValuations } from "@/lib/teamMetrics";
-import { getCurrentMarketMix } from "@/lib/marketSources";
+import { getFreshCurrentMarketMix } from "@/lib/currentMarket";
 import RiserFallerTabs, { type MoverRow } from "@/components/RiserFallerTabs";
 import SectionHeader from "@/components/SectionHeader";
 import { formatPercent, formatPoints, formatSigned, trendColorClass } from "@/lib/format";
@@ -23,7 +23,7 @@ export default async function LeaguePage() {
   const playerIds = entries.map((e) => e.playerId);
   const [marketData, marketMix, valuations] = await Promise.all([
     computeMarketDataForPlayers(playerIds),
-    getCurrentMarketMix(playerIds),
+    getFreshCurrentMarketMix(playerIds),
     computeAllTeamValuations(),
   ]);
 
@@ -109,7 +109,7 @@ export default async function LeaguePage() {
       </section>
 
       <section className="min-w-0">
-        <SectionHeader title="Team value ranking" description="KTC totals are player value only. Consensus coverage is shown separately so a partially covered roster is never presented as a complete comparison." />
+        <SectionHeader title="Team value ranking" description="KTC totals are player value only. Fresh consensus coverage is shown separately so a partially covered or stale roster is never presented as a complete comparison." />
 
         <div className="space-y-2 md:hidden">
           {rankedByTotal.map((v) => {
@@ -143,7 +143,7 @@ export default async function LeaguePage() {
                 </div>
 
                 <div className="mt-2 flex min-w-0 items-center justify-between gap-3 text-[10px] text-neutral-600">
-                  <span className="truncate">Consensus {consensus?.covered ? `${formatPoints(consensus.total)} · ${consensus.covered}/${consensus.rostered}` : "—"}</span>
+                  <span className="truncate">Fresh consensus {consensus?.covered ? `${formatPoints(consensus.total)} · ${consensus.covered}/${consensus.rostered}` : "—"}</span>
                   <span className="shrink-0">7d coverage {v.change7dCoverage}/{v.playerCount}</span>
                 </div>
               </div>
@@ -158,7 +158,7 @@ export default async function LeaguePage() {
                 <th className="px-3 py-2 text-left">Rank</th>
                 <th className="px-3 py-2 text-left">Team</th>
                 <th className="px-2 py-2 text-right">KTC total</th>
-                <th className="px-2 py-2 text-right">Consensus</th>
+                <th className="px-2 py-2 text-right">Fresh consensus</th>
                 <th className="px-2 py-2 text-right">Starter rank</th>
                 <th className="px-2 py-2 text-right">Depth rank</th>
                 {positions.map((p) => <th key={p} className="px-2 py-2 text-right">{p}</th>)}
