@@ -7,12 +7,12 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Probe Vercel string env format
+      - name: Probe Vercel array env format
         run: |
           set +e
           for u in \
-            'https://dynasty-env-capability-test2.vercel.app/api/test' \
-            'https://dynasty-env-capability-test2.vercel.app/'; do
+            'https://dynasty-env-capability-test3.vercel.app/api/test' \
+            'https://dynasty-env-capability-test3.vercel.app/'; do
             echo "===== $u ====="
             curl -L --max-time 30 -sS -D /tmp/h -o /tmp/b "$u"
             echo "curl_exit=$? status=$(awk 'NR==1{print $2}' /tmp/h)"
