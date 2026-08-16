@@ -6,21 +6,26 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Probe live and database-test deployments
+      - name: Probe live Patch 12 and trigger first refresh
         shell: bash
         run: |
           set +e
-          for url in \
-            'https://dynasty-boys-dashboard.vercel.app' \
-            'https://dynasty-boys-dashboard-bl6fpwtee-myteamwheel-8058s-projects.vercel.app' \
-            'https://dynasty-boys-dashboard-myteamwheel-8058s-projects.vercel.app'; do
-            echo "===== $url ====="
-            curl -L --max-time 30 -sS -D /tmp/h "$url" -o /tmp/b
-            code=$?
-            echo "curl_exit=$code"
-            echo '--- headers ---'
-            cat /tmp/h || true
-            echo '--- body first 12000 bytes ---'
-            head -c 12000 /tmp/b || true
-            echo
-          done
+          BASE='https://dynasty-boys-dashboard.vercel.app'
+          echo '===== ROOT ====='
+          curl -L --max-time 30 -sS -D /tmp/h "$BASE/" -o /tmp/root
+          cat /tmp/h
+          grep -o 'SOURCE TRUST + WAIVER CALIBRATION PATCH 12' /tmp/root || true
+          grep -o 'Dynasty Boys' /tmp/root | head || true
+          echo '===== SETTINGS ====='
+          curl -L --max-time 30 -sS "$BASE/settings" -o /tmp/settings
+          grep -o 'SOURCE TRUST + WAIVER CALIBRATION PATCH 12' /tmp/settings || true
+          echo '===== REFRESH STATUS BEFORE ====='
+          curl -L --max-time 30 -sS "$BASE/api/refresh" || true
+          echo
+          echo '===== START REFRESH ====='
+          curl -L --max-time 30 -sS -X POST -H 'content-type: application/json' "$BASE/api/refresh" || true
+          echo
+          sleep 12
+          echo '===== REFRESH STATUS AFTER ====='
+          curl -L --max-time 30 -sS "$BASE/api/refresh" || true
+          echo
