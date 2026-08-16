@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { Pool } from "pg";
+import { prisma } from "@/lib/prisma";
 
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 function message(error: unknown) {
@@ -9,32 +10,16 @@ function message(error: unknown) {
 }
 
 export async function GET() {
-  const databaseConfigured = Boolean(process.env.DATABASE_URL);
-
-  if (!databaseConfigured) {
-    return NextResponse.json(
-      {
-        patch: 14,
-        databaseConfigured: false,
-        ok: false,
-        error: "DATABASE_URL is not configured in this deployment environment.",
-      },
-      { status: 500 },
-    );
-  }
-
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-
   try {
-    const [enumResult, tableResult] = await Promise.all([
-      pool.query<{ enumlabel: string }>(`
+    const [enumRows, tableRows, marketRows] = await Promise.all([
+      prisma.$queryRaw<Array<{ enumlabel: string }>>`
         SELECT e.enumlabel
         FROM pg_type t
         JOIN pg_enum e ON t.oid = e.enumtypid
         WHERE t.typname = 'MarketSource'
         ORDER BY e.enumsortorder
-      `),
-      pool.query<{ table_name: string }>(`
+      `,
+      prisma.$queryRaw<Array<{ table_name: string }>>`
         SELECT table_name
         FROM information_schema.tables
         WHERE table_schema = 'public'
@@ -48,41 +33,32 @@ export async function GET() {
             'RefreshRun'
           )
         ORDER BY table_name
-      `),
+      `,
+      prisma.$queryRaw<Array<{ count: bigint }>>`
+        SELECT COUNT(*)::bigint AS count FROM "MarketObservation"
+      `,
     ]);
-
-    let marketObservationCheck: { ok: boolean; count?: number; error?: string };
-    try {
-      const result = await pool.query<{ count: string }>(
-        `SELECT COUNT(*)::text AS count FROM "MarketObservation"`,
-      );
-      marketObservationCheck = {
-        ok: true,
-        count: Number(result.rows[0]?.count ?? 0),
-      };
-    } catch (error) {
-      marketObservationCheck = { ok: false, error: message(error) };
-    }
 
     return NextResponse.json({
       patch: 14,
       ok: true,
-      databaseConfigured: true,
-      marketSourceEnumLabels: enumResult.rows.map((row) => row.enumlabel),
-      expectedTablesPresent: tableResult.rows.map((row) => row.table_name),
-      marketObservationCheck,
+      databaseConfigured: Boolean(process.env.DATABASE_URL || process.env.RECOVERY_DATABASE_URL),
+      marketSourceEnumLabels: enumRows.map((row) => row.enumlabel),
+      expectedTablesPresent: tableRows.map((row) => row.table_name),
+      marketObservationCheck: {
+        ok: true,
+        count: Number(marketRows[0]?.count ?? 0n),
+      },
     });
   } catch (error) {
     return NextResponse.json(
       {
         patch: 14,
         ok: false,
-        databaseConfigured: true,
+        databaseConfigured: Boolean(process.env.DATABASE_URL || process.env.RECOVERY_DATABASE_URL),
         error: message(error),
       },
       { status: 500 },
     );
-  } finally {
-    await pool.end().catch(() => undefined);
   }
 }
