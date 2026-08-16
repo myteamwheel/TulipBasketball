@@ -1,0 +1,84 @@
+name: backfill-orlando-player-stats
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/backfill-orlando-player-stats.yml']
+  workflow_dispatch:
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download nflverse crosswalk and weekly stats
+        run: |
+          mkdir -p /tmp/nfl
+          curl -fsSL https://github.com/nflverse/nflverse-data/releases/download/players/players.csv -o /tmp/nfl/players.csv
+          for y in 2020 2021 2022 2023 2024 2025; do
+            curl -fsSL https://github.com/nflverse/nflverse-data/releases/download/stats_player/stats_player_week_${y}.csv -o /tmp/nfl/stats_${y}.csv || true
+          done
+          for w in 1 2 3 4 5; do
+            curl -fsSL "https://api.sleeper.com/stats/nfl/2026/${w}?season_type=pre" -o /tmp/nfl/sleeper_pre_${w}.json || echo '{}' > /tmp/nfl/sleeper_pre_${w}.json
+          done
+      - name: Filter current Orlando roster
+        run: |
+          python - <<'PY'
+          import csv,json,re,glob,os
+          targets = [
+            ('Brenen Thompson','WR','12518'),('Bryce Lance','WR','12528'),('Caleb Douglas','WR','12511'),('Cam Ward','QB','11560'),
+            ('Carson Beck','QB','12505'),('Christian Watson','WR','7525'),('Cole Payton','QB','12531'),('Colston Loveland','TE','11604'),
+            ("De'Zhaun Stribling",'WR','12520'),('Eli Raridon','TE','12521'),('Eli Stowers','TE','12509'),('Emeka Egbuka','WR','11564'),
+            ('Isaac TeSlaa','WR','11629'),('Jeremiyah Love','RB','12502'),('Jordan Love','QB','5854'),('Kaelon Black','RB','12530'),
+            ('Keaton Mitchell','RB','9224'),('Luther Burden','WR','11562'),('Malachi Fields','WR','12515'),('Max Klare','TE','12507'),
+            ('Michael Penix','QB','11567'),('Mike Washington','RB','12516'),('Nicholas Singleton','RB','12504'),('Ollie Gordon','RB','11627'),
+            ('Oronde Gadsden','TE','11603'),('Quinshon Judkins','RB','11563'),('Shedeur Sanders','QB','12524'),('Terrance Ferguson','TE','11611'),('Zachariah Branch','WR','12506')]
+          def norm(s):
+            s=(s or '').lower().replace('’',"'")
+            s=re.sub(r"\b(jr|sr|ii|iii|iv)\b\.?",'',s)
+            s=re.sub(r'[^a-z0-9]','',s)
+            return s
+          target_by_key={(norm(n),p):(n,p,sid) for n,p,sid in targets}
+          profiles=[]; gsis_to_target={}
+          with open('/tmp/nfl/players.csv',newline='',encoding='utf-8-sig') as f:
+            rows=list(csv.DictReader(f))
+          for r in rows:
+            pos=(r.get('position') or '').upper()
+            key=(norm(r.get('display_name') or r.get('football_name') or r.get('short_name')),pos)
+            t=target_by_key.get(key)
+            if not t: continue
+            name,position,sid=t
+            gsis=r.get('gsis_id') or r.get('gsis_it_id') or ''
+            profiles.append({'name':name,'position':position,'sleeperId':sid,'gsisId':gsis or None,'displayName':r.get('display_name'),'draftYear':r.get('draft_year'),'draftRound':r.get('draft_round'),'draftPick':r.get('draft_pick'),'draftTeam':r.get('draft_club') or r.get('draft_team'),'college':r.get('college_name') or r.get('college'),'birthDate':r.get('birth_date')})
+            if gsis: gsis_to_target[gsis]=t
+          games=[]
+          wanted={'season','week','season_type','player_id','player_name','position','recent_team','opponent_team','completions','attempts','passing_yards','passing_tds','interceptions','carries','rushing_yards','rushing_tds','targets','receptions','receiving_yards','receiving_tds','rushing_fumbles_lost','receiving_fumbles_lost','sack_fumbles_lost','fantasy_points','fantasy_points_ppr'}
+          for fn in glob.glob('/tmp/nfl/stats_*.csv'):
+            if not os.path.getsize(fn): continue
+            with open(fn,newline='',encoding='utf-8-sig') as f:
+              for r in csv.DictReader(f):
+                t=gsis_to_target.get(r.get('player_id',''))
+                if not t: continue
+                name,pos,sid=t
+                if (r.get('season_type') or 'REG')!='REG': continue
+                row={k:r.get(k) for k in wanted}
+                row.update({'name':name,'sleeperId':sid,'source':'NFLVERSE'})
+                games.append(row)
+          # Preserve raw Sleeper preseason data for later exact mapping; format can vary by endpoint.
+          sleeper=[]
+          for fn in glob.glob('/tmp/nfl/sleeper_pre_*.json'):
+            try: body=json.load(open(fn))
+            except: continue
+            week=int(re.search(r'_(\d+)\.json$',fn).group(1))
+            if isinstance(body,dict):
+              for sid,t in [(x[2],x) for x in targets]:
+                raw=body.get(sid)
+                if raw: sleeper.append({'week':week,'name':t[0],'position':t[1],'sleeperId':sid,'raw':raw})
+          out={'profiles':profiles,'games':games,'sleeperPreseason2026':sleeper,'targetCount':len(targets)}
+          json.dump(out,open('orlando-player-stats-backfill.json','w'),separators=(',',':'))
+          print('profiles',len(profiles),'regular games',len(games),'2026 preseason rows',len(sleeper))
+          missing=[n for n,p,s in targets if not any(x['name']==n for x in profiles)]
+          print('missing profiles:',missing)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: orlando-player-stats-backfill
+          path: orlando-player-stats-backfill.json
+          retention-days: 7
