@@ -30,6 +30,10 @@ jobs:
           if(overlayPacked.length!==34076) throw new Error(`Patch 11 overlay length ${overlayPacked.length}`);
           const overlay=JSON.parse(zlib.brotliDecompressSync(Buffer.from(overlayPacked,'base64')).toString('utf8'));
           for(const [rel,item] of Object.entries(overlay)){ const dest=path.join(root,rel); fs.mkdirSync(path.dirname(dest),{recursive:true}); fs.writeFileSync(dest,item.encoding==='base64'?Buffer.from(item.data,'base64'):item.data); }
+          const health=path.join(root,'src/app/(app)/refresh-history/page.tsx');
+          let healthSource=fs.readFileSync(health,'utf8');
+          healthSource=healthSource.replace('sub={`last success ${timeAgo(lastSuccess)}`}', 'sub={`last success ${timeAgo(lastSuccess?.toISOString()??null)}`}');
+          fs.writeFileSync(health,healthSource);
           console.log(`Reconstructed ${Object.keys(base).length} base files + ${Object.keys(overlay).length} Patch 11 files`);
           NODE
       - name: Install dependencies
