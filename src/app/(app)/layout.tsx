@@ -1,73 +1,43 @@
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import { isAuthenticated, authRequired } from "@/lib/auth";
 import { ensureOrlandoHistoryBackfill } from "@/lib/orlandoHistoryBackfill";
 import RefreshButton from "@/components/RefreshButton";
+import TopNav from "@/components/TopNav";
 
-// Every page under this layout reads live DB/session state; never
-// statically prerender so a rebuild isn't required to see fresh data.
 export const dynamic = "force-dynamic";
-
-const NAV = [
-  { href: "/", label: "My Team" },
-  { href: "/league", label: "League Market" },
-  { href: "/trade-finder", label: "Trade Finder" },
-  { href: "/transactions", label: "Transactions" },
-  { href: "/players", label: "Players" },
-  { href: "/refresh-history", label: "Refresh History" },
-  { href: "/settings", label: "Settings" },
-];
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
   if (!(await isAuthenticated())) redirect("/login");
 
-  // Idempotent one-time repair: completes the exact June 7 baseline and full
-  // August 13 Orlando checkpoint in production, then reduces to one cheap count.
   await ensureOrlandoHistoryBackfill();
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <header className="sticky top-0 z-10 border-b border-neutral-800 bg-neutral-950/95 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3">
-          <div className="flex items-center gap-6">
-            <span className="text-sm font-semibold tracking-tight text-neutral-100">
-              Dynasty Boys <span className="text-emerald-500">·</span> Market Terminal
-            </span>
-            <nav className="hidden gap-1 md:flex">
-              {NAV.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="rounded-md px-3 py-1.5 text-sm text-neutral-400 transition hover:bg-neutral-900 hover:text-neutral-100"
-                >
-                  {item.label}
-                </Link>
-              ))}
-            </nav>
+    <div className="min-h-screen min-w-0 overflow-x-hidden bg-neutral-950 text-neutral-100">
+      <header className="sticky top-0 z-30 w-full border-b border-neutral-800/90 bg-neutral-950/95 backdrop-blur-xl">
+        <div className="mx-auto w-full max-w-7xl px-3 sm:px-4">
+          <div className="flex min-w-0 items-center justify-between gap-2 py-2.5">
+            <div className="min-w-0 truncate text-sm font-semibold tracking-tight text-neutral-100">
+              <span>Dynasty Boys</span>
+              <span className="hidden sm:inline"> <span className="text-emerald-500">·</span> Market Terminal</span>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <RefreshButton />
+              {authRequired() ? (
+                <form action="/api/auth/logout" method="post" className="hidden sm:block">
+                  <button className="rounded-md px-2 py-1 text-[11px] text-neutral-500 hover:bg-neutral-900 hover:text-neutral-300">Sign out</button>
+                </form>
+              ) : null}
+            </div>
           </div>
-          <div className="flex items-center gap-3">
-            <RefreshButton />
-            {authRequired() && (
-              <form action="/api/auth/logout" method="post">
-                <button className="text-xs text-neutral-500 hover:text-neutral-300">Sign out</button>
-              </form>
-            )}
+          <div className="border-t border-neutral-900/90">
+            <TopNav />
           </div>
         </div>
-        <nav className="flex gap-1 overflow-x-auto border-t border-neutral-900 px-4 py-1.5 md:hidden">
-          {NAV.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="whitespace-nowrap rounded-md px-3 py-1 text-xs text-neutral-400 hover:bg-neutral-900 hover:text-neutral-100"
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
       </header>
-      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6">{children}</main>
+      <main className="mx-auto w-full min-w-0 max-w-7xl px-3 py-4 pb-[calc(2rem+env(safe-area-inset-bottom))] sm:px-4 sm:py-6">
+        {children}
+      </main>
     </div>
   );
 }
