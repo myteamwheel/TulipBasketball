@@ -3,7 +3,8 @@ name: Patch 14 Daily 8am Refresh
 on:
   schedule:
     # 8:00 a.m. Eastern is 12:00 UTC during daylight time and 13:00 UTC
-    # during standard time. The application endpoint gates the wrong invocation.
+    # during standard time. The application endpoint accepts the correct
+    # invocation and safely ignores the wrong offset / late duplicate.
     - cron: '0 12 * * *'
     - cron: '0 13 * * *'
   workflow_dispatch:
@@ -17,11 +18,12 @@ jobs:
       - name: Invoke Patch 14 daily refresh gate
         run: |
           set -euo pipefail
-          url='https://dynasty-boys-dashboard.vercel.app/api/cron/refresh'
+          url='https://dynasty-boys-dashboard.vercel.app/api/cron/github-refresh'
           stamp=$(date +%s%N)
           code=$(curl -L --max-time 30 -sS \
             -H 'Cache-Control: no-cache, no-store, max-age=0' \
             -H 'Pragma: no-cache' \
+            -H 'x-patch14-scheduler: github-actions' \
             -o /tmp/refresh.json \
             -w '%{http_code}' \
             "${url}?github_schedule=${stamp}")
