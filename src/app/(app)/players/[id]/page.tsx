@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { computeMarketDataForPlayer } from "@/lib/metrics";
 import { computeSignalsForCurrentRoster } from "@/lib/signalsEngine";
 import { addPlayerNote } from "@/lib/actions";
-import { getCurrentMarketMix } from "@/lib/marketSources";
+import { getFreshCurrentMarketMix } from "@/lib/currentMarket";
 import { ORLANDO_BASELINE_DATE, SLEEPER_LEAGUE_ID } from "@/lib/config";
 import KtcHistoryChart from "@/components/KtcHistoryChart";
 import PlayerNotes from "@/components/PlayerNotes";
@@ -16,7 +16,6 @@ import {
   formatPercent,
   formatPoints,
   formatSigned,
-  trendColorClass,
 } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -39,7 +38,7 @@ export default async function PlayerDetailPage(props: { params: Promise<{ id: st
     }),
     prisma.userNote.findMany({ where: { playerId: id }, orderBy: { createdAt: "desc" } }),
     computeMarketDataForPlayer(id),
-    getCurrentMarketMix([id]),
+    getFreshCurrentMarketMix([id]),
     computeSignalsForCurrentRoster(),
   ]);
 
@@ -57,12 +56,13 @@ export default async function PlayerDetailPage(props: { params: Promise<{ id: st
     return player.sleeperId in adds || player.sleeperId in drops;
   });
 
-  const firstValid = observations.find((o) => o.validationStatus === "VALID");
-  const lastValid = [...observations].reverse().find((o) => o.validationStatus === "VALID");
+  const validObservations = observations.filter((o) => o.validationStatus === "VALID");
+  const firstValid = validObservations[0];
+  const lastValid = validObservations[validObservations.length - 1];
   const rangeSpanDays = firstValid && lastValid
     ? (lastValid.observedAt.getTime() - firstValid.observedAt.getTime()) / DAY_MS
     : 0;
-  const rangeIsMature = observations.filter((o) => o.validationStatus === "VALID").length >= 3 && rangeSpanDays >= 14;
+  const rangeIsMature = validObservations.length >= 3 && rangeSpanDays >= 14;
   const baselineLabel = formatDateEastern(ORLANDO_BASELINE_DATE);
 
   return (
@@ -72,7 +72,7 @@ export default async function PlayerDetailPage(props: { params: Promise<{ id: st
         <p className="mt-1 text-sm text-neutral-500">
           {player.position}{player.nflTeam ? ` · ${player.nflTeam}` : ""}{player.status ? ` · ${player.status}` : ""}
         </p>
-        {market.isStale ? <p className="mt-1 text-xs text-amber-300">KTC is stale — showing the last confirmed value rather than substituting zero.</p> : null}
+        {market.isStale ? <p className="mt-1 text-xs text-amber-300">KTC is stale — showing the last confirmed KTC value. Stale secondary feeds are hidden from the current comparison below.</p> : null}
         {market.pendingReview ? <p className="mt-1 text-xs leading-5 text-amber-300">A newer parsed value of {formatPoints(market.pendingReviewValue)} is quarantined for review and is not being used: {market.pendingReviewNote}</p> : null}
       </div>
 
@@ -93,10 +93,10 @@ export default async function PlayerDetailPage(props: { params: Promise<{ id: st
       ) : null}
 
       <section>
-        <SectionHeader title="Market snapshot" description="KTC is the anchor. Consensus is the trusted cross-market blend when at least two qualifying sources are available." />
+        <SectionHeader title="Market snapshot" description="KTC is the anchor. Consensus is shown only while the trusted source mix is still fresh." />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <MetricCard label="Current KTC" value={formatPoints(market.currentValue)} detail={market.currentObservedAt ? `observed ${formatDateEastern(market.currentObservedAt)}` : "No valid observation"} />
-          <MetricCard label="Consensus" value={formatPoints(marketMix.consensusValue)} detail={marketMix.consensusSourceCount ? `${marketMix.consensusSourceCount} trusted sources` : "No fresh blend"} />
+          <MetricCard label="Fresh consensus" value={formatPoints(marketMix.consensusValue)} detail={marketMix.consensusSourceCount ? `${marketMix.consensusSourceCount} trusted sources` : "No fresh trusted blend"} />
           <MetricCard label="Latest change" value={formatSigned(market.changeSinceLastRefresh?.points)} tone={market.changeSinceLastRefresh?.points && market.changeSinceLastRefresh.points > 0 ? "positive" : market.changeSinceLastRefresh?.points && market.changeSinceLastRefresh.points < 0 ? "negative" : "neutral"} detail="vs previous valid KTC observation" />
           <MetricCard label="7-day" value={formatSigned(market.change7d?.points)} tone={market.change7d?.points && market.change7d.points > 0 ? "positive" : market.change7d?.points && market.change7d.points < 0 ? "negative" : "neutral"} detail={market.change7d ? formatPercent(market.change7d.percent) : "No checkpoint close enough to 7 days ago"} />
           <MetricCard label="30-day" value={formatSigned(market.change30d?.points)} tone={market.change30d?.points && market.change30d.points > 0 ? "positive" : market.change30d?.points && market.change30d.points < 0 ? "negative" : "neutral"} detail={market.change30d ? formatPercent(market.change30d.percent) : "No checkpoint close enough to 30 days ago"} />
@@ -105,10 +105,10 @@ export default async function PlayerDetailPage(props: { params: Promise<{ id: st
       </section>
 
       <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3 sm:p-4">
-        <SectionHeader title="Source comparison" description="Secondary values are normalized onto the KTC scale. FantasyCalc and Stats Guy are diagnostics only." />
+        <SectionHeader title="Fresh source comparison" description="Stale feeds are shown as — here, while their historical observations remain preserved in the database. FantasyCalc and Stats Guy are diagnostic only." />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
           {[
-            ["KTC", marketMix.ktcValue],
+            ["KTC market feed", marketMix.ktcValue],
             ["Tradyr", marketMix.tradyrValue],
             ["Dynasty Dealer", marketMix.dynastyDealerValue],
             ["FantasyCalc · diagnostic", marketMix.fantasyCalcValue],
@@ -123,7 +123,7 @@ export default async function PlayerDetailPage(props: { params: Promise<{ id: st
       </section>
 
       <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3 sm:p-4">
-        <SectionHeader title="Tracked range" description={rangeIsMature ? `High/low uses ${observations.filter((o) => o.validationStatus === "VALID").length} valid observations spanning ${Math.floor(rangeSpanDays)} days.` : "High/low is not treated as decision-grade yet because this player does not have at least three valid observations spanning 14 days."} />
+        <SectionHeader title="Tracked range" description={rangeIsMature ? `High/low uses ${validObservations.length} valid observations spanning ${Math.floor(rangeSpanDays)} days.` : "High/low is not treated as decision-grade yet because this player does not have at least three valid observations spanning 14 days."} />
         {rangeIsMature ? (
           <div className="grid grid-cols-2 gap-2">
             <div className="rounded-md bg-neutral-950 p-3">
