@@ -1,7 +1,7 @@
 import KtcImportForm from "@/components/KtcImportForm";
 import { getSecondaryBackupHealth } from "@/lib/secondaryBackup";
 import { getPlayersNeedingMappingReview } from "@/lib/queries";
-import { KTC_DIRECT_REFRESH_ENABLED, KTC_FORMAT_LABEL, MARKET_SOURCE_MAX_AGE_HOURS, SLEEPER_LEAGUE_ID, ORLANDO_OSWALDS_SLEEPER_USER_ID, STATSGUY_REFRESH_ENABLED, DISPLAY_TIMEZONE } from "@/lib/config";
+import { KTC_DIRECT_REFRESH_ENABLED, KTC_FORMAT_LABEL, MARKET_SOURCE_MAX_AGE_HOURS, SLEEPER_LEAGUE_ID, ORLANDO_OSWALDS_SLEEPER_USER_ID, FANTASYCALC_REFRESH_ENABLED, STATSGUY_REFRESH_ENABLED, DISPLAY_TIMEZONE } from "@/lib/config";
 import { getLatestMarketSourceStatuses } from "@/lib/marketSources";
 import { authRequired } from "@/lib/auth";
 import { timeAgo } from "@/lib/format";
@@ -12,11 +12,12 @@ export default async function SettingsPage() {
   const secondaryBackup = await getSecondaryBackupHealth();
   const [needsReview, statuses] = await Promise.all([getPlayersNeedingMappingReview(), getLatestMarketSourceStatuses()]);
   const sources = [
-    { key:"KTC" as const, enabled:KTC_DIRECT_REFRESH_ENABLED, label:"KeepTradeCut", detail:"Primary live dynasty market source · Superflex / 0.5 PPR / no TEP · freshness marker must pass the cutoff" },
-    { key:"STATSGUY" as const, enabled:STATSGUY_REFRESH_ENABLED, label:"Stats Guy (diagnostic) Fantasy", detail:"Secondary live market source · official API · sf_dynasty freshness must pass the cutoff · raw scores are translated onto KTC scale before consensus" },
+    { key:"KTC" as const, enabled:KTC_DIRECT_REFRESH_ENABLED, label:"KeepTradeCut", detail:"Canonical anchor · Superflex / 0.5 PPR / no TEP · public freshness marker must pass the cutoff · deep ranking pages are merged so low-ranked rostered players are not silently missed" },
+    { key:"FANTASYCALC" as const, enabled:FANTASYCALC_REFRESH_ENABLED, label:"FantasyCalc", detail:"Preferred secondary · exact 12-team Superflex / 0.5-PPR feed · live API fetch · provider publishes a 3-hour recalculation cadence · translated onto KTC scale before use" },
+    { key:"STATSGUY" as const, enabled:STATSGUY_REFRESH_ENABLED, label:"Stats Guy", detail:"Diagnostic-only secondary · disabled by default · stored only for comparison when explicitly enabled and never used to manufacture the headline consensus" },
   ];
   return <div className="space-y-6">
-    <div><div className="eyebrow">Controls + methodology</div><h1 className="mt-1 text-xl font-semibold text-neutral-100">Settings</h1><p className="text-sm text-neutral-500">Data sources, backups, mapping review, and the technical rules behind the dashboard.</p><p className="mt-1 text-[10px] text-neutral-600">Build: PATCH 12 · preserves DECISION CENTER + QOL PATCH 11</p></div>
+    <div><div className="eyebrow">Controls + methodology</div><h1 className="mt-1 text-xl font-semibold text-neutral-100">Settings</h1><p className="text-sm text-neutral-500">Data sources, backups, mapping review, and the technical rules behind the dashboard.</p><p className="mt-1 text-[10px] text-neutral-600">Build: MARKET INTEGRITY + RECOVERY PATCH 14 · preserves DECISION CENTER + QOL PATCH 11</p></div>
 
     <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
       <h3 className="mb-1 text-sm font-semibold text-neutral-100">Live market sources</h3>
@@ -24,7 +25,7 @@ export default async function SettingsPage() {
       <div className="space-y-3">{sources.map((s)=>{const st=statuses[s.key];return <div key={s.key} className="rounded border border-neutral-800 bg-neutral-950/50 p-3 text-xs"><div className="flex items-center justify-between"><span className="font-medium text-neutral-200">{s.label}</span><span className={!s.enabled?"text-neutral-500":st.stale?"text-amber-400":"text-emerald-400"}>{!s.enabled?"disabled":st.stale?"stale / no stored live value":"fresh"}</span></div><p className="mt-1 text-neutral-500">{s.detail}</p><p className="mt-1 text-neutral-600">Last observed: {timeAgo(st.observedAt)}{st.sourceUpdatedAt?` · provider data as of ${timeAgo(st.sourceUpdatedAt)}`:""}</p></div>})}</div>
       <details className="mt-3 rounded border border-neutral-800 bg-neutral-950/40 p-3 text-[11px] text-neutral-500">
         <summary className="cursor-pointer font-medium text-neutral-300">How consensus, signals, and pick values work</summary>
-        <div className="mt-2 space-y-2 leading-relaxed"><p><span className="font-medium text-neutral-300">Consensus:</span> KTC is the 75% anchor; Stats Guy (diagnostic) is 25% after same-refresh position-aware quantile calibration onto the KTC scale. Raw Stats Guy (diagnostic) numbers are never averaged directly with KTC.</p><p><span className="font-medium text-neutral-300">Signal context:</span> Sleeper supplies roster/status/depth metadata and nflverse adds automated NFL production context when available. These inform recommendations but are not blended into market value.</p><p><span className="font-medium text-neutral-300">Draft picks:</span> KTC Early/Mid/Late pick values are saved on refresh. Transaction grades project the original pick team into a bucket from league power and include that pick value in the trade total.</p></div>
+        <div className="mt-2 space-y-2 leading-relaxed"><p><span className="font-medium text-neutral-300">Consensus:</span> KTC is mandatory and remains the canonical anchor. FantasyCalc can contribute 20% after same-refresh calibration onto the KTC scale. If the translated secondary differs by at least 500 points and 50%, it is excluded and the consensus falls back to KTC alone. Stats Guy is diagnostic-only by default.</p><p><span className="font-medium text-neutral-300">Signal context:</span> Sleeper supplies roster/status/depth metadata and nflverse adds automated NFL production context when available. These inform recommendations but are not blended into market value.</p><p><span className="font-medium text-neutral-300">Draft picks:</span> KTC Early/Mid/Late pick values are saved on refresh. Transaction grades project the original pick team into a bucket from league power and include that pick value in the trade total.</p></div>
       </details>
     </div>
 

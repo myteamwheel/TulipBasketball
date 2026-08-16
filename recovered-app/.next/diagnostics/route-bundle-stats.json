@@ -16,11 +16,11 @@
   },
   {
     "route": "/",
-    "firstLoadUncompressedJsBytes": 485179,
+    "firstLoadUncompressedJsBytes": 485267,
     "firstLoadChunkPaths": [
       ".next/static/chunks/3fntmmi971322.js",
       ".next/static/chunks/1zr7yg7uk11rd.js",
-      ".next/static/chunks/0z5c875sqdo40.js",
+      ".next/static/chunks/2bw3nhwz-np17.js",
       ".next/static/chunks/3mc6dra1m0098.js",
       ".next/static/chunks/2i51e627rllld.js",
       ".next/static/chunks/3e4keds9ktjdu.js",
@@ -30,11 +30,11 @@
   },
   {
     "route": "/players",
-    "firstLoadUncompressedJsBytes": 485179,
+    "firstLoadUncompressedJsBytes": 485267,
     "firstLoadChunkPaths": [
       ".next/static/chunks/3fntmmi971322.js",
       ".next/static/chunks/1zr7yg7uk11rd.js",
-      ".next/static/chunks/0z5c875sqdo40.js",
+      ".next/static/chunks/2bw3nhwz-np17.js",
       ".next/static/chunks/3mc6dra1m0098.js",
       ".next/static/chunks/2i51e627rllld.js",
       ".next/static/chunks/3e4keds9ktjdu.js",

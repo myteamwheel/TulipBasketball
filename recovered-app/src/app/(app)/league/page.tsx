@@ -65,7 +65,7 @@ export default async function LeaguePage() {
   const disagreement = entries.map((e) => {
     const mix = marketMix.get(e.playerId);
     const ktc = marketData.get(e.playerId)?.currentValue ?? null;
-    return { e, ktc, sg: mix?.statsGuyValue ?? null, gap: sourceGapPct(ktc, mix?.statsGuyValue ?? null) };
+    return { e, ktc, secondary: mix?.fantasyCalcValue ?? null, gap: sourceGapPct(ktc, mix?.fantasyCalcValue ?? null) };
   }).filter((x): x is typeof x & { gap: number } => x.gap !== null)
     .sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap)).slice(0, 8);
 
@@ -130,9 +130,9 @@ export default async function LeaguePage() {
 
       <section className="grid gap-3 lg:grid-cols-2">
         <div className="space-y-3">
-          <SectionHeader eyebrow="Market disagreement" title="Largest source gaps" description="Stats Guy is translated onto the KTC scale first. Large gaps identify players where the markets disagree, not automatic buys or sells." />
+          <SectionHeader eyebrow="Market disagreement" title="Largest source gaps" description="FantasyCalc is translated onto the KTC scale first. Large gaps are review flags; extreme disagreements are excluded from consensus instead of averaged blindly." />
           <div className="panel divide-y divide-neutral-800/80 px-4">
-            {disagreement.map(({ e, ktc, sg, gap }) => <Link key={e.playerId} href={`/players/${e.playerId}`} className="flex items-center justify-between gap-3 py-3"><div className="min-w-0"><div className="truncate text-sm font-medium text-neutral-100">{e.player.fullName}</div><div className="text-[10px] text-neutral-600">{e.manager.teamName ?? e.manager.displayName} · KTC {formatPoints(ktc)} · SG→KTC {formatPoints(sg)}</div></div><div className={`shrink-0 text-sm font-bold ${gap >= 0 ? "text-sky-300" : "text-amber-300"}`}>{gap > 0 ? "+" : ""}{gap.toFixed(1)}%</div></Link>)}
+            {disagreement.map(({ e, ktc, secondary, gap }) => <Link key={e.playerId} href={`/players/${e.playerId}`} className="flex items-center justify-between gap-3 py-3"><div className="min-w-0"><div className="truncate text-sm font-medium text-neutral-100">{e.player.fullName}</div><div className="text-[10px] text-neutral-600">{e.manager.teamName ?? e.manager.displayName} · KTC {formatPoints(ktc)} · FC→KTC {formatPoints(secondary)}</div></div><div className={`shrink-0 text-sm font-bold ${gap >= 0 ? "text-sky-300" : "text-amber-300"}`}>{gap > 0 ? "+" : ""}{gap.toFixed(1)}%</div></Link>)}
           </div>
         </div>
         <div className="space-y-3">

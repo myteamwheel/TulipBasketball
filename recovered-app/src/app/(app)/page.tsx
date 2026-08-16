@@ -67,6 +67,7 @@ export default async function HomePage() {
       slot: slotMap.get(`${manager.id}:${p.id}`) ?? "BENCH",
       currentValue: m.currentValue, currentObservedAt: m.currentObservedAt,
       consensusValue: mix.consensusValue, consensusSourceCount: mix.consensusSourceCount, consensusSources: mix.consensusSources,
+      fantasyCalcValue: mix.fantasyCalcValue, fantasyCalcRawValue: mix.fantasyCalcRawValue,
       statsGuyValue: mix.statsGuyValue, statsGuyRawValue: mix.statsGuyRawValue,
       isStale: m.isStale, pendingReview: m.pendingReview,
       changeSinceLastRefresh: m.changeSinceLastRefresh?.points ?? null,
@@ -112,7 +113,7 @@ export default async function HomePage() {
   const worst7d = [...movers].sort((a, b) => (a.change7dPoints ?? 0) - (b.change7dPoints ?? 0))[0];
 
   const disagreements = rows
-    .map((r) => ({ row: r, gap: sourceGapPct(r.currentValue, r.statsGuyValue) }))
+    .map((r) => ({ row: r, gap: sourceGapPct(r.currentValue, r.fantasyCalcValue) }))
     .filter((x): x is { row: PlayerRow; gap: number } => x.gap !== null)
     .sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap))
     .slice(0, 5);
@@ -138,7 +139,7 @@ export default async function HomePage() {
             <div className="mt-4 flex flex-wrap gap-2 text-[11px] text-neutral-500">
               <span className="status-pill">Sleeper {timeAgo(latestRun?.finishedAt ?? null)}</span>
               <span className={`status-pill ${sourceStatuses.KTC.stale ? "text-amber-300" : "text-emerald-300"}`}>KTC {sourceStatuses.KTC.stale ? "stale" : "fresh"}</span>
-              <span className={`status-pill ${sourceStatuses.STATSGUY.stale ? "text-amber-300" : "text-emerald-300"}`}>Stats Guy {sourceStatuses.STATSGUY.stale ? "stale" : "fresh"}</span>
+              <span className={`status-pill ${sourceStatuses.FANTASYCALC.stale ? "text-amber-300" : "text-emerald-300"}`}>FantasyCalc {sourceStatuses.FANTASYCALC.stale ? "stale" : "fresh"}</span>
               <span className="status-pill">KTC observed {timeAgo(latestKtcObservedAt)}</span>
             </div>
           </div>

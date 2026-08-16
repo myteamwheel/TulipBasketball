@@ -18,6 +18,8 @@ export interface PlayerRow {
   consensusValue: number | null;
   consensusSourceCount: number;
   consensusSources: string[];
+  fantasyCalcValue: number | null;
+  fantasyCalcRawValue: number | null;
   statsGuyValue: number | null;
   statsGuyRawValue: number | null;
   isStale: boolean;
@@ -71,9 +73,9 @@ const SIGNAL_FILTERS = [
   { key: "RISK", label: "Cut risk" },
 ] as const;
 
-function marketGapPct(ktc: number | null, sg: number | null) {
-  if (ktc === null || sg === null || ktc <= 0) return null;
-  return ((sg - ktc) / ktc) * 100;
+function marketGapPct(ktc: number | null, secondary: number | null) {
+  if (ktc === null || secondary === null || ktc <= 0) return null;
+  return ((secondary - ktc) / ktc) * 100;
 }
 
 function priceZone(r: PlayerRow) {
@@ -303,13 +305,13 @@ export default function PlayerTable({ rows, showOwner = false }: { rows: PlayerR
               <div className="rounded-md border border-emerald-950 bg-emerald-950/15 px-2.5 py-2">
                 <div className="text-[9px] uppercase tracking-wide text-neutral-600">Consensus</div>
                 <div className="text-lg font-semibold text-emerald-300">{formatPoints(r.consensusValue)}</div>
-                <div className="text-[10px] text-neutral-600">{r.consensusSourceCount ? `${r.consensusSourceCount} fresh sources` : "No fresh mix"}</div>{r.statsGuyValue !== null && <div className="text-[9px] text-neutral-600">KTC {formatPoints(r.currentValue)} · secondary→KTC {formatPoints(r.statsGuyValue)}</div>}
+                <div className="text-[10px] text-neutral-600">{r.consensusSourceCount ? `${r.consensusSourceCount} fresh sources` : "No fresh mix"}</div>{r.fantasyCalcValue !== null ? <div className="text-[9px] text-neutral-600">KTC {formatPoints(r.currentValue)} · FC→KTC {formatPoints(r.fantasyCalcValue)}</div> : <div className="text-[9px] text-neutral-600">KTC anchor only</div>}
               </div>
               <ChangeBlock label="7 days" points={r.change7dPoints} percent={r.change7dPercent} currentValue={r.currentValue} />
               <ChangeBlock label="30 days" points={r.change30dPoints} percent={r.change30dPercent} currentValue={r.currentValue} />
               <div className="min-w-0 rounded-md bg-neutral-950/70 px-2.5 py-2">
                 <div className="text-[9px] uppercase tracking-wide text-neutral-600">Market gap</div>
-                {(() => { const gap = marketGapPct(r.currentValue, r.statsGuyValue); return <><div className={`mt-0.5 text-base font-semibold ${gap === null ? "text-neutral-500" : gap >= 0 ? "text-sky-300" : "text-amber-300"}`}>{gap === null ? "n/a" : `${gap > 0 ? "+" : ""}${gap.toFixed(1)}%`}</div><div className="text-[9px] text-neutral-600">secondary→KTC vs KTC</div></>; })()}
+                {(() => { const gap = marketGapPct(r.currentValue, r.fantasyCalcValue); return <><div className={`mt-0.5 text-base font-semibold ${gap === null ? "text-neutral-500" : gap >= 0 ? "text-sky-300" : "text-amber-300"}`}>{gap === null ? "n/a" : `${gap > 0 ? "+" : ""}${gap.toFixed(1)}%`}</div><div className="text-[9px] text-neutral-600">FantasyCalc→KTC vs KTC</div></>; })()}
               </div>
             </div>
 
@@ -357,7 +359,7 @@ export default function PlayerTable({ rows, showOwner = false }: { rows: PlayerR
                   <div className="text-[11px] text-neutral-500">{r.position}{r.nflTeam ? ` · ${r.nflTeam}` : ""} · <span className={slotClass(r.slot)}>{r.slot}</span>{r.isStale && <span className="ml-1 text-amber-500">· STALE</span>}{r.pendingReview && <span className="ml-1 text-amber-500">· review pending</span>}</div>
                 </td>
                 {showOwner && <td className="px-2 py-2 text-xs text-neutral-400">{r.ownerTeam ?? "Free Agent"}</td>}
-                <td className="px-2 py-2 text-right"><span className="text-base font-semibold text-emerald-300">{formatPoints(r.consensusValue)}</span><div className="text-[10px] text-neutral-600">{r.consensusSourceCount > 0 ? `${r.consensusSourceCount} source${r.consensusSourceCount === 1 ? "" : "s"}` : "no fresh mix"}</div>{r.statsGuyValue !== null && (() => { const gap = marketGapPct(r.currentValue, r.statsGuyValue); return <div className={`mt-0.5 text-[9px] ${gap === null ? "text-neutral-600" : gap >= 0 ? "text-sky-400/70" : "text-amber-400/70"}`}>secondary gap {gap === null ? "n/a" : `${gap > 0 ? "+" : ""}${gap.toFixed(1)}%`}</div>; })()}</td>
+                <td className="px-2 py-2 text-right"><span className="text-base font-semibold text-emerald-300">{formatPoints(r.consensusValue)}</span><div className="text-[10px] text-neutral-600">{r.consensusSourceCount > 0 ? `${r.consensusSourceCount} source${r.consensusSourceCount === 1 ? "" : "s"}` : "no fresh mix"}</div>{r.fantasyCalcValue !== null && (() => { const gap = marketGapPct(r.currentValue, r.fantasyCalcValue); return <div className={`mt-0.5 text-[9px] ${gap === null ? "text-neutral-600" : gap >= 0 ? "text-sky-400/70" : "text-amber-400/70"}`}>FC gap {gap === null ? "n/a" : `${gap > 0 ? "+" : ""}${gap.toFixed(1)}%`}</div>; })()}</td>
                 <td className="px-2 py-2 text-right"><span className="text-base font-semibold text-neutral-100">{formatPoints(r.currentValue)}</span></td>
                 <td className={`px-2 py-2 text-right text-xs ${trendColorClass(r.changeSinceLastRefresh)}`}>{formatSigned(r.changeSinceLastRefresh)}</td>
                 <DesktopChangeCell points={r.change7dPoints} percent={r.change7dPercent} currentValue={r.currentValue} />
