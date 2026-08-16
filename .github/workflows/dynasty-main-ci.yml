@@ -3,6 +3,7 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+# Validates the full recovered dashboard before any production promotion.
 jobs:
   validate-dashboard:
     runs-on: ubuntu-latest
