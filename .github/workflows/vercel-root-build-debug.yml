@@ -6,7 +6,11 @@ on:
       - '.github/workflows/vercel-root-build-debug.yml'
       - 'package.json'
       - 'vercel.json'
-      - 'recovered-app/**'
+      - 'tsconfig.json'
+      - 'src/**'
+      - 'scripts/**'
+      - 'prisma/**'
+      - 'prisma.config.ts'
   workflow_dispatch:
 
 jobs:
