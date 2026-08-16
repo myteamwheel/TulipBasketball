@@ -11,8 +11,13 @@ export const KTC_FORMAT_LABEL = "Superflex / 0.5 PPR / No TE Premium";
 // without bypassing authentication, bot challenges, CAPTCHAs, or access controls.
 // Product requirement: KTC collection is always attempted on every dashboard refresh.
 export const KTC_DIRECT_REFRESH_ENABLED = true;
-export const STATSGUY_REFRESH_ENABLED = process.env.STATSGUY_REFRESH_ENABLED !== "false";
+
+// Stats Guy remains stored only as an optional diagnostic feed. It is disabled
+// by default because its trade-derived/tail values created unrealistic gaps
+// versus current KTC on low-end veterans and fringe assets.
+export const STATSGUY_REFRESH_ENABLED = process.env.STATSGUY_REFRESH_ENABLED === "true";
 export const DYNASTYDEALER_REFRESH_ENABLED = process.env.DYNASTYDEALER_REFRESH_ENABLED !== "false";
+export const TRADYR_REFRESH_ENABLED = process.env.TRADYR_REFRESH_ENABLED !== "false";
 export const KTC_AUTO_REFRESH_ENABLED = KTC_DIRECT_REFRESH_ENABLED;
 export const AUTO_REFRESH_ON_VISIT = true;
 
@@ -22,14 +27,15 @@ export const AUTO_REFRESH_ON_VISIT = true;
 export const MARKET_SOURCE_MAX_AGE_HOURS = Number(process.env.MARKET_SOURCE_MAX_AGE_HOURS || "26");
 export const MARKET_SOURCE_MAX_AGE_MS = MARKET_SOURCE_MAX_AGE_HOURS * 60 * 60 * 1000;
 
-// KTC is the canonical market-value scale. Independent secondary markets are
-// translated onto KTC scale, but KTC remains the anchor. Per-player reliability
-// gates can reduce or exclude a secondary when calibration extrapolates or the
-// source remains implausibly far from the live KTC observation.
+// KTC is the canonical market-value scale. Tradyr and Dynasty Dealer are
+// translated onto KTC scale and only included when they remain inside the trust
+// band. Stats Guy is zero-weight by default and should be treated as a
+// disagreement/diagnostic feed unless explicitly re-enabled and audited.
 export const CONSENSUS_WEIGHTS = {
   KTC: 0.70,
-  STATSGUY: 0.15,
-  DYNASTYDEALER: 0.15,
+  TRADYR: 0.20,
+  DYNASTYDEALER: 0.10,
+  STATSGUY: 0.00,
 } as const;
 
 // Optional authorized feed remains supported as an emergency/manual alternative.
