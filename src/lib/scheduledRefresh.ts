@@ -3,30 +3,23 @@ import { DISPLAY_TIMEZONE } from "@/lib/config";
 import { getLatestSuccessfulRefreshRun, startRefresh } from "@/lib/refresh";
 import { repairCurrentOwnershipIntegrity } from "@/lib/ownershipIntegrity";
 
-export const maxDuration = 300;
-export const dynamic = "force-dynamic";
-
 function easternParts(now: Date) {
   const parts = new Intl.DateTimeFormat("en-US", { timeZone: DISPLAY_TIMEZONE, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hour12: false }).formatToParts(now);
   const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
   return { date: `${value("year")}-${value("month")}-${value("day")}`, hour: Number(value("hour")) };
 }
 
-export async function GET(request: Request) {
+export async function runScheduledRefresh(request: Request) {
   const secret = process.env.CRON_SECRET?.trim();
   if (!secret) return NextResponse.json({ error: "Scheduled refresh is not configured" }, { status: 503 });
   if (request.headers.get("authorization") !== `Bearer ${secret}`) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const now = new Date();
-  const local = easternParts(now);
-  if (local.hour !== 8) return NextResponse.json({ ok: true, skipped: true, reason: "Outside the 8 a.m. ET refresh window" });
-
+  const local = easternParts(new Date());
+  if (local.hour !== 8) return NextResponse.json({ ok: true, skipped: true, reason: "Not 8 a.m. America/New_York" });
   const latestSuccess = await getLatestSuccessfulRefreshRun();
   if (latestSuccess?.startedAt) {
     const prior = easternParts(new Date(latestSuccess.startedAt));
-    if (prior.date === local.date && prior.hour === 8) return NextResponse.json({ ok: true, skipped: true, reason: "Daily refresh already completed", runId: latestSuccess.runId });
+    if (prior.date === local.date) return NextResponse.json({ ok: true, skipped: true, reason: "Daily refresh already completed", runId: latestSuccess.runId });
   }
-
   try {
     await repairCurrentOwnershipIntegrity();
     const { runId } = await startRefresh();
