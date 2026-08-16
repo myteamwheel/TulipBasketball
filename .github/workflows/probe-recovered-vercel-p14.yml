@@ -1,0 +1,26 @@
+name: probe-recovered-vercel-p14
+on:
+  push:
+    paths: ['.github/workflows/probe-recovered-vercel-p14.yml']
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for recovered Vercel dashboard
+        run: |
+          set -euo pipefail
+          base='https://dynasty-boys-dashboard-recovered-myteamwheel-8058s-projects.vercel.app'
+          for i in $(seq 1 40); do
+            echo "attempt=$i"
+            h=$(curl -sS -L --max-time 30 -o /tmp/health -w '%{http_code}' "${base}/healthz?probe=$(date +%s%N)" || true)
+            d=$(curl -sS -L --max-time 30 -o /tmp/debug -w '%{http_code}' "${base}/api/debug-home?probe=$(date +%s%N)" || true)
+            s=$(curl -sS -L --max-time 30 -o /tmp/settings -w '%{http_code}' "${base}/settings?probe=$(date +%s%N)" || true)
+            echo "health=$h debug=$d settings=$s"
+            echo "debug_body=$(head -c 1200 /tmp/debug 2>/dev/null || true)"
+            if [ "$h" = 200 ] && [ "$d" = 200 ] && grep -q '"ok":true' /tmp/debug && [ "$s" = 200 ] && grep -q 'Build: PATCH 14' /tmp/settings && grep -q 'Tradyr' /tmp/settings; then
+              echo 'RECOVERED PATCH 14 IS HEALTHY'
+              exit 0
+            fi
+            sleep 15
+          done
+          exit 1
