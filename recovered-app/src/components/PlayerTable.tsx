@@ -86,7 +86,7 @@ function priceZone(r: PlayerRow) {
 const MOBILE_SORTS: { value: SortKey; label: string }[] = [
   { value: "currentValue", label: "KTC value" },
   { value: "consensusValue", label: "Consensus" },
-  { value: "changeSinceLastRefresh", label: "Latest move" },
+  { value: "changeSinceLastRefresh", label: "Previous checkpoint" },
   { value: "change7dPoints", label: "7-day move" },
   { value: "changeBaselinePoints", label: "Since baseline" },
   { value: "fullName", label: "Name" },
@@ -316,7 +316,7 @@ export default function PlayerTable({ rows, showOwner = false }: { rows: PlayerR
             <div className="mt-3 flex items-end justify-between gap-3">
               <div className="text-[10px] leading-relaxed text-neutral-500">
                 {(() => { const zone = priceZone(r); return <><div className="font-medium text-neutral-400">{zone.label}</div><div>{zone.pct === null ? "Tracked range still forming" : `${Math.round(zone.pct)}th percentile of saved range`}</div><div className="text-[9px] text-neutral-600">{formatPoints(r.low)} – {formatPoints(r.high)}</div></>; })()}
-                {r.changeSinceLastRefresh !== null && <div className={`mt-0.5 text-[9px] ${trendColorClass(r.changeSinceLastRefresh)}`}>latest refresh {formatSigned(r.changeSinceLastRefresh)}</div>}
+                {r.changeSinceLastRefresh !== null && <div className={`mt-0.5 text-[9px] ${trendColorClass(r.changeSinceLastRefresh)}`}>previous checkpoint {formatSigned(r.changeSinceLastRefresh)}</div>}
               </div>
               <div className="flex items-center gap-2">
                 <Link href={`/players/${r.id}`} onClick={(e) => e.stopPropagation()} className="block"><Sparkline points={r.sparkline} /></Link>
@@ -341,7 +341,7 @@ export default function PlayerTable({ rows, showOwner = false }: { rows: PlayerR
               {showOwner && <th className="whitespace-nowrap px-2 py-2 text-left text-[11px] font-medium uppercase tracking-wide text-neutral-500">Owner</th>}
               {([[
                 "Consensus", "consensusValue"
-              ], ["KTC", "currentValue"], ["Since Refresh", "changeSinceLastRefresh"], ["7d", "change7dPoints"], ["30d", "change30dPoints"], ["Baseline", "changeBaselinePoints"]] as [string, SortKey][]).map(([label, field]) => (
+              ], ["KTC", "currentValue"], ["Prev checkpoint", "changeSinceLastRefresh"], ["7d", "change7dPoints"], ["30d", "change30dPoints"], ["Baseline", "changeBaselinePoints"]] as [string, SortKey][]).map(([label, field]) => (
                 <Th key={field} label={label} sortField={field} active={sortKey === field} sortDir={sortDir} onToggle={toggleSort} />
               ))}
               <th className="px-2 py-2 text-right text-[11px] font-medium uppercase tracking-wide text-neutral-500"><div>Tracked range</div><div className="normal-case tracking-normal text-[9px] text-neutral-600">all saved history</div></th>

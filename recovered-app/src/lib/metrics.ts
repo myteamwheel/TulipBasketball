@@ -107,20 +107,13 @@ function computeForPlayer(now: Date, observations: Obs[]): PlayerMarketData {
   const dataAgeMs = latestValid ? now.getTime() - latestValid.observedAt.getTime() : null;
   const isStale = dataAgeMs !== null && dataAgeMs > STALE_MS;
 
-  // "Since last refresh" must compare two actual automatic refresh runs. The
-  // seeded June baseline is historical reference data, not a prior refresh.
-  let previousRefreshValid: Obs | null = null;
-  if (latestValid?.refreshRunId) {
-    for (let i = valid.length - 2; i >= 0; i--) {
-      const candidate = valid[i];
-      if (candidate.refreshRunId && candidate.refreshRunId !== latestValid.refreshRunId) {
-        previousRefreshValid = candidate;
-        break;
-      }
-    }
-  }
+  // "Latest move" means the immediately previous saved KTC checkpoint, regardless
+  // of whether that checkpoint came from an automatic refresh or a verified manual
+  // historical backfill. This preserves the user's permanent current-vs-previous
+  // format while June 7 remains the separate long-term baseline.
+  const previousCheckpoint = latestValid && valid.length >= 2 ? valid[valid.length - 2] : null;
   const changeSinceLastRefresh =
-    latestValid && previousRefreshValid ? change(latestValid.value, previousRefreshValid) : null;
+    latestValid && previousCheckpoint ? change(latestValid.value, previousCheckpoint) : null;
 
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);

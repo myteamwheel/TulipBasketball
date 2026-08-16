@@ -66,12 +66,14 @@ export default async function HomePage() {
     const m = marketData.get(p.id)!;
     const mix = marketMix.get(p.id)!;
     const signal = signals.get(p.id)?.result;
+    const trusted = trustedMarkets.get(p.id);
+    const trustedSecondary = trusted?.tradyr.value ?? trusted?.dynastyDealer.value ?? null;
     return {
       id: p.id, fullName: p.fullName, position: p.position, nflTeam: p.nflTeam, status: p.status,
       slot: slotMap.get(`${manager.id}:${p.id}`) ?? "BENCH",
       currentValue: m.currentValue, currentObservedAt: m.currentObservedAt,
       consensusValue: mix.consensusValue, consensusSourceCount: mix.consensusSourceCount, consensusSources: mix.consensusSources,
-      statsGuyValue: mix.statsGuyValue, statsGuyRawValue: mix.statsGuyRawValue,
+      statsGuyValue: trustedSecondary, statsGuyRawValue: null,
       isStale: m.isStale, pendingReview: m.pendingReview,
       changeSinceLastRefresh: m.changeSinceLastRefresh?.points ?? null,
       change7dPoints: m.change7d?.points ?? null, change7dPercent: m.change7d?.percent ?? null,
