@@ -7,17 +7,17 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Probe Vercel project environment format
+      - name: Reprobe settled Vercel environment tests
         run: |
           set +e
           for u in \
-            'https://dynasty-env-capability-test5.vercel.app/api/test' \
-            'https://dynasty-env-capability-test5.vercel.app/'; do
+            'https://dynasty-env-capability-test4.vercel.app/api/test' \
+            'https://dynasty-env-capability-test5.vercel.app/api/test'; do
             echo "===== $u ====="
             curl -L --max-time 30 -sS -D /tmp/h -o /tmp/b "$u"
             echo "curl_exit=$? status=$(awk 'NR==1{print $2}' /tmp/h)"
             grep -Ei '^(location|x-vercel|content-type|http/)' /tmp/h | head -30 || true
             echo '--- BODY ---'
-            cat /tmp/b | head -c 2500 || true
+            cat /tmp/b | head -c 2000 || true
             echo
           done
