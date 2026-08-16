@@ -1,0 +1,31 @@
+name: Patch 14 Daily 8am Refresh
+
+on:
+  schedule:
+    # 8:00 a.m. Eastern is 12:00 UTC during daylight time and 13:00 UTC
+    # during standard time. The application endpoint gates the wrong invocation.
+    - cron: '0 12 * * *'
+    - cron: '0 13 * * *'
+  workflow_dispatch:
+  push:
+    paths: ['.github/workflows/patch14-daily-refresh.yml']
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Invoke Patch 14 daily refresh gate
+        run: |
+          set -euo pipefail
+          url='https://dynasty-boys-dashboard.vercel.app/api/cron/refresh'
+          stamp=$(date +%s%N)
+          code=$(curl -L --max-time 30 -sS \
+            -H 'Cache-Control: no-cache, no-store, max-age=0' \
+            -H 'Pragma: no-cache' \
+            -o /tmp/refresh.json \
+            -w '%{http_code}' \
+            "${url}?github_schedule=${stamp}")
+          echo "HTTP=${code}"
+          cat /tmp/refresh.json
+          echo
+          test "$code" = '200'
