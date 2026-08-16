@@ -6,27 +6,24 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Inspect current production and backup health
+      - name: Inspect current production recovery paths
         shell: bash
         run: |
           set +e
           BASE='https://dynasty-boys-dashboard.vercel.app'
-          curl -L --max-time 30 -sS "$BASE/settings" -o /tmp/settings
-          curl -L --max-time 30 -sS "$BASE/" -o /tmp/root
-          echo '===== BUILD MARKERS ====='
+          echo '===== ROOT ====='
+          curl -L --max-time 30 -sS -o /tmp/root -w 'status=%{http_code}\n' "$BASE/"
+          grep -o 'Decision Desk' /tmp/root | head || true
+          echo '===== SETTINGS MARKERS ====='
+          curl -L --max-time 30 -sS -o /tmp/settings -w 'status=%{http_code}\n' "$BASE/settings"
           grep -o 'DECISION CENTER + QOL PATCH 11' /tmp/settings | head || true
           grep -o 'SOURCE TRUST + WAIVER CALIBRATION PATCH 12' /tmp/settings | head || true
-          grep -o 'Decision Desk' /tmp/root | head || true
-          echo '===== BACKUP HEALTH TEXT ====='
-          python3 - <<'PY'
-          import re, html
-          s=html.unescape(open('/tmp/settings',errors='ignore').read())
-          s=re.sub(r'<[^>]+>',' ',s)
-          s=re.sub(r'\s+',' ',s)
-          for needle in ['Independent automatic backup','Healthy · last copy','Independent backup is healthy','Configured; waiting','not configured','30 daily recovery points']:
-              i=s.find(needle)
-              if i>=0: print(s[max(0,i-250):i+500])
-          PY
+          echo '===== OLD DB AUDIT ====='
+          curl -L --max-time 45 -sS -o /tmp/old -w 'status=%{http_code}\n' "$BASE/api/recovery-old-db-audit"
+          cat /tmp/old; echo
+          echo '===== BACKUP AUDIT ====='
+          curl -L --max-time 45 -sS -o /tmp/backup -w 'status=%{http_code}\n' "$BASE/api/recovery-backup-audit"
+          cat /tmp/backup; echo
           echo '===== REFRESH STATUS ====='
-          curl -L --max-time 30 -sS "$BASE/api/refresh" || true
+          curl -L --max-time 45 -sS "$BASE/api/refresh" || true
           echo
