@@ -27,18 +27,21 @@ jobs:
           STATSGUY_REFRESH_ENABLED: "false"
         run: |
           cat > provider-check.ts <<'TS'
-          const { fetchKtcSnapshot, fetchFantasyCalcSnapshot } = await import('./src/lib/marketSources.ts');
-          const ktc = await fetchKtcSnapshot();
-          const joeKtc = ktc.rows.find((r:any) => r.name === 'Joe Mixon');
-          if (!joeKtc) throw new Error(`Joe Mixon still missing from KTC merged collector (${ktc.rows.length} rows)`);
-          const fc = await fetchFantasyCalcSnapshot();
-          const joeFc = fc.rows.find((r:any) => r.sleeperId === '4018');
-          if (!joeFc) throw new Error(`Joe Mixon missing from FantasyCalc collector (${fc.rows.length} rows)`);
-          console.log(JSON.stringify({
-            ktcRows: ktc.rows.length,
-            ktcJoe: { value: joeKtc.rawValue, rank: joeKtc.rank, positionRank: joeKtc.positionRank, ktcId: joeKtc.ktcId },
-            fantasyCalcRows: fc.rows.length,
-            fantasyCalcJoe: { value: joeFc.rawValue, rank: joeFc.rank, positionRank: joeFc.positionRank, sleeperId: joeFc.sleeperId },
-          }, null, 2));
+          async function main() {
+            const { fetchKtcSnapshot, fetchFantasyCalcSnapshot } = await import('./src/lib/marketSources.ts');
+            const ktc = await fetchKtcSnapshot();
+            const joeKtc = ktc.rows.find((r:any) => r.name === 'Joe Mixon');
+            if (!joeKtc) throw new Error(`Joe Mixon still missing from KTC merged collector (${ktc.rows.length} rows)`);
+            const fc = await fetchFantasyCalcSnapshot();
+            const joeFc = fc.rows.find((r:any) => r.sleeperId === '4018');
+            if (!joeFc) throw new Error(`Joe Mixon missing from FantasyCalc collector (${fc.rows.length} rows)`);
+            console.log(JSON.stringify({
+              ktcRows: ktc.rows.length,
+              ktcJoe: { value: joeKtc.rawValue, rank: joeKtc.rank, positionRank: joeKtc.positionRank, ktcId: joeKtc.ktcId },
+              fantasyCalcRows: fc.rows.length,
+              fantasyCalcJoe: { value: joeFc.rawValue, rank: joeFc.rank, positionRank: joeFc.positionRank, sleeperId: joeFc.sleeperId },
+            }, null, 2));
+          }
+          main().catch((err) => { console.error(err); process.exit(1); });
           TS
           npx tsx provider-check.ts
