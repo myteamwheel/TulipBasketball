@@ -1,0 +1,15 @@
+name: trigger-patch14-refresh-once
+on:
+  push:
+    paths: ['.github/workflows/trigger-patch14-refresh-once.yml']
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Start one Patch 14 production refresh
+        run: |
+          set -euo pipefail
+          stamp=$(date +%s%N)
+          curl -fsSL --max-time 30 -H 'Cache-Control: no-cache, no-store' \
+            "https://dynasty-boys-dashboard.vercel.app/api/patch14-refresh-once-a17c9e?probe=${stamp}"
+          echo
