@@ -21,8 +21,8 @@ model League {
   sleeperId   String   @unique
   name        String
   season      String
-  format      String // e.g. "Superflex, 0.5 PPR, no TE premium"
-  settings    String // raw JSON blob of Sleeper league settings/scoring/roster_positions
+  format      String
+  settings    String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -39,7 +39,7 @@ model Manager {
   sleeperRosterId  Int
   displayName      String
   teamName         String?
-  isPrimaryTeam    Boolean  @default(false) // true for Orlando Oswalds
+  isPrimaryTeam    Boolean  @default(false)
   isActive         Boolean  @default(true)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -66,10 +66,10 @@ model Player {
   sleeperId       String        @unique
   ktcId           String?       @unique
   fullName        String
-  normalizedName  String // lowercased, punctuation/suffix-stripped, for fallback matching
+  normalizedName  String
   position        String
   nflTeam         String?
-  status          String? // Active, Injured Reserve, etc (Sleeper status)
+  status          String?
   mappingStatus   MappingStatus @default(NEEDS_REVIEW)
   mappingNote     String?
   createdAt       DateTime      @default(now())
@@ -79,9 +79,9 @@ model Player {
   marketObservations    MarketObservation[]
   consensusObservations ConsensusObservation[]
   ownershipIntervals    OwnershipInterval[]
-  rosterSnapshots    RosterSnapshot[]
-  signals            Signal[]
-  notes              UserNote[]
+  rosterSnapshots       RosterSnapshot[]
+  signals               Signal[]
+  notes                 UserNote[]
 
   @@index([normalizedName])
   @@index([position])
@@ -98,17 +98,14 @@ model OwnershipInterval {
   manager               Manager   @relation(fields: [managerId], references: [id])
   managerId             String
   validFrom             DateTime
-  validTo               DateTime? // null = current owner
-  sourceTransactionId   String? // Sleeper transaction id that caused this, if known
+  validTo               DateTime?
+  sourceTransactionId   String?
   createdAt             DateTime  @default(now())
 
   @@index([playerId, validFrom])
   @@index([managerId, validFrom])
 }
 
-// Point-in-time full roster capture for each refresh run (audit trail of
-// exactly what Sleeper reported at that moment, independent of our derived
-// ownership intervals).
 enum RosterSlot {
   STARTER
   BENCH
@@ -156,8 +153,8 @@ model KtcObservation {
   format            String            @default("SF-0.5PPR-noTEP")
   observedAt        DateTime
   sourceType        KtcSourceType
-  sourceUrl         String? // KTC page/profile URL if known, or import filename
-  importBatchId     String? // groups rows imported together
+  sourceUrl         String?
+  importBatchId     String?
   refreshRunId      String?
   validationStatus  ValidationStatus  @default(VALID)
   validationNote    String?
@@ -166,7 +163,6 @@ model KtcObservation {
   @@index([playerId, observedAt])
   @@index([importBatchId])
 }
-
 
 // ---------------------------------------------------------------------------
 // Multi-source dynasty market observations + weighted consensus
@@ -208,9 +204,9 @@ model ConsensusObservation {
   value         Int
   observedAt    DateTime
   refreshRunId  String
-  sourcesUsed   String   // JSON array of source names
+  sourcesUsed   String
   sourceCount   Int
-  weights       String   // JSON object of effective normalized weights
+  weights       String
   createdAt     DateTime @default(now())
 
   @@unique([playerId, refreshRunId])
@@ -218,12 +214,11 @@ model ConsensusObservation {
   @@index([refreshRunId])
 }
 
-
 model DraftPickObservation {
   id              String   @id @default(cuid())
   season          Int
   round           Int
-  bucket          String   // EARLY | MID | LATE
+  bucket          String
   label           String
   value           Int
   observedAt      DateTime
@@ -242,20 +237,20 @@ model DraftPickObservation {
 // ---------------------------------------------------------------------------
 
 model Transaction {
-  id                  String   @id @default(cuid())
-  league              League   @relation(fields: [leagueId], references: [id])
-  leagueId            String
-  sleeperTransactionId String  @unique
-  type                String // trade, waiver, free_agent, commissioner
-  status              String
-  sleeperCreatedAt    DateTime
-  rosterIdsInvolved   String // JSON array of sleeper roster ids
-  adds                String? // JSON { playerId: rosterId }
-  drops               String? // JSON { playerId: rosterId }
-  draftPicks          String? // JSON array
-  waiverBudget        String? // JSON array
-  rawPayload          String // full JSON for audit
-  processedAt         DateTime @default(now())
+  id                   String   @id @default(cuid())
+  league               League   @relation(fields: [leagueId], references: [id])
+  leagueId             String
+  sleeperTransactionId String   @unique
+  type                 String
+  status               String
+  sleeperCreatedAt     DateTime
+  rosterIdsInvolved    String
+  adds                 String?
+  drops                String?
+  draftPicks           String?
+  waiverBudget         String?
+  rawPayload           String
+  processedAt          DateTime @default(now())
 
   @@index([leagueId, sleeperCreatedAt])
 }
@@ -270,15 +265,15 @@ model RefreshRun {
   leagueId              String
   startedAt             DateTime @default(now())
   finishedAt            DateTime?
-  status                String // RUNNING | SUCCESS | PARTIAL_FAILURE | FAILED
-  requestedSources      String // JSON array
-  sleeperSyncOk          Boolean?
-  ktcSyncOk              Boolean?
-  rosterChangesCount     Int      @default(0)
-  playersRefreshed       Int      @default(0)
-  mappingWarnings        String?  // JSON array of unresolved mapping issues
-  errors                 String?  // JSON array of {source,message}
-  summary                String?  // JSON summary for UI/history cards
+  status                String
+  requestedSources      String
+  sleeperSyncOk         Boolean?
+  ktcSyncOk             Boolean?
+  rosterChangesCount    Int      @default(0)
+  playersRefreshed      Int      @default(0)
+  mappingWarnings       String?
+  errors                String?
+  summary               String?
 
   rosterSnapshots RosterSnapshot[]
 
@@ -286,26 +281,37 @@ model RefreshRun {
   @@index([status, startedAt])
 }
 
-model Signal {
-  id           String   @id @default(cuid())
-  player       Player   @relation(fields: [playerId], references: [id])
-  playerId     String
-  signalType   String
-  strength     Int
-  reason       String
-  observedAt   DateTime
-  refreshRunId String?
-  createdAt    DateTime @default(now())
+enum SignalType {
+  SELL_HIGH
+  HOLD
+  BUY_LOW
+  CUT_BAIT
+  WATCH
+  CUT_LOSSES
+}
 
-  @@index([playerId, observedAt])
-  @@index([signalType, observedAt])
+model Signal {
+  id           String     @id @default(cuid())
+  player       Player     @relation(fields: [playerId], references: [id])
+  playerId     String
+  refreshRunId String?
+  signal       SignalType
+  score        Int
+  confidence   String
+  reasonCodes  String
+  createdAt    DateTime   @default(now())
+
+  @@index([playerId, createdAt])
+  @@index([signal, createdAt])
+  @@index([refreshRunId])
 }
 
 model UserNote {
   id        String   @id @default(cuid())
   player    Player   @relation(fields: [playerId], references: [id])
   playerId  String
-  note      String
+  body      String
+  tags      String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
