@@ -1,0 +1,6 @@
+.git
+.github
+recovered-app/.next
+recovered-app/node_modules
+recovered-app/.env*
+*.log
