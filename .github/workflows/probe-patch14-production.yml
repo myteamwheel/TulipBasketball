@@ -13,12 +13,7 @@ jobs:
           set -euo pipefail
           PROD='https://dynasty-boys-dashboard.vercel.app'
           stamp=$(date +%s)
-          code=$(curl -L --max-time 30 -sS \
-            -H 'Cache-Control: no-cache, no-store, max-age=0' \
-            -H 'Pragma: no-cache' \
-            -o /tmp/health.json \
-            -w '%{http_code}' \
-            "${PROD}/api/patch14-health?probe=${stamp}")
+          code=$(curl -L --max-time 30 -sS -H 'Cache-Control: no-cache, no-store, max-age=0' -H 'Pragma: no-cache' -o /tmp/health.json -w '%{http_code}' "${PROD}/api/patch14-health?probe=${stamp}")
           echo "HEALTH_HTTP=${code}"
           cat /tmp/health.json
           echo
@@ -29,37 +24,17 @@ jobs:
           stamp=$(date +%s)
           for path in / /settings; do
             safe=$(echo "$path" | tr '/' '_' )
-            code=$(curl -L --max-time 30 -sS \
-              -H 'Cache-Control: no-cache, no-store, max-age=0' \
-              -H 'Pragma: no-cache' \
-              -o "/tmp/${safe}.html" \
-              -w '%{http_code}' \
-              "${PROD}${path}?probe=${stamp}")
+            code=$(curl -L --max-time 30 -sS -H 'Cache-Control: no-cache, no-store, max-age=0' -H 'Pragma: no-cache' -o "/tmp/${safe}.html" -w '%{http_code}' "${PROD}${path}?probe=${stamp}")
             echo "PATH=${path} HTTP=${code}"
             grep -Eo 'Data Health[^<]{0,40}|Patch 14|Tradyr|Dynasty Dealer|FantasyCalc|Stats Guy|Decision Center|Power Board|Orlando Oswalds' "/tmp/${safe}.html" | sort -u || true
           done
       - name: Probe Tradyr documented pagination behavior
         run: |
           set -euo pipefail
-          for qs in \
-            'format=dynasty&numQbs=2&tep=false&limit=1000&offset=0' \
-            'format=dynasty&numQbs=2&tep=false&limit=500&offset=0' \
-            'format=dynasty&numQbs=2&tep=false&limit=200&offset=0' \
-            'format=dynasty&numQbs=2&tep=false&limit=50&offset=0' \
-            'format=dynasty&numQbs=2&tep=false&limit=50&offset=50'; do
+          for qs in 'format=dynasty&numQbs=2&tep=false&limit=1000&offset=0' 'format=dynasty&numQbs=2&tep=false&limit=500&offset=0' 'format=dynasty&numQbs=2&tep=false&limit=200&offset=0' 'format=dynasty&numQbs=2&tep=false&limit=50&offset=0' 'format=dynasty&numQbs=2&tep=false&limit=50&offset=50'; do
             url="https://api.tradyr.app/v1/players?${qs}"
             echo "===== ${qs} ====="
             curl -sS --max-time 30 -D /tmp/h -o /tmp/b "$url"
             grep -iE '^(HTTP/|content-type:|x-ratelimit|cache-control:|etag:)' /tmp/h || true
-            python3 - <<'PY'
-import json
-p=json.load(open('/tmp/b'))
-data=p.get('data') if isinstance(p,dict) else None
-meta=p.get('meta') if isinstance(p,dict) else None
-print('rows=', len(data) if isinstance(data,list) else None)
-print('meta=', meta)
-if isinstance(data,list) and data:
-    print('first=', {k:data[0].get(k) for k in ('name','rank','composite','slug')})
-    print('last=', {k:data[-1].get(k) for k in ('name','rank','composite','slug')})
-PY
+            jq -c '{rows:(.data|length),meta:.meta,first:(.data[0]|{name,rank,composite,slug}),last:(.data[-1]|{name,rank,composite,slug})}' /tmp/b
           done
