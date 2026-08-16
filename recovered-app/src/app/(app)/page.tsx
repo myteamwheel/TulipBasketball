@@ -8,6 +8,8 @@ import PlayerTable, { type PlayerRow } from "@/components/PlayerTable";
 import SectionHeader from "@/components/SectionHeader";
 import { formatPoints, formatSigned, trendColorClass, timeAgo } from "@/lib/format";
 import { getCurrentMarketMix, getLatestMarketSourceStatuses } from "@/lib/marketSources";
+import { getMarketMovers } from "@/lib/marketMovers";
+import { getTrustedMarketContext } from "@/lib/trustedMarketContext";
 import {
   actionPriority,
   powerTier,
@@ -51,11 +53,13 @@ export default async function HomePage() {
     getLatestKtcObservationTime(),
   ]);
   const playerIds = roster.map((p) => p.id);
-  const [marketData, marketMix, sourceStatuses, signals] = await Promise.all([
+  const [marketData, marketMix, sourceStatuses, signals, moverWindows, trustedMarkets] = await Promise.all([
     computeMarketDataForPlayers(playerIds),
     getCurrentMarketMix(playerIds),
     getLatestMarketSourceStatuses(),
     computeSignalsForCurrentRoster(),
+    getMarketMovers(playerIds),
+    getTrustedMarketContext(playerIds),
   ]);
 
   const rows: PlayerRow[] = roster.map((p) => {
@@ -105,20 +109,23 @@ export default async function HomePage() {
       if (p) return p;
       return Math.abs(b.change7dPercent ?? 0) - Math.abs(a.change7dPercent ?? 0);
     })
-    .slice(0, 5);
+    .slice(0, 6);
 
-  const movers = rows.filter((r) => r.change7dPoints !== null);
-  const best7d = [...movers].sort((a, b) => (b.change7dPoints ?? 0) - (a.change7dPoints ?? 0))[0];
-  const worst7d = [...movers].sort((a, b) => (a.change7dPoints ?? 0) - (b.change7dPoints ?? 0))[0];
+  const disagreements = rows.flatMap((row) => {
+    const trusted = trustedMarkets.get(row.id);
+    const options = [
+      { source: "Tradyr", value: trusted?.tradyr.value ?? null },
+      { source: "Dynasty Dealer", value: trusted?.dynastyDealer.value ?? null },
+    ];
+    return options.flatMap((option) => {
+      const sourceGap = sourceGapPct(row.currentValue, option.value);
+      return sourceGap === null ? [] : [{ row, source: option.source, value: option.value, gap: sourceGap }];
+    });
+  }).sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap)).slice(0, 5);
 
-  const disagreements = rows
-    .map((r) => ({ row: r, gap: sourceGapPct(r.currentValue, r.statsGuyValue) }))
-    .filter((x): x is { row: PlayerRow; gap: number } => x.gap !== null)
-    .sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap))
-    .slice(0, 5);
-
-  const unmapped = rows.filter((r) => r.currentValue === null).length;
+  const noCurrentKtc = rows.filter((r) => r.currentValue === null).length;
   const stale = rows.filter((r) => r.isStale).length;
+  const tradyrStatus = latestRun?.marketSourceStatuses.find((s) => String(s.source) === "TRADYR");
 
   return (
     <div className="space-y-7">
@@ -138,7 +145,8 @@ export default async function HomePage() {
             <div className="mt-4 flex flex-wrap gap-2 text-[11px] text-neutral-500">
               <span className="status-pill">Sleeper {timeAgo(latestRun?.finishedAt ?? null)}</span>
               <span className={`status-pill ${sourceStatuses.KTC.stale ? "text-amber-300" : "text-emerald-300"}`}>KTC {sourceStatuses.KTC.stale ? "stale" : "fresh"}</span>
-              <span className={`status-pill ${sourceStatuses.STATSGUY.stale ? "text-amber-300" : "text-emerald-300"}`}>Stats Guy {sourceStatuses.STATSGUY.stale ? "stale" : "fresh"}</span>
+              <span className={`status-pill ${tradyrStatus?.ok ? "text-emerald-300" : "text-amber-300"}`}>Tradyr {tradyrStatus?.ok ? "fresh" : "check"}</span>
+              <span className={`status-pill ${sourceStatuses.DYNASTYDEALER.stale ? "text-amber-300" : "text-emerald-300"}`}>Dynasty Dealer {sourceStatuses.DYNASTYDEALER.stale ? "stale" : "fresh"}</span>
               <span className="status-pill">KTC observed {timeAgo(latestKtcObservedAt)}</span>
             </div>
           </div>
@@ -151,40 +159,44 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {(unmapped > 0 || stale > 0) && (
+      {(noCurrentKtc > 0 || stale > 0) && (
         <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.05] px-4 py-2.5 text-xs text-amber-200">
-          Data attention: {unmapped > 0 ? `${unmapped} player${unmapped === 1 ? "" : "s"} missing KTC mapping` : ""}{unmapped > 0 && stale > 0 ? " · " : ""}{stale > 0 ? `${stale} stale player value${stale === 1 ? "" : "s"}` : ""}. <Link href="/refresh-history" className="underline decoration-amber-500/50 underline-offset-2">Open Data Health</Link>.
+          Data attention: {noCurrentKtc > 0 ? `${noCurrentKtc} identified player${noCurrentKtc === 1 ? "" : "s"} without a current KTC value` : ""}{noCurrentKtc > 0 && stale > 0 ? " · " : ""}{stale > 0 ? `${stale} stale player value${stale === 1 ? "" : "s"}` : ""}. <Link href="/refresh-history" className="underline decoration-amber-500/50 underline-offset-2">Open Data Health</Link>.
         </div>
       )}
 
       <section className="space-y-3">
-        <SectionHeader eyebrow="What deserves attention" title="Decision Board" description="Prioritized from live recommendation signals and meaningful 7-day movement—not tiny changes between frequent refreshes." />
-        <div className="grid gap-3 lg:grid-cols-[1.2fr_.8fr]">
-          <div className="grid gap-2 sm:grid-cols-2">
-            {actionable.map((r) => (
-              <Link key={r.id} href={`/players/${r.id}`} className={`interactive-card rounded-xl border p-3 ${SIGNAL_TONE[r.signal ?? ""] ?? "border-neutral-800 bg-neutral-900"}`}>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-[10px] font-semibold uppercase tracking-[.16em] opacity-80">{r.signal?.replaceAll("_", " ")}</div>
-                    <div className="mt-1 truncate font-semibold text-neutral-100">{r.fullName}</div>
-                    <div className="mt-0.5 text-[11px] text-neutral-500">{r.position} · {r.slot} · KTC {formatPoints(r.currentValue)}</div>
-                  </div>
-                  <div className={`shrink-0 text-right text-sm font-semibold ${trendColorClass(r.change7dPoints)}`}>{formatSigned(r.change7dPoints)}<div className="text-[9px] font-normal text-neutral-600">7d</div></div>
+        <SectionHeader eyebrow="What deserves attention" title="Decision Board" description="Prioritized from market trend, roster role, player context, and bounded game-performance evidence. One or two bad games cannot manufacture a sell signal." />
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {actionable.map((r) => (
+            <Link key={r.id} href={`/players/${r.id}`} className={`interactive-card rounded-xl border p-3 ${SIGNAL_TONE[r.signal ?? ""] ?? "border-neutral-800 bg-neutral-900"}`}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-[10px] font-semibold uppercase tracking-[.16em] opacity-80">{r.signal?.replaceAll("_", " ")}</div>
+                  <div className="mt-1 truncate font-semibold text-neutral-100">{r.fullName}</div>
+                  <div className="mt-0.5 text-[11px] text-neutral-500">{r.position} · {r.slot} · KTC {formatPoints(r.currentValue)}</div>
                 </div>
-                <p className="mt-3 text-xs leading-relaxed text-neutral-400">{signalActionCopy(r.signal)}</p>
-              </Link>
-            ))}
-            {actionable.length === 0 && <div className="panel p-4 text-sm text-neutral-500 sm:col-span-2">No non-HOLD signals right now. The model is not forcing action.</div>}
-          </div>
+                <div className={`shrink-0 text-right text-sm font-semibold ${trendColorClass(r.change7dPoints)}`}>{formatSigned(r.change7dPoints)}<div className="text-[9px] font-normal text-neutral-600">7d</div></div>
+              </div>
+              <p className="mt-3 text-xs leading-relaxed text-neutral-400">{signalActionCopy(r.signal)}</p>
+            </Link>
+          ))}
+          {actionable.length === 0 && <div className="panel p-4 text-sm text-neutral-500 sm:col-span-2 lg:col-span-3">No non-HOLD signals right now. The model is not forcing action.</div>}
+        </div>
+      </section>
 
-          <div className="panel p-4">
-            <div className="eyebrow">Market movement</div>
-            <h3 className="mt-1 text-sm font-semibold text-neutral-100">7-day pulse</h3>
-            <div className="mt-3 space-y-3">
-              {best7d && <Link href={`/players/${best7d.id}`} className="flex items-center justify-between rounded-lg bg-neutral-950/60 p-3"><div><div className="text-[10px] uppercase tracking-wide text-neutral-600">Biggest riser</div><div className="mt-0.5 text-sm font-medium text-neutral-100">{best7d.fullName}</div></div><div className="text-right text-emerald-400"><div className="font-semibold">{formatSigned(best7d.change7dPoints)}</div><div className="text-[10px]">{best7d.change7dPercent !== null ? `${best7d.change7dPercent > 0 ? "+" : ""}${best7d.change7dPercent.toFixed(1)}%` : ""}</div></div></Link>}
-              {worst7d && <Link href={`/players/${worst7d.id}`} className="flex items-center justify-between rounded-lg bg-neutral-950/60 p-3"><div><div className="text-[10px] uppercase tracking-wide text-neutral-600">Biggest faller</div><div className="mt-0.5 text-sm font-medium text-neutral-100">{worst7d.fullName}</div></div><div className="text-right text-red-400"><div className="font-semibold">{formatSigned(worst7d.change7dPoints)}</div><div className="text-[10px]">{worst7d.change7dPercent !== null ? `${worst7d.change7dPercent > 0 ? "+" : ""}${worst7d.change7dPercent.toFixed(1)}%` : ""}</div></div></Link>}
+      <section className="space-y-3">
+        <SectionHeader eyebrow="Market pulse" title="Biggest KTC changes" description="The largest Orlando roster repricings over four useful windows. A window marked limited uses the earliest saved point because tracking has not covered the full period yet." />
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {moverWindows.map((window) => (
+            <div key={window.key} className="panel p-4">
+              <div className="flex items-center justify-between"><div className="eyebrow">{window.label}</div>{(window.riser?.limitedCoverage || window.faller?.limitedCoverage) && <span className="text-[9px] text-amber-400">limited history</span>}</div>
+              <div className="mt-3 space-y-2">
+                {window.riser ? <Link href={`/players/${window.riser.playerId}`} className="flex items-center justify-between rounded-lg bg-neutral-950/60 p-2.5"><div className="min-w-0"><div className="text-[9px] uppercase tracking-wide text-neutral-600">Biggest riser</div><div className="truncate text-xs font-medium text-neutral-100">{window.riser.name}</div></div><div className="shrink-0 text-right text-emerald-400"><div className="text-sm font-semibold">{formatSigned(window.riser.points)}</div><div className="text-[9px]">{window.riser.percent >= 0 ? "+" : ""}{window.riser.percent.toFixed(1)}%</div></div></Link> : <div className="text-xs text-neutral-600">Riser unavailable</div>}
+                {window.faller ? <Link href={`/players/${window.faller.playerId}`} className="flex items-center justify-between rounded-lg bg-neutral-950/60 p-2.5"><div className="min-w-0"><div className="text-[9px] uppercase tracking-wide text-neutral-600">Biggest faller</div><div className="truncate text-xs font-medium text-neutral-100">{window.faller.name}</div></div><div className="shrink-0 text-right text-red-400"><div className="text-sm font-semibold">{formatSigned(window.faller.points)}</div><div className="text-[9px]">{window.faller.percent >= 0 ? "+" : ""}{window.faller.percent.toFixed(1)}%</div></div></Link> : <div className="text-xs text-neutral-600">Faller unavailable</div>}
+              </div>
             </div>
-          </div>
+          ))}
         </div>
       </section>
 
@@ -203,11 +215,12 @@ export default async function HomePage() {
             </div>
           </div>
           <div className="panel p-4">
-            <div className="eyebrow">Source disagreement</div>
-            <h3 className="mt-1 text-sm font-semibold text-neutral-100">Where KTC and Stats Guy disagree most</h3>
-            <p className="mt-1 text-[11px] leading-relaxed text-neutral-500">Useful as a disagreement flag—not a command to trade. Stats Guy is translated onto the KTC scale first.</p>
+            <div className="eyebrow">Trusted source disagreement</div>
+            <h3 className="mt-1 text-sm font-semibold text-neutral-100">Where KTC, Tradyr and Dynasty Dealer differ</h3>
+            <p className="mt-1 text-[11px] leading-relaxed text-neutral-500">Only freshness-qualified, non-extrapolated KTC-scale translations are shown. Large gaps reduce confidence instead of forcing a trade.</p>
             <div className="mt-3 divide-y divide-neutral-800/80">
-              {disagreements.map(({ row, gap: marketGap }) => <Link key={row.id} href={`/players/${row.id}`} className="flex items-center justify-between gap-3 py-2.5"><div className="min-w-0"><div className="truncate text-xs font-medium text-neutral-200">{row.fullName}</div><div className="text-[10px] text-neutral-600">KTC {formatPoints(row.currentValue)} · SG→KTC {formatPoints(row.statsGuyValue)}</div></div><div className={`shrink-0 text-xs font-semibold ${marketGap >= 0 ? "text-sky-300" : "text-amber-300"}`}>{marketGap > 0 ? "+" : ""}{marketGap.toFixed(1)}%</div></Link>)}
+              {disagreements.map(({ row, source, value, gap: marketGap }, i) => <Link key={`${row.id}-${source}-${i}`} href={`/players/${row.id}`} className="flex items-center justify-between gap-3 py-2.5"><div className="min-w-0"><div className="truncate text-xs font-medium text-neutral-200">{row.fullName}</div><div className="text-[10px] text-neutral-600">KTC {formatPoints(row.currentValue)} · {source}→KTC {formatPoints(value)}</div></div><div className={`shrink-0 text-xs font-semibold ${marketGap >= 0 ? "text-sky-300" : "text-amber-300"}`}>{marketGap > 0 ? "+" : ""}{marketGap.toFixed(1)}%</div></Link>)}
+              {disagreements.length === 0 && <div className="py-3 text-xs text-neutral-600">No freshness-qualified trusted-source comparisons are available yet.</div>}
             </div>
           </div>
         </div>
