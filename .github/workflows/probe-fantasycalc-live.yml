@@ -1,0 +1,20 @@
+name: probe-fantasycalc-live
+on:
+  push:
+    branches: [dynasty-patch11-exact-reconstruct-20260816b]
+    paths: ['.github/workflows/probe-fantasycalc-live.yml']
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check exact dynasty format feed
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL='https://api.fantasycalc.com/values/current?isDynasty=true&numQbs=2&numTeams=12&ppr=0.5&includeAdp=false'
+          curl -fsSL --max-time 30 "$URL" -o /tmp/fc.json
+          echo "rows=$(jq 'length' /tmp/fc.json)"
+          echo 'Joe Mixon:'
+          jq -c '[.[] | select((.player.name // "") == "Joe Mixon") | {name:.player.name,sleeperId:.player.sleeperId,position:.player.position,team:.player.maybeTeam,value,overallRank,positionRank,trend30Day}]' /tmp/fc.json
+          echo 'Top 3:'
+          jq -c '.[0:3] | map({name:.player.name,value,overallRank})' /tmp/fc.json
