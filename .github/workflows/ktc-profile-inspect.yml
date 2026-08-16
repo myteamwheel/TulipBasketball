@@ -1,0 +1,15 @@
+name: ktc-profile-inspect
+on:
+  push:
+    branches: [dynasty-db-diagnostic-probe-20260816]
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect profile
+        run: |
+          node <<'NODE'
+          const r=await fetch('https://keeptradecut.com/dynasty-rankings/players/joe-mixon-273',{headers:{'user-agent':'Mozilla/5.0','cache-control':'no-cache'}}); const h=await r.text();
+          console.log('status',r.status,'len',h.length,'joe',h.toLowerCase().indexOf('joe mixon'));
+          for(const pat of [/superflexValues.{0,300}/gi,/playerValue.{0,200}/gi,/dynastyValue.{0,200}/gi,/value.{0,80}606/gi,/Joe Mixon.{0,500}/gi]){console.log('PAT',String(pat),[...h.matchAll(pat)].slice(0,8).map(m=>m[0].replace(/\s+/g,' ')))}
+          NODE
