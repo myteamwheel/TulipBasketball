@@ -9,12 +9,23 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Capture production runtime responses
+      - name: Wait for safe DB diagnostic then capture runtime
         shell: bash
         run: |
           set +e
           base='https://dynasty-boys-dashboard.vercel.app'
-          for path in '/healthz' '/login' '/' '/settings' '/api/debug-home'; do
+          for attempt in $(seq 1 30); do
+            stamp="$(date +%s%N)"
+            code=$(curl -sS --max-time 30 -o /tmp/dbdiag -w '%{http_code}' -H 'Cache-Control: no-cache' "${base}/api/db-env-diagnostic?probe=${stamp}")
+            echo "diagnostic attempt ${attempt}/30 status=${code}"
+            if [ "$code" = "200" ]; then
+              cat /tmp/dbdiag
+              echo
+              break
+            fi
+            sleep 10
+          done
+          for path in '/healthz' '/api/debug-home' '/'; do
             echo "===== ${path} ====="
             stamp="$(date +%s%N)"
             curl -sS -L --max-time 30 -D /tmp/headers -o /tmp/body -H 'Cache-Control: no-cache' "${base}${path}?probe=${stamp}"
