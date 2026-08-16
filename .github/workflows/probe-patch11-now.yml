@@ -1,0 +1,19 @@
+name: Probe Patch 11 Now
+on:
+  push:
+    branches: [dynasty-patch11-command-center]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe public production
+        run: |
+          curl -fsSL --max-time 30 https://dynasty-boys-dashboard.vercel.app/settings -o /tmp/settings.html
+          echo '--- BUILD MARKERS ---'
+          grep -oE 'Build: [^<]{0,100}|COMMAND CENTER \+ UX PATCH 11|PICK VALUES \+ KTC-SCALE CONSENSUS PATCH 10' /tmp/settings.html | head -20 || true
+          if grep -q 'COMMAND CENTER + UX PATCH 11' /tmp/settings.html; then
+            echo PATCH11_LIVE=yes
+          else
+            echo PATCH11_LIVE=no
+            exit 1
+          fi
