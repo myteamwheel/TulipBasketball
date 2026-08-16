@@ -11,16 +11,17 @@ jobs:
         run: |
           set +e
           for u in \
-            'https://dynasty-boys-dashboard-xf9vp2e1i-myteamwheel-8058s-projects.vercel.app/' \
+            'https://dynasty-boys-dashboard-et6a7w0q3-myteamwheel-8058s-projects.vercel.app/' \
+            'https://dynasty-boys-dashboard-myteamwheel-8058s-projects.vercel.app/' \
             'https://dynasty-boys-dashboard.vercel.app/'; do
             echo "===== $u ====="
-            curl -L --max-time 25 -sS -D /tmp/h -o /tmp/b "$u"
+            curl -L --max-time 30 -sS -D /tmp/h -o /tmp/b "$u"
             code=$?
             echo "curl_exit=$code"
             head -20 /tmp/h || true
             echo '--- feature markers ---'
-            grep -Eio 'Biggest KTC changes|Tradyr|Stats Guy|Decision Board|Orlando Oswalds|This page couldn.t load|server error' /tmp/b | head -40 || true
+            grep -Eio 'Biggest KTC changes|Tradyr|Dynasty Dealer|Stats Guy|Decision Board|Orlando Oswalds|Persistent performance history|server error|This page couldn.t load' /tmp/b | head -80 || true
             echo '--- error clues ---'
-            grep -Eio '.{0,120}(digest|error|database|relation|column|prisma|connect|undefined|exception).{0,240}' /tmp/b | head -30 || true
+            grep -Eio '.{0,120}(digest|error|database|relation|column|prisma|connect|undefined|exception|DATABASE_URL).{0,240}' /tmp/b | head -30 || true
             echo "body_bytes=$(wc -c < /tmp/b 2>/dev/null || echo 0)"
           done
