@@ -18,7 +18,12 @@ jobs:
             code=$?
             echo "curl_exit=$code"
             head -20 /tmp/h || true
-            echo '--- markers ---'
-            grep -Eio 'Biggest KTC changes|Tradyr|Stats Guy|Decision Board|Orlando Oswalds|This page couldn.t load|server error' /tmp/b | head -30 || true
+            echo '--- feature markers ---'
+            grep -Eio 'Biggest KTC changes|Tradyr|Stats Guy|Decision Board|Orlando Oswalds|This page couldn.t load|server error' /tmp/b | head -40 || true
+            echo '--- error clues ---'
+            grep -Eio '.{0,120}(digest|error|database|relation|column|prisma|connect|undefined|exception).{0,240}' /tmp/b | head -50 || true
+            echo '--- text excerpt ---'
+            sed 's/<[^>]*>/ /g' /tmp/b | tr -s ' ' | head -c 6000 || true
+            echo
             echo "body_bytes=$(wc -c < /tmp/b 2>/dev/null || echo 0)"
           done
