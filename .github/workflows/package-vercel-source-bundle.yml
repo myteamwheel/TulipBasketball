@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Package source-only recovered app
+      - name: Package minimal recovered app source
         shell: bash
         run: |
           set -euo pipefail
@@ -21,6 +21,11 @@ jobs:
             --exclude='recovered-app/node_modules' \
             --exclude='recovered-app/.env' \
             --exclude='recovered-app/.env.*' \
+            --exclude='recovered-app/package-lock.json' \
+            --exclude='recovered-app/src/generated/prisma' \
+            --exclude='recovered-app/prisma/migrations' \
+            --exclude='recovered-app/scripts' \
+            --exclude='recovered-app/DEPLOYMENT_STATUS.md' \
             recovered-app
           base64 -w0 /tmp/recovered-app-source.tar.gz > /tmp/bundle.b64
           split -b 7000 -d -a 3 /tmp/bundle.b64 deploy-bundle/bundle.part.
@@ -37,5 +42,5 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A deploy-bundle
-          git commit -m 'Split recovered dashboard into connector-safe Vercel chunks' || exit 0
+          git commit -m 'Minimize recovered dashboard direct-deploy bundle' || exit 0
           git push
