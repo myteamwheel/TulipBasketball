@@ -1,0 +1,23 @@
+name: ktc-history-api-discovery
+on:
+  push:
+    branches: [dynasty-db-diagnostic-probe-20260816]
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Discover KTC history API
+        run: |
+          node <<'NODE'
+          const H={'user-agent':'Mozilla/5.0','cache-control':'no-cache'};
+          const base='https://keeptradecut.com';
+          const profile=await (await fetch(base+'/dynasty-rankings/players/joe-mixon-273',{headers:H})).text();
+          function extractVar(name){const marker=new RegExp(`\\bvar\\s+${name}\\s*=\\s*`);const m=marker.exec(profile);if(!m)return null;const open=profile.indexOf('[',m.index+m[0].length);if(open<0)return null;let d=0,s=false,e=false;for(let i=open;i<profile.length;i++){const c=profile[i];if(s){if(e)e=false;else if(c==='\\\\')e=true;else if(c==='"')s=false;continue}if(c==='"'){s=true;continue}if(c==='[')d++;else if(c===']'&&--d===0){try{return JSON.parse(profile.slice(open,i+1))}catch(err){console.log('parse err',String(err));return null}}}return null}
+          for(const v of ['sfPlayers','oneQBPlayers','playersArray']){const a=extractVar(v);console.log('VAR',v,'N',a?.length||0);if(a){const j=a.find(x=>String(x.playerName||'').toLowerCase()==='joe mixon');if(j)console.log('JOE',v,JSON.stringify({playerID:j.playerID,slug:j.slug,position:j.position,team:j.team,sf:j.superflexValues,oneqb:j.oneQBValues}));}}
+          const js=await (await fetch(base+'/js/site.min.js?v=WiwBAk3n2D7licE0meE7j34jogL0jLU7m3b7pzOejA4',{headers:H})).text();
+          for(const term of ['getPlayerHistoryAsync','HistoryAsync','guessGraphHistoryUpdates','ValueHistory','HistoryResponse']){
+            let from=0,count=0; while((from=js.indexOf(term,from))>=0&&count<8){console.log('\nTERM',term,'AT',from,'\n',js.slice(Math.max(0,from-1600),from+2600));from+=term.length;count++;}
+          }
+          for(const m of js.matchAll(/\$\.ajax\(\{[^}]{0,3000}\}/g)){if(/history|valuehistory|player/i.test(m[0]))console.log('\nAJAX',m[0].slice(0,4000));}
+          for(const m of js.matchAll(/url\s*:\s*["'][^"']+["']/g)){if(/history|player|dynasty|api/i.test(m[0]))console.log('URL',m[0]);}
+          NODE
