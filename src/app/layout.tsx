@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
@@ -15,16 +15,21 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Orlando Oswalds Market Dashboard",
-  description: "Dynasty Boys — live KTC market dashboard",
+  description: "Dynasty Boys — live dynasty market dashboard",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  colorScheme: "dark",
+  themeColor: "#09090b",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
-      <body className="min-h-full flex flex-col bg-neutral-950 text-neutral-100">{children}</body>
+    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full bg-neutral-950 antialiased`}>
+      <body className="min-h-full min-w-0 bg-neutral-950 text-neutral-100">{children}</body>
     </html>
   );
 }
