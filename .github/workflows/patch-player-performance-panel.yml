@@ -1,0 +1,32 @@
+name: patch-player-performance-panel
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/patch-player-performance-panel.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add performance panel to player page
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('recovered-app/src/app/(app)/players/[id]/page.tsx')
+          s=p.read_text()
+          if 'PlayerPerformancePanel' not in s:
+              s=s.replace('import SectionHeader from "@/components/SectionHeader";\n', 'import SectionHeader from "@/components/SectionHeader";\nimport PlayerPerformancePanel from "@/components/PlayerPerformancePanel";\n')
+              marker='''      <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-4">\n        <h3 className="mb-2 text-sm font-semibold text-neutral-100">Value History</h3>'''
+              insert='''      <PlayerPerformancePanel playerId={player.id} position={player.position} />\n\n'''
+              if marker not in s:
+                  raise SystemExit('Value History marker not found')
+              s=s.replace(marker, insert+marker, 1)
+              p.write_text(s)
+      - name: Commit patch
+        run: |
+          git config user.name 'ChatGPT Dashboard Patch'
+          git config user.email 'actions@users.noreply.github.com'
+          git add 'recovered-app/src/app/(app)/players/[id]/page.tsx'
+          if git diff --cached --quiet; then echo 'Already patched'; else git commit -m 'Show game-by-game stats and grades on player pages'; git push; fi
