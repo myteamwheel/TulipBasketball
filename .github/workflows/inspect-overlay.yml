@@ -1,0 +1,20 @@
+name: inspect-patch12-overlay
+on:
+  push:
+    branches: [inspect-patch12-overlay-20260816]
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect overlay
+        run: |
+          node <<'NODE'
+          const fs=require('fs'),zlib=require('zlib'),path=require('path');
+          const parts=['part.00','part.01','part.02','part.03','part.04'];
+          const packed=parts.map(f=>fs.readFileSync(path.join('deploy/exact12-overlay',f),'utf8').trim()).join('');
+          const p=JSON.parse(zlib.brotliDecompressSync(Buffer.from(packed,'base64')).toString('utf8'));
+          console.log('PATCH12 FILES');
+          console.log(Object.keys(p).sort().join('\n'));
+          for(const [k,v] of Object.entries(p)) console.log('SIZE',k,v.data?.length||0,v.op||'write');
+          NODE
