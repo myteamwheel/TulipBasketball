@@ -1,0 +1,31 @@
+name: dynasty-main-ci
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  validate-dashboard:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: recovered-app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --ignore-scripts
+      - name: Generate Prisma client
+        env:
+          DATABASE_URL: postgresql://user:pass@localhost:5432/postgres
+        run: npx prisma generate
+      - name: Typecheck and build
+        env:
+          DATABASE_URL: postgresql://user:pass@localhost:5432/postgres
+          BACKUP_DATABASE_URL: postgresql://user:pass@localhost:5432/postgres
+          STATSGUY_REFRESH_ENABLED: "false"
+          TRADYR_REFRESH_ENABLED: "true"
+        run: |
+          npx tsc --noEmit
+          npm run build
