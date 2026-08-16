@@ -1,0 +1,86 @@
+name: patch13-fresh-anchor
+on:
+  push:
+    branches: [dynasty-patch13-source-trust-20260816]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply fresh-anchor trust patch
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          root=Path('recovered-app')
+          def rep(path,old,new):
+              p=root/path;s=p.read_text()
+              if old not in s: raise SystemExit(f'missing target in {path}: {old[:100]!r}')
+              p.write_text(s.replace(old,new))
+
+          # The signal engine now exposes and uses the freshness-gated KTC observation.
+          rep(Path('src/lib/signalsEngine.ts'),
+              '  statsGuyRawValue: number | null;\n  dynastyDealerValue: number | null;',
+              '  statsGuyRawValue: number | null;\n  ktcValue: number | null;\n  dynastyDealerValue: number | null;')
+          rep(Path('src/lib/signalsEngine.ts'),
+              '      currentKtc: market.currentValue,',
+              '      currentKtc: mix.ktcValue,')
+          rep(Path('src/lib/signalsEngine.ts'),
+              'out.set(e.playerId, { result: computeSignal(market, ctx), market, football, statsGuyValue: mix.statsGuyValue, statsGuyRawValue: mix.statsGuyRawValue, dynastyDealerValue: mix.dynastyDealerValue, dynastyDealerRawValue: mix.dynastyDealerRawValue });',
+              'out.set(e.playerId, { result: computeSignal(market, ctx), market, football, ktcValue: mix.ktcValue, statsGuyValue: mix.statsGuyValue, statsGuyRawValue: mix.statsGuyRawValue, dynastyDealerValue: mix.dynastyDealerValue, dynastyDealerRawValue: mix.dynastyDealerRawValue });')
+
+          # Historical KTC remains useful context, but cannot trigger a directional action without a fresh KTC anchor.
+          rep(Path('src/lib/signals.ts'),
+              '  } else {\n    signal = "HOLD";\n  }\n\n  let confidence: Confidence = "MEDIUM";',
+              '  } else {\n    signal = "HOLD";\n  }\n  if (ctx.currentKtc === null) signal = "WATCH";\n\n  let confidence: Confidence = "MEDIUM";')
+          rep(Path('src/lib/signals.ts'),
+              '  else if (market.observationCount >= 8 && regression.spanDays >= 14 && !highVol && Math.abs(sourceGapPct ?? 0) < 25) confidence = "HIGH";',
+              '  else if (market.observationCount >= 8 && regression.spanDays >= 14 && !highVol && Math.abs(sourceGapPct ?? 0) < 25) confidence = "HIGH";\n  if (ctx.currentKtc === null) confidence = "LOW";')
+          rep(Path('src/lib/signals.ts'),
+              '  if (market.isStale) reasons.push({ code: "STALE_DATA", label: "Freshness warning", detail: "No confirmed KTC value in the last 48 hours; confidence is reduced", impact: "NEGATIVE" });',
+              '  if (ctx.currentKtc === null) {\n    reasons.push({ code: "NO_FRESH_KTC_ANCHOR", label: "Current KTC anchor unavailable", detail: "The saved KTC history is retained for context, but there is no freshness-qualified KTC observation in the current market ingest. Secondary values are not allowed to create an action call by themselves.", impact: "NEGATIVE" });\n    whatWouldChange.unshift("A fresh KTC observation is required before the model will issue a directional BUY LOW, SELL HIGH, CUT LOSSES, or CUT BAIT call.");\n  }\n  if (market.isStale) reasons.push({ code: "STALE_DATA", label: "Freshness warning", detail: "No confirmed KTC value in the last 48 hours; confidence is reduced", impact: "NEGATIVE" });')
+
+          # Player detail source-gap math must use fresh KTC, never the last historical KTC point.
+          pp=root/'src/app/(app)/players/[id]/page.tsx'; ps=pp.read_text()
+          old='''  const sourceCandidates = [\n    { label:"SG→KTC", value:signalEntry?.statsGuyValue ?? null },\n    { label:"DD→KTC", value:signalEntry?.dynastyDealerValue ?? null },\n  ].filter((x): x is {label:string;value:number} => market.currentValue !== null && market.currentValue > 0 && x.value !== null);\n  const sourceGapEntry = sourceCandidates.map((x)=>({ ...x, gap:((x.value-market.currentValue!)/market.currentValue!)*100 })).sort((a,b)=>Math.abs(b.gap)-Math.abs(a.gap))[0] ?? null;'''
+          new='''  const freshKtc = signalEntry?.ktcValue ?? null;\n  const sourceCandidates = [\n    { label:"SG→KTC", value:signalEntry?.statsGuyValue ?? null },\n    { label:"DD→KTC", value:signalEntry?.dynastyDealerValue ?? null },\n  ].filter((x): x is {label:string;value:number} => freshKtc !== null && freshKtc > 0 && x.value !== null);\n  const sourceGapEntry = sourceCandidates.map((x)=>({ ...x, gap:((x.value-freshKtc!)/freshKtc!)*100 })).sort((a,b)=>Math.abs(b.gap)-Math.abs(a.gap))[0] ?? null;'''
+          if old not in ps: raise SystemExit('player source candidate block missing')
+          ps=ps.replace(old,new)
+          marker='''      <div className="grid grid-cols-2 gap-3 md:grid-cols-6">'''
+          note='''      {market.currentValue !== null && freshKtc === null && (signalEntry?.statsGuyValue !== null || signalEntry?.dynastyDealerValue !== null) ? (\n        <div className="rounded-lg border border-amber-700/40 bg-amber-950/20 p-3 text-xs leading-relaxed text-amber-200">\n          <span className="font-semibold">Current KTC anchor unavailable.</span> The KTC number in saved history is historical, not a freshness-qualified live observation. Secondary markets are shown as context only; they are not blended into consensus and cannot trigger a directional recommendation until a fresh KTC anchor is available.\n        </div>\n      ) : null}\n\n'''+marker
+          if marker not in ps: raise SystemExit('player metrics grid marker missing')
+          ps=ps.replace(marker,note,1)
+          pp.write_text(ps)
+
+          # League disagreement queue should only compare against a live, freshness-qualified KTC row.
+          lp=root/'src/app/(app)/league/page.tsx'; ls=lp.read_text()
+          old='''    const mix=marketMix.get(e.playerId); const ktc=marketData.get(e.playerId)?.currentValue??null;'''
+          new='''    const mix=marketMix.get(e.playerId); const ktc=mix?.ktcValue??null;'''
+          if old not in ls: raise SystemExit('league KTC disagreement anchor missing')
+          ls=ls.replace(old,new)
+          ls=ls.replace('Extreme or extrapolated gaps are excluded from consensus; this board is a review queue, not a buy/sell list.', 'Extreme or extrapolated gaps are excluded from consensus, and no comparison is shown unless the KTC anchor itself is fresh. This board is a review queue, not a buy/sell list.')
+          lp.write_text(ls)
+          print('fresh KTC anchor patch applied')
+          PY
+      - name: Validate
+        working-directory: recovered-app
+        env:
+          DATABASE_URL: postgresql://user:pass@localhost:5432/postgres
+          BACKUP_DATABASE_URL: postgresql://user:pass@localhost:5432/postgres
+        run: |
+          npm install --ignore-scripts
+          npx prisma generate
+          npx tsc --noEmit
+          npm run build
+      - name: Commit
+        shell: bash
+        run: |
+          git config user.name 'ChatGPT Dashboard Patch'
+          git config user.email 'actions@users.noreply.github.com'
+          git add recovered-app
+          if git diff --cached --quiet; then echo 'No changes'; else git commit -m 'Patch 13.4: require fresh KTC anchor for gaps and actions'; git push; fi
