@@ -1,15 +1,56 @@
 {
-  "name": "tulip-basketball-deployment",
-  "version": "1.0.0",
+  "name": "dynasty-boys-dashboard",
+  "version": "0.14.0",
   "private": true,
-  "type": "module",
   "scripts": {
-    "build": "cd recovered-app && npm ci && npm run build",
-    "start": "cd recovered-app && npm start -- -p ${PORT:-3000}",
-    "sync:gleague": "node scripts/sync-gleague-data.mjs",
-    "audit:gleague": "node scripts/audit-gleague-data.mjs"
+    "preinstall": "node bootstrap.js",
+    "dev": "next dev -p 3400",
+    "build": "prisma migrate deploy && next build",
+    "start": "next start",
+    "lint": "eslint",
+    "seed:baseline": "tsx scripts/seed-baseline.ts",
+    "refresh": "tsx scripts/run-refresh.ts",
+    "postinstall": "prisma generate",
+    "vercel-build": "prisma migrate deploy && tsx scripts/backfill-patch14-history.ts && next build",
+    "backfill:patch14": "tsx scripts/backfill-patch14-history.ts"
   },
-  "engines": {
-    "node": ">=22"
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.9.1",
+    "@prisma/client": "^7.9.1",
+    "date-fns": "^4.4.0",
+    "iron-session": "^8.0.4",
+    "next": "16.3.1",
+    "papaparse": "^5.6.0",
+    "pg": "^8.23.0",
+    "prisma": "^7.9.1",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "recharts": "^3.10.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/papaparse": "^5.5.2",
+    "@types/pg": "^8.21.0",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.1",
+    "tailwindcss": "^4",
+    "tsx": "^4.23.12",
+    "typescript": "^5",
+    "vercel": "^59.0.0",
+    "dotenv": "^17.3.1"
+  },
+  "allowScripts": {
+    "@prisma/engines@7.9.1": true,
+    "prisma@7.9.1": true,
+    "unrs-resolver@1.12.2": true,
+    "esbuild@0.28.2": true,
+    "better-sqlite3@12.11.1": true,
+    "fsevents@2.3.3": true,
+    "esbuild@0.27.7": true,
+    "esbuild@0.27.0": true
   }
 }
