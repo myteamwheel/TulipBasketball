@@ -112,7 +112,7 @@ function gradeFromScore(score: number): string {
   return "F";
 }
 
-type GameInput = Omit<StoredGameStat, "id" | "playerId" | "sleeperId" | "gsisId" | "grade" | "gradeScore" | "performanceSummary" | "sourceUpdatedAt" | "observedAt"> & {
+type GameInput = Omit<StoredGameStat, "id" | "playerId" | "sleeperId" | "gsisId" | "grade" | "gradeScore" | "performanceSummary" | "sourceUpdatedAt" | "observedAt" | "source"> & {
   sourceUpdatedAt?: Date | null;
 };
 
@@ -236,7 +236,7 @@ async function upsertGame(player: LeaguePlayer, gsisId: string | null, source: s
     id, player.id, player.sleeperId, gsisId, input.season, input.week, input.seasonType, input.team, input.opponent,
     input.fantasyHalfPpr, input.completions, input.attempts, input.passingYards, input.passingTds, input.interceptions,
     input.carries, input.rushingYards, input.rushingTds, input.targets, input.receptions, input.receivingYards, input.receivingTds, input.fumblesLost,
-    graded.grade, graded.gradeScore, graded.summary, source, sourceUpdatedAt, (input as AnyObj).refreshRunId ?? null, JSON.stringify(raw ?? {}),
+    graded.grade, graded.gradeScore, graded.summary, source, sourceUpdatedAt, (input as unknown as AnyObj).refreshRunId ?? null, JSON.stringify(raw ?? {}),
   );
   return true;
 }
