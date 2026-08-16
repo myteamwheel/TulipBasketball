@@ -28,7 +28,7 @@ jobs:
             --exclude='recovered-app/DEPLOYMENT_STATUS.md' \
             recovered-app
           base64 -w0 /tmp/recovered-app-source.tar.gz > /tmp/bundle.b64
-          split -b 7000 -d -a 3 /tmp/bundle.b64 deploy-bundle/bundle.part.
+          split -b 3500 -d -a 3 /tmp/bundle.b64 deploy-bundle/bundle.part.
           bytes=$(wc -c < /tmp/recovered-app-source.tar.gz | tr -d ' ')
           b64bytes=$(wc -c < /tmp/bundle.b64 | tr -d ' ')
           sha=$(sha256sum /tmp/recovered-app-source.tar.gz | awk '{print $1}')
@@ -42,5 +42,5 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A deploy-bundle
-          git commit -m 'Minimize recovered dashboard direct-deploy bundle' || exit 0
+          git commit -m 'Use connector-safe recovered dashboard chunks' || exit 0
           git push
