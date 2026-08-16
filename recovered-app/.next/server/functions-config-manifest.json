@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "functions": {
+    "/api/cron/daily-refresh": {
+      "maxDuration": 300
+    },
+    "/api/export": {
+      "maxDuration": 300
+    },
+    "/api/refresh": {
+      "maxDuration": 300
+    }
+  }
+}

@@ -1,0 +1,3 @@
+{
+  "/api/cron/daily-refresh/route": "app/api/cron/daily-refresh/route.js"
+}

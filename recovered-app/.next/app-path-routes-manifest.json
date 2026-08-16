@@ -1,0 +1,20 @@
+{
+  "/(app)/league/page": "/league",
+  "/(app)/page": "/",
+  "/(app)/players/[id]/page": "/players/[id]",
+  "/(app)/players/page": "/players",
+  "/(app)/refresh-history/page": "/refresh-history",
+  "/(app)/settings/page": "/settings",
+  "/(app)/transactions/page": "/transactions",
+  "/_global-error/page": "/_global-error",
+  "/_not-found/page": "/_not-found",
+  "/api/auth/logout/route": "/api/auth/logout",
+  "/api/cron/daily-refresh/route": "/api/cron/daily-refresh",
+  "/api/export/route": "/api/export",
+  "/api/ktc/import/route": "/api/ktc/import",
+  "/api/recovery-backup-audit/route": "/api/recovery-backup-audit",
+  "/api/recovery-old-db-audit/route": "/api/recovery-old-db-audit",
+  "/api/refresh/[runId]/route": "/api/refresh/[runId]",
+  "/api/refresh/route": "/api/refresh",
+  "/login/page": "/login"
+}

@@ -1,0 +1,20 @@
+{
+  "/(app)/league/page": "app/(app)/league/page.js",
+  "/(app)/page": "app/(app)/page.js",
+  "/(app)/players/[id]/page": "app/(app)/players/[id]/page.js",
+  "/(app)/players/page": "app/(app)/players/page.js",
+  "/(app)/refresh-history/page": "app/(app)/refresh-history/page.js",
+  "/(app)/settings/page": "app/(app)/settings/page.js",
+  "/(app)/transactions/page": "app/(app)/transactions/page.js",
+  "/_global-error/page": "app/_global-error/page.js",
+  "/_not-found/page": "app/_not-found/page.js",
+  "/api/auth/logout/route": "app/api/auth/logout/route.js",
+  "/api/cron/daily-refresh/route": "app/api/cron/daily-refresh/route.js",
+  "/api/export/route": "app/api/export/route.js",
+  "/api/ktc/import/route": "app/api/ktc/import/route.js",
+  "/api/recovery-backup-audit/route": "app/api/recovery-backup-audit/route.js",
+  "/api/recovery-old-db-audit/route": "app/api/recovery-old-db-audit/route.js",
+  "/api/refresh/[runId]/route": "app/api/refresh/[runId]/route.js",
+  "/api/refresh/route": "app/api/refresh/route.js",
+  "/login/page": "app/login/page.js"
+}
