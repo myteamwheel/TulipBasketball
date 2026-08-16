@@ -1,0 +1,45 @@
+name: finalize-checkpoint-semantics
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/finalize-checkpoint-semantics.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Make latest move mean previous checkpoint and trusted secondary only
+        shell: python
+        run: |
+          from pathlib import Path
+
+          metrics=Path('recovered-app/src/lib/metrics.ts')
+          s=metrics.read_text()
+          old='''  // "Since last refresh" must compare two actual automatic refresh runs. The\n  // seeded June baseline is historical reference data, not a prior refresh.\n  let previousRefreshValid: Obs | null = null;\n  if (latestValid?.refreshRunId) {\n    for (let i = valid.length - 2; i >= 0; i--) {\n      const candidate = valid[i];\n      if (candidate.refreshRunId && candidate.refreshRunId !== latestValid.refreshRunId) {\n        previousRefreshValid = candidate;\n        break;\n      }\n    }\n  }\n  const changeSinceLastRefresh =\n    latestValid && previousRefreshValid ? change(latestValid.value, previousRefreshValid) : null;'''
+          new='''  // "Latest move" means the immediately previous saved KTC checkpoint, regardless\n  // of whether that checkpoint came from an automatic refresh or a verified manual\n  // historical backfill. This preserves the user's permanent current-vs-previous\n  // format while June 7 remains the separate long-term baseline.\n  const previousCheckpoint = latestValid && valid.length >= 2 ? valid[valid.length - 2] : null;\n  const changeSinceLastRefresh =\n    latestValid && previousCheckpoint ? change(latestValid.value, previousCheckpoint) : null;'''
+          if old not in s: raise SystemExit('metrics checkpoint block not found')
+          metrics.write_text(s.replace(old,new,1))
+
+          home=Path('recovered-app/src/app/(app)/page.tsx')
+          s=home.read_text()
+          old='''    const m = marketData.get(p.id)!;\n    const mix = marketMix.get(p.id)!;\n    const signal = signals.get(p.id)?.result;\n    return {'''
+          new='''    const m = marketData.get(p.id)!;\n    const mix = marketMix.get(p.id)!;\n    const signal = signals.get(p.id)?.result;\n    const trusted = trustedMarkets.get(p.id);\n    const trustedSecondary = trusted?.tradyr.value ?? trusted?.dynastyDealer.value ?? null;\n    return {'''
+          if old not in s: raise SystemExit('home row block not found')
+          s=s.replace(old,new,1)
+          s=s.replace('statsGuyValue: mix.statsGuyValue, statsGuyRawValue: mix.statsGuyRawValue,','statsGuyValue: trustedSecondary, statsGuyRawValue: null,',1)
+          home.write_text(s)
+
+          table=Path('recovered-app/src/components/PlayerTable.tsx')
+          s=table.read_text()
+          s=s.replace('{ value: "changeSinceLastRefresh", label: "Latest move" }','{ value: "changeSinceLastRefresh", label: "Previous checkpoint" }')
+          s=s.replace('latest refresh {formatSigned(r.changeSinceLastRefresh)}','previous checkpoint {formatSigned(r.changeSinceLastRefresh)}')
+          s=s.replace('["Since Refresh", "changeSinceLastRefresh"]','["Prev checkpoint", "changeSinceLastRefresh"]')
+          table.write_text(s)
+      - name: Commit checkpoint semantics
+        run: |
+          git config user.name 'ChatGPT Dashboard Patch'
+          git config user.email 'actions@users.noreply.github.com'
+          git add recovered-app/src/lib/metrics.ts 'recovered-app/src/app/(app)/page.tsx' recovered-app/src/components/PlayerTable.tsx
+          if git diff --cached --quiet; then echo 'Already patched'; else git commit -m 'Use immediately previous KTC checkpoint for latest move'; git push; fi
