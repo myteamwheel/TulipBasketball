@@ -45,7 +45,7 @@ export async function getMarketMovers(playerIds: string[]): Promise<MarketMoverW
     for (const [playerId, rows] of byPlayer) {
       if (rows.length < 2) continue;
       const current = rows[rows.length - 1];
-      let baseline = [...rows].reverse().find((row) => row.observedAt.getTime() <= cutoff) ?? rows[0];
+      const baseline = [...rows].reverse().find((row) => row.observedAt.getTime() <= cutoff) ?? rows[0];
       if (baseline.id === current.id) continue;
       const points = current.value - baseline.value;
       const percent = baseline.value > 0 ? (points / baseline.value) * 100 : 0;
@@ -62,8 +62,10 @@ export async function getMarketMovers(playerIds: string[]): Promise<MarketMoverW
         limitedCoverage: baseline.observedAt.getTime() > cutoff + 12 * 3600000,
       });
     }
-    const riser = [...movers].sort((a, b) => b.points - a.points)[0] ?? null;
-    const faller = [...movers].sort((a, b) => a.points - b.points)[0] ?? null;
+    // The dashboard's change cards are percentage-first, so the headline movers
+    // are selected by percentage too; point delta remains visible as context.
+    const riser = [...movers].sort((a, b) => b.percent - a.percent)[0] ?? null;
+    const faller = [...movers].sort((a, b) => a.percent - b.percent)[0] ?? null;
     return { key: window.key, label: window.label, riser, faller, targetDays: window.days };
   });
 }
