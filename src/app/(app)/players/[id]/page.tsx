@@ -3,8 +3,13 @@ import { prisma } from "@/lib/prisma";
 import { computeMarketDataForPlayer } from "@/lib/metrics";
 import { computeSignalsForCurrentRoster } from "@/lib/signalsEngine";
 import { addPlayerNote } from "@/lib/actions";
+import { getCurrentMarketMix } from "@/lib/marketSources";
+import { ORLANDO_BASELINE_DATE, SLEEPER_LEAGUE_ID } from "@/lib/config";
 import KtcHistoryChart from "@/components/KtcHistoryChart";
 import PlayerNotes from "@/components/PlayerNotes";
+import SignalBadge from "@/components/SignalBadge";
+import MetricCard from "@/components/MetricCard";
+import SectionHeader from "@/components/SectionHeader";
 import {
   formatDateEastern,
   formatDateTimeEastern,
@@ -15,31 +20,34 @@ import {
 } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 export default async function PlayerDetailPage(props: { params: Promise<{ id: string }> }) {
   const { id } = await props.params;
-
   const player = await prisma.player.findUnique({ where: { id } });
   if (!player) notFound();
 
-  const [observations, ownershipIntervals, notes, market] = await Promise.all([
+  const [observations, ownershipIntervals, notes, market, marketMixMap, signals] = await Promise.all([
     prisma.ktcObservation.findMany({
       where: { playerId: id, validationStatus: { not: "REJECTED" } },
       orderBy: { observedAt: "asc" },
     }),
     prisma.ownershipInterval.findMany({
-      where: { playerId: id },
+      where: { playerId: id, manager: { league: { sleeperId: SLEEPER_LEAGUE_ID } } },
       include: { manager: true },
       orderBy: { validFrom: "desc" },
     }),
     prisma.userNote.findMany({ where: { playerId: id }, orderBy: { createdAt: "desc" } }),
     computeMarketDataForPlayer(id),
+    getCurrentMarketMix([id]),
+    computeSignalsForCurrentRoster(),
   ]);
 
-  const signals = await computeSignalsForCurrentRoster();
   const signalEntry = signals.get(id);
+  const marketMix = marketMixMap.get(id)!;
 
   const allTransactions = await prisma.transaction.findMany({
+    where: { league: { sleeperId: SLEEPER_LEAGUE_ID } },
     orderBy: { sleeperCreatedAt: "desc" },
     take: 300,
   });
@@ -49,126 +57,102 @@ export default async function PlayerDetailPage(props: { params: Promise<{ id: st
     return player.sleeperId in adds || player.sleeperId in drops;
   });
 
+  const firstValid = observations.find((o) => o.validationStatus === "VALID");
+  const lastValid = [...observations].reverse().find((o) => o.validationStatus === "VALID");
+  const rangeSpanDays = firstValid && lastValid
+    ? (lastValid.observedAt.getTime() - firstValid.observedAt.getTime()) / DAY_MS
+    : 0;
+  const rangeIsMature = observations.filter((o) => o.validationStatus === "VALID").length >= 3 && rangeSpanDays >= 14;
+  const baselineLabel = formatDateEastern(ORLANDO_BASELINE_DATE);
+
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-neutral-100">{player.fullName}</h1>
-        <p className="text-sm text-neutral-500">
-          {player.position}
-          {player.nflTeam ? ` · ${player.nflTeam}` : ""}
-          {player.status ? ` · ${player.status}` : ""}
+    <div className="min-w-0 space-y-6">
+      <div className="min-w-0">
+        <h1 className="truncate text-xl font-semibold text-neutral-100 sm:text-2xl">{player.fullName}</h1>
+        <p className="mt-1 text-sm text-neutral-500">
+          {player.position}{player.nflTeam ? ` · ${player.nflTeam}` : ""}{player.status ? ` · ${player.status}` : ""}
         </p>
-        {market.isStale && (
-          <p className="mt-1 text-xs text-amber-400">
-            STALE — no confirmed KTC value in the last 48h. Showing last known-good value.
-          </p>
-        )}
-        {market.pendingReview && (
-          <p className="mt-1 text-xs text-amber-400">
-            A new value of {formatPoints(market.pendingReviewValue)} is pending review:{" "}
-            {market.pendingReviewNote}
-          </p>
-        )}
+        {market.isStale ? <p className="mt-1 text-xs text-amber-300">KTC is stale — showing the last confirmed value rather than substituting zero.</p> : null}
+        {market.pendingReview ? <p className="mt-1 text-xs leading-5 text-amber-300">A newer parsed value of {formatPoints(market.pendingReviewValue)} is quarantined for review and is not being used: {market.pendingReviewNote}</p> : null}
       </div>
 
-      {signalEntry && (
-        <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
-          <div className="mb-2 flex items-center gap-3">
-            <span className="rounded border border-neutral-700 bg-neutral-950 px-2.5 py-1 text-sm font-semibold text-neutral-100">
-              {signalEntry.result.signal.replace("_", " ")}
-            </span>
-            <span className="text-sm text-neutral-400">
-              Market Score {signalEntry.result.score}/100 · {signalEntry.result.confidence} confidence
-            </span>
+      {signalEntry ? (
+        <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3 sm:p-4">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <SignalBadge signal={signalEntry.result.signal} score={signalEntry.result.score} confidence={signalEntry.result.confidence} />
+            <span className="text-[10px] text-neutral-600">Directional calls require a valid recent historical window.</span>
           </div>
-          <ul className="grid grid-cols-1 gap-x-6 gap-y-1 text-xs text-neutral-400 sm:grid-cols-2">
-            {signalEntry.result.reasonCodes.map((r, i) => (
-              <li key={i}>
-                <span className="text-neutral-300">{r.label}:</span> {r.detail}
-              </li>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            {signalEntry.result.reasonCodes.slice(0, 4).map((r, i) => (
+              <div key={i} className="rounded-md bg-neutral-950 px-2.5 py-2 text-[10px] leading-4 text-neutral-500">
+                <span className="font-medium text-neutral-300">{r.label}:</span> {r.detail}
+              </div>
             ))}
-          </ul>
-        </div>
-      )}
+          </div>
+        </section>
+      ) : null}
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
-          <p className="text-[11px] uppercase tracking-wide text-neutral-500">Current KTC</p>
-          <p className="mt-1 text-3xl font-semibold text-neutral-100">{formatPoints(market.currentValue)}</p>
-          <p className="text-[11px] text-neutral-600">as of {formatDateEastern(market.currentObservedAt)}</p>
+      <section>
+        <SectionHeader title="Market snapshot" description="KTC is the anchor. Consensus is the trusted cross-market blend when at least two qualifying sources are available." />
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+          <MetricCard label="Current KTC" value={formatPoints(market.currentValue)} detail={market.currentObservedAt ? `observed ${formatDateEastern(market.currentObservedAt)}` : "No valid observation"} />
+          <MetricCard label="Consensus" value={formatPoints(marketMix.consensusValue)} detail={marketMix.consensusSourceCount ? `${marketMix.consensusSourceCount} trusted sources` : "No fresh blend"} />
+          <MetricCard label="Latest change" value={formatSigned(market.changeSinceLastRefresh?.points)} tone={market.changeSinceLastRefresh?.points && market.changeSinceLastRefresh.points > 0 ? "positive" : market.changeSinceLastRefresh?.points && market.changeSinceLastRefresh.points < 0 ? "negative" : "neutral"} detail="vs previous valid KTC observation" />
+          <MetricCard label="7-day" value={formatSigned(market.change7d?.points)} tone={market.change7d?.points && market.change7d.points > 0 ? "positive" : market.change7d?.points && market.change7d.points < 0 ? "negative" : "neutral"} detail={market.change7d ? formatPercent(market.change7d.percent) : "No checkpoint close enough to 7 days ago"} />
+          <MetricCard label="30-day" value={formatSigned(market.change30d?.points)} tone={market.change30d?.points && market.change30d.points > 0 ? "positive" : market.change30d?.points && market.change30d.points < 0 ? "negative" : "neutral"} detail={market.change30d ? formatPercent(market.change30d.percent) : "No checkpoint close enough to 30 days ago"} />
+          <MetricCard label={`Since ${baselineLabel}`} value={formatSigned(market.changeSinceBaseline?.points)} tone={market.changeSinceBaseline?.points && market.changeSinceBaseline.points > 0 ? "positive" : market.changeSinceBaseline?.points && market.changeSinceBaseline.points < 0 ? "negative" : "neutral"} detail={market.changeSinceBaseline ? formatPercent(market.changeSinceBaseline.percent) : "No baseline observation for this player"} />
         </div>
-        <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
-          <p className="text-[11px] uppercase tracking-wide text-neutral-500">7-Day</p>
-          <p className={`mt-1 text-xl font-semibold ${trendColorClass(market.change7d?.points)}`}>
-            {formatSigned(market.change7d?.points)}
-          </p>
-          <p className="text-[11px] text-neutral-600">{formatPercent(market.change7d?.percent)}</p>
-        </div>
-        <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
-          <p className="text-[11px] uppercase tracking-wide text-neutral-500">30-Day</p>
-          <p className={`mt-1 text-xl font-semibold ${trendColorClass(market.change30d?.points)}`}>
-            {formatSigned(market.change30d?.points)}
-          </p>
-          <p className="text-[11px] text-neutral-600">{formatPercent(market.change30d?.percent)}</p>
-        </div>
-        <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
-          <p className="text-[11px] uppercase tracking-wide text-neutral-500">Since Baseline</p>
-          <p className={`mt-1 text-xl font-semibold ${trendColorClass(market.changeSinceBaseline?.points)}`}>
-            {market.changeSinceBaseline ? formatSigned(market.changeSinceBaseline.points) : "n/a"}
-          </p>
-          <p className="text-[11px] text-neutral-600">{formatPercent(market.changeSinceBaseline?.percent)}</p>
-        </div>
-      </div>
+      </section>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-4 text-sm">
-          <p className="text-neutral-400">
-            Tracked high <span className="font-semibold text-neutral-100">{formatPoints(market.high?.value)}</span>{" "}
-            <span className="text-neutral-600">({formatDateEastern(market.high?.observedAt)})</span>
-          </p>
-          <p className="mt-1 text-neutral-400">
-            Drawdown from peak{" "}
-            <span className={trendColorClass(market.distanceFromHigh?.percent)}>
-              {formatPercent(market.distanceFromHigh?.percent)}
-            </span>
-          </p>
+      <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3 sm:p-4">
+        <SectionHeader title="Source comparison" description="Secondary values are normalized onto the KTC scale. FantasyCalc and Stats Guy are diagnostics only." />
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+          {[
+            ["KTC", marketMix.ktcValue],
+            ["Tradyr", marketMix.tradyrValue],
+            ["Dynasty Dealer", marketMix.dynastyDealerValue],
+            ["FantasyCalc · diagnostic", marketMix.fantasyCalcValue],
+            ["Stats Guy · diagnostic", marketMix.statsGuyValue],
+          ].map(([label, value]) => (
+            <div key={String(label)} className="rounded-md bg-neutral-950 p-2.5">
+              <div className="truncate text-[9px] uppercase tracking-wide text-neutral-600">{String(label)}</div>
+              <div className="mt-1 text-sm font-semibold tabular-nums text-neutral-200">{formatPoints(value as number | null)}</div>
+            </div>
+          ))}
         </div>
-        <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-4 text-sm">
-          <p className="text-neutral-400">
-            Tracked low <span className="font-semibold text-neutral-100">{formatPoints(market.low?.value)}</span>{" "}
-            <span className="text-neutral-600">({formatDateEastern(market.low?.observedAt)})</span>
-          </p>
-          <p className="mt-1 text-neutral-400">
-            Above low{" "}
-            <span className={trendColorClass(market.distanceFromLow?.percent)}>
-              {formatPercent(market.distanceFromLow?.percent)}
-            </span>
-          </p>
-        </div>
-      </div>
+      </section>
 
-      <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
-        <h3 className="mb-2 text-sm font-semibold text-neutral-100">Value History</h3>
-        <KtcHistoryChart
-          points={observations.map((o) => ({
-            value: o.value,
-            observedAt: o.observedAt.toISOString(),
-            validationStatus: o.validationStatus,
-          }))}
-        />
-      </div>
+      <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3 sm:p-4">
+        <SectionHeader title="Tracked range" description={rangeIsMature ? `High/low uses ${observations.filter((o) => o.validationStatus === "VALID").length} valid observations spanning ${Math.floor(rangeSpanDays)} days.` : "High/low is not treated as decision-grade yet because this player does not have at least three valid observations spanning 14 days."} />
+        {rangeIsMature ? (
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-md bg-neutral-950 p-3">
+              <div className="text-[9px] uppercase tracking-wide text-neutral-600">Tracked high</div>
+              <div className="mt-1 text-lg font-semibold text-neutral-100">{formatPoints(market.high?.value)}</div>
+              <div className="mt-0.5 text-[10px] text-neutral-600">{formatDateEastern(market.high?.observedAt)} · now {formatPercent(market.distanceFromHigh?.percent)} vs high</div>
+            </div>
+            <div className="rounded-md bg-neutral-950 p-3">
+              <div className="text-[9px] uppercase tracking-wide text-neutral-600">Tracked low</div>
+              <div className="mt-1 text-lg font-semibold text-neutral-100">{formatPoints(market.low?.value)}</div>
+              <div className="mt-0.5 text-[10px] text-neutral-600">{formatDateEastern(market.low?.observedAt)} · now {formatPercent(market.distanceFromLow?.percent)} above low</div>
+            </div>
+          </div>
+        ) : <div className="rounded-md bg-neutral-950 p-3 text-xs text-neutral-500">Range metrics will become meaningful as real daily observations accumulate. Historical backfill alone is not enough to label a player at a reliable peak or trough.</div>}
+      </section>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
-          <h3 className="mb-2 text-sm font-semibold text-neutral-100">Observation Log</h3>
-          <div className="max-h-80 overflow-y-auto">
-            <table className="w-full text-xs">
+      <section className="min-w-0 rounded-lg border border-neutral-800 bg-neutral-900 p-3 sm:p-4">
+        <SectionHeader title="KTC history" description="Every non-rejected KTC observation stored for this player." />
+        <KtcHistoryChart points={observations.map((o) => ({ value: o.value, observedAt: o.observedAt.toISOString(), validationStatus: o.validationStatus }))} />
+      </section>
+
+      <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2">
+        <section className="min-w-0 rounded-lg border border-neutral-800 bg-neutral-900 p-3 sm:p-4">
+          <SectionHeader title="Observation log" description="Newest first. Flagged observations remain visible for audit but are not used as the current KTC." />
+          <div className="max-h-80 overflow-auto">
+            <table className="w-full min-w-[520px] text-xs">
               <thead className="sticky top-0 bg-neutral-900">
                 <tr className="text-neutral-500">
-                  <th className="py-1 text-left">Observed</th>
-                  <th className="py-1 text-right">Value</th>
-                  <th className="py-1 text-right">Source</th>
-                  <th className="py-1 text-right">Status</th>
+                  <th className="py-1 text-left">Observed</th><th className="py-1 text-right">Value</th><th className="py-1 text-right">Source</th><th className="py-1 text-right">Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -176,56 +160,40 @@ export default async function PlayerDetailPage(props: { params: Promise<{ id: st
                   <tr key={o.id} className="border-t border-neutral-800/60">
                     <td className="py-1 text-neutral-400">{formatDateTimeEastern(o.observedAt.toISOString())}</td>
                     <td className="py-1 text-right text-neutral-100">{formatPoints(o.value)}</td>
-                    <td className="py-1 text-right text-neutral-500">{o.sourceType}</td>
-                    <td
-                      className={`py-1 text-right ${
-                        o.validationStatus === "VALID" ? "text-emerald-500" : "text-amber-500"
-                      }`}
-                    >
-                      {o.validationStatus}
-                    </td>
+                    <td className="py-1 text-right text-neutral-500">{o.sourceType.replaceAll("_", " ")}</td>
+                    <td className={`py-1 text-right ${o.validationStatus === "VALID" ? "text-emerald-500" : "text-amber-500"}`}>{o.validationStatus}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </div>
+        </section>
 
-        <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
-          <h3 className="mb-2 text-sm font-semibold text-neutral-100">Ownership Timeline</h3>
-          <ul className="space-y-1.5 text-xs">
+        <section className="min-w-0 rounded-lg border border-neutral-800 bg-neutral-900 p-3 sm:p-4">
+          <SectionHeader title="League history" description="Ownership and transaction records are scoped to this Dynasty Boys league only." />
+          <h3 className="text-[10px] font-semibold uppercase tracking-wide text-neutral-600">Ownership</h3>
+          <ul className="mt-2 space-y-1.5 text-xs">
             {ownershipIntervals.map((oi) => (
-              <li key={oi.id} className="flex justify-between text-neutral-300">
-                <span>{oi.manager.teamName ?? oi.manager.displayName}</span>
-                <span className="text-neutral-500">
-                  {formatDateEastern(oi.validFrom.toISOString())} –{" "}
-                  {oi.validTo ? formatDateEastern(oi.validTo.toISOString()) : "present"}
-                </span>
+              <li key={oi.id} className="grid grid-cols-[1fr_auto] gap-3 rounded-md bg-neutral-950 px-2.5 py-2">
+                <span className="min-w-0 truncate text-neutral-300">{oi.manager.teamName ?? oi.manager.displayName}</span>
+                <span className="shrink-0 text-[10px] text-neutral-600">{formatDateEastern(oi.validFrom.toISOString())} – {oi.validTo ? formatDateEastern(oi.validTo.toISOString()) : "present"}</span>
               </li>
             ))}
-            {ownershipIntervals.length === 0 && <li className="text-neutral-500">No ownership history recorded.</li>}
+            {ownershipIntervals.length === 0 ? <li className="text-neutral-500">No ownership history recorded.</li> : null}
           </ul>
 
-          <h3 className="mb-2 mt-4 text-sm font-semibold text-neutral-100">Recent Transactions</h3>
-          <ul className="space-y-1 text-xs text-neutral-400">
-            {relatedTransactions.slice(0, 10).map((t) => (
-              <li key={t.id}>
-                {t.type} — {formatDateEastern(t.sleeperCreatedAt.toISOString())}
-              </li>
-            ))}
-            {relatedTransactions.length === 0 && <li className="text-neutral-500">None recorded.</li>}
+          <h3 className="mt-4 text-[10px] font-semibold uppercase tracking-wide text-neutral-600">Transactions</h3>
+          <ul className="mt-2 space-y-1.5 text-xs">
+            {relatedTransactions.slice(0, 10).map((t) => <li key={t.id} className="rounded-md bg-neutral-950 px-2.5 py-2 text-neutral-400">{t.type.replaceAll("_", " ")} · {formatDateEastern(t.sleeperCreatedAt.toISOString())}</li>)}
+            {relatedTransactions.length === 0 ? <li className="text-neutral-500">None recorded in this league.</li> : null}
           </ul>
-        </div>
+        </section>
       </div>
 
-      <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
-        <h3 className="mb-2 text-sm font-semibold text-neutral-100">Notes</h3>
-        <PlayerNotes
-          playerId={player.id}
-          initialNotes={notes.map((n) => ({ id: n.id, body: n.body, createdAt: n.createdAt.toISOString() }))}
-          addNoteAction={addPlayerNote}
-        />
-      </div>
+      <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3 sm:p-4">
+        <SectionHeader title="Notes" />
+        <PlayerNotes playerId={player.id} initialNotes={notes.map((n) => ({ id: n.id, body: n.body, createdAt: n.createdAt.toISOString() }))} addNoteAction={addPlayerNote} />
+      </section>
     </div>
   );
 }
