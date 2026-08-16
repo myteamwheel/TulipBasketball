@@ -10,8 +10,8 @@ import { SLEEPER_LEAGUE_ID } from "@/lib/config";
 const POSITIONS = ["QB", "RB", "WR", "TE"] as const;
 type Position = (typeof POSITIONS)[number];
 
-// Strategy constraints are intentionally separate from live roster state.
-// Sleeper still determines whether any of these players are actually on Orlando.
+// Strategy constraints are separate from live roster state. Sleeper still
+// determines whether any named player is actually on Orlando or another team.
 const PROTECTED_ORLANDO = new Set(
   [
     "Cam Ward",
@@ -29,8 +29,10 @@ const DO_NOT_TARGET = new Set(
   ["Geno Smith", "Kenneth Walker", "Kenneth Walker III", "TreVeyon Henderson"].map(normalizePlayerName),
 );
 
+// Explicit current strategic boosts only. Elijah Hampton was removed from this
+// list because that was an older target request and should no longer bias rank.
 const STRATEGIC_TARGETS = new Set(
-  ["Tua Tagovailoa", "Makai Lemon", "Elijah Hampton"].map(normalizePlayerName),
+  ["Tua Tagovailoa", "Makai Lemon"].map(normalizePlayerName),
 );
 
 const POSITION_PRIORITY: Record<Position, number> = { QB: 34, WR: 27, RB: 25, TE: 5 };
@@ -113,7 +115,6 @@ function needsForManager(
 }
 
 function combinations(chips: LiveAsset[]): LiveAsset[][] {
-  // Keep the search bounded while still allowing player+pick and pick+pick packages.
   const pool = chips.slice(0, 24);
   const result: LiveAsset[][] = pool.map((chip) => [chip]);
   for (let i = 0; i < pool.length; i++) {
@@ -150,8 +151,6 @@ function offerCandidates(target: LiveAsset, chips: LiveAsset[], ownerNeeds: Posi
   const selected: typeof packages = [];
   for (const candidate of packages) {
     if (selected.some((x) => x.give.map((p) => p.id).sort().join(":") === candidate.give.map((p) => p.id).sort().join(":"))) continue;
-    // Prefer structurally different alternatives: e.g. one asset vs two, or
-    // a player-heavy offer vs a pick-containing offer.
     if (selected.length === 1) {
       const firstHasPick = selected[0].give.some((x) => x.assetType === "pick");
       const candidateHasPick = candidate.give.some((x) => x.assetType === "pick");
@@ -355,10 +354,10 @@ export async function buildTradeFinderData(): Promise<TradeFinderData | null> {
       const needText = ownerNeeds.join(" / ");
       const movementText =
         target.change30d === null
-          ? "30-day history is limited"
+          ? "30-day history is unavailable or insufficient"
           : target.change30d < 0
-            ? `KTC is down ${Math.abs(Math.round(target.change30d)).toLocaleString("en-US")} over the tracked 30-day window`
-            : `KTC is up ${Math.round(target.change30d).toLocaleString("en-US")} over the tracked 30-day window`;
+            ? `KTC is down ${Math.abs(Math.round(target.change30d)).toLocaleString("en-US")} over a valid 30-day window`
+            : `KTC is up ${Math.round(target.change30d).toLocaleString("en-US")} over a valid 30-day window`;
       const why = `${target.position} addresses Orlando’s current ${target.position === "QB" ? "Superflex/QB2" : target.position} priority; ${target.managerName} grades weakest at ${needText}. ${movementText}.`;
 
       return {
