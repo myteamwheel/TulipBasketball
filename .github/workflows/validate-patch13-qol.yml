@@ -21,7 +21,8 @@ jobs:
           const base=JSON.parse(zlib.brotliDecompressSync(Buffer.from(baseParts.map(f=>fs.readFileSync(path.join('dynasty-patch10',f),'utf8').trim()).join(''),'base64')).toString('utf8')); apply(base);
           const p12parts=['part.00','part.01','part.02','part.03','part.04'];
           const p12=JSON.parse(zlib.brotliDecompressSync(Buffer.from(p12parts.map(f=>fs.readFileSync(path.join('deploy/exact12-overlay',f),'utf8').trim()).join(''),'base64')).toString('utf8')); apply(p12);
-          const qol=JSON.parse(zlib.brotliDecompressSync(Buffer.from(fs.readFileSync('deploy/qol-patch13/part.00','utf8').trim(),'base64')).toString('utf8')); apply(qol);
+          const qolPacked=['part.00','part.01'].map(f=>fs.readFileSync(path.join('deploy/qol-patch13',f),'utf8').trim()).join('');
+          const qol=JSON.parse(zlib.brotliDecompressSync(Buffer.from(qolPacked,'base64')).toString('utf8')); apply(qol);
           const mp=path.join('recovered-app','src/lib/marketSources.ts'); let src=fs.readFileSync(mp,'utf8');
           const before='if (statuses.find((s)=>s.source==="KTC")?.ok && statuses.find((s)=>s.source==="STATSGUY")?.ok) {';
           const after='if (ktcResult.status === "fulfilled" && sgResult.status === "fulfilled" && statuses.find((s)=>s.source==="KTC")?.ok && statuses.find((s)=>s.source==="STATSGUY")?.ok) {';
