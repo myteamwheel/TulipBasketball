@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { isAuthenticated, authRequired } from "@/lib/auth";
+import { ensurePatch14Schema } from "@/lib/prisma";
 import RefreshButton from "@/components/RefreshButton";
 
 // Every page under this layout reads live DB/session state; never
@@ -18,6 +19,7 @@ const NAV = [
 ];
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
+  await ensurePatch14Schema();
   if (!(await isAuthenticated())) redirect("/login");
 
   return (
