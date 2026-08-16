@@ -1,0 +1,23 @@
+name: probe-ktc-joe-live
+on:
+  push:
+    branches: [dynasty-patch11-exact-reconstruct-20260816b]
+    paths: ['.github/workflows/probe-ktc-joe-live.yml']
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect Joe Mixon in KTC playersArray
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL --max-time 30 -A 'Mozilla/5.0' 'https://keeptradecut.com/dynasty-rankings' -o /tmp/ktc.html
+          node <<'NODE'
+          const fs=require('fs'); const html=fs.readFileSync('/tmp/ktc.html','utf8');
+          const m=/\b(?:var|let|const)\s+playersArray\s*=\s*/.exec(html); if(!m) throw new Error('playersArray not found');
+          const open=html.indexOf('[',m.index+m[0].length); let depth=0,str=false,esc=false,end=-1;
+          for(let i=open;i<html.length;i++){const c=html[i];if(str){if(esc)esc=false;else if(c==='\\')esc=true;else if(c==='"')str=false;continue;}if(c==='"'){str=true;continue;}if(c==='[')depth++;else if(c===']'&&--depth===0){end=i+1;break;}}
+          const rows=JSON.parse(html.slice(open,end));
+          const joe=rows.filter(p=>String(p.playerName||p.name||'').toLowerCase().includes('joe mixon'));
+          console.log(JSON.stringify({count:rows.length,joe},null,2));
+          NODE
