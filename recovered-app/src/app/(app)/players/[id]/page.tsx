@@ -6,6 +6,7 @@ import { addPlayerNote } from "@/lib/actions";
 import KtcHistoryChart from "@/components/KtcHistoryChart";
 import PlayerNotes from "@/components/PlayerNotes";
 import SectionHeader from "@/components/SectionHeader";
+import PlayerPerformancePanel from "@/components/PlayerPerformancePanel";
 import { signalActionCopy } from "@/lib/dashboardInsights";
 import {
   formatDateEastern,
@@ -198,6 +199,8 @@ export default async function PlayerDetailPage(props: { params: Promise<{ id: st
           ) : <p className="mt-3 text-xs text-neutral-500">No nflverse regular-season game sample is available for this player yet. The signal currently relies on market history and live roster/depth/status context.</p>}
         </section>
       )}
+
+      <PlayerPerformancePanel playerId={player.id} position={player.position} />
 
       <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
         <h3 className="mb-2 text-sm font-semibold text-neutral-100">Value History</h3>
