@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { isAuthenticated } from "@/lib/auth";
 import { startRefresh, getLatestRefreshRun } from "@/lib/refresh";
-import { AUTO_REFRESH_ON_VISIT, KTC_DIRECT_REFRESH_ENABLED, MARKET_SOURCE_MAX_AGE_HOURS, STATSGUY_REFRESH_ENABLED } from "@/lib/config";
+import { AUTO_REFRESH_ON_VISIT, DYNASTYDEALER_REFRESH_ENABLED, KTC_DIRECT_REFRESH_ENABLED, MARKET_SOURCE_MAX_AGE_HOURS, STATSGUY_REFRESH_ENABLED, TRADYR_REFRESH_ENABLED } from "@/lib/config";
 
 export const maxDuration = 300;
 
@@ -17,7 +17,8 @@ export async function GET() {
     autoRefreshOnVisit: AUTO_REFRESH_ON_VISIT,
     ktcAutoRefreshEnabled: KTC_DIRECT_REFRESH_ENABLED,
     ktcMode: KTC_DIRECT_REFRESH_ENABLED ? "direct-public-page" : "manual-import",
-    sources: { KTC: KTC_DIRECT_REFRESH_ENABLED, STATSGUY: STATSGUY_REFRESH_ENABLED },
+    sources: { KTC: KTC_DIRECT_REFRESH_ENABLED, TRADYR: TRADYR_REFRESH_ENABLED, DYNASTYDEALER: DYNASTYDEALER_REFRESH_ENABLED, STATSGUY_DIAGNOSTIC: STATSGUY_REFRESH_ENABLED },
+    consensusPolicy: "KTC anchor; Tradyr and Dynasty Dealer only inside trust band; Stats Guy excluded by default.",
     freshnessHours: MARKET_SOURCE_MAX_AGE_HOURS,
   }});
 }
