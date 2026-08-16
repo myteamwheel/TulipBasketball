@@ -6,13 +6,13 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Probe live and diagnostic deployments
+      - name: Probe live and database-test deployments
         shell: bash
         run: |
           set +e
           for url in \
             'https://dynasty-boys-dashboard.vercel.app' \
-            'https://dynasty-boys-dashboard-qv6bro5vx-myteamwheel-8058s-projects.vercel.app' \
+            'https://dynasty-boys-dashboard-bl6fpwtee-myteamwheel-8058s-projects.vercel.app' \
             'https://dynasty-boys-dashboard-myteamwheel-8058s-projects.vercel.app'; do
             echo "===== $url ====="
             curl -L --max-time 30 -sS -D /tmp/h "$url" -o /tmp/b
