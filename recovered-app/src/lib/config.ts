@@ -12,10 +12,10 @@ export const KTC_FORMAT_LABEL = "Superflex / 0.5 PPR / No TE Premium";
 // Product requirement: KTC collection is always attempted on every dashboard refresh.
 export const KTC_DIRECT_REFRESH_ENABLED = true;
 
-// Stats Guy remains stored only as an optional diagnostic feed. It is disabled
-// by default because its trade-derived/tail values created unrealistic gaps
-// versus current KTC on low-end veterans and fringe assets.
-export const STATSGUY_REFRESH_ENABLED = process.env.STATSGUY_REFRESH_ENABLED === "true";
+// Stats Guy is retained only as historical/diagnostic data. The trade-derived
+// tail values created implausible gaps versus current KTC for low-end veterans
+// and fringe assets, so it cannot participate in live refresh consensus/signals.
+export const STATSGUY_REFRESH_ENABLED = false;
 export const DYNASTYDEALER_REFRESH_ENABLED = process.env.DYNASTYDEALER_REFRESH_ENABLED !== "false";
 export const TRADYR_REFRESH_ENABLED = process.env.TRADYR_REFRESH_ENABLED !== "false";
 export const KTC_AUTO_REFRESH_ENABLED = KTC_DIRECT_REFRESH_ENABLED;
@@ -29,8 +29,7 @@ export const MARKET_SOURCE_MAX_AGE_MS = MARKET_SOURCE_MAX_AGE_HOURS * 60 * 60 * 
 
 // KTC is the canonical market-value scale. Tradyr and Dynasty Dealer are
 // translated onto KTC scale and only included when they remain inside the trust
-// band. Stats Guy is zero-weight by default and should be treated as a
-// disagreement/diagnostic feed unless explicitly re-enabled and audited.
+// band. Stats Guy has zero live weight.
 export const CONSENSUS_WEIGHTS = {
   KTC: 0.70,
   TRADYR: 0.20,
@@ -42,10 +41,10 @@ export const CONSENSUS_WEIGHTS = {
 export const KTC_AUTHORIZED_FEED_URL = process.env.KTC_AUTHORIZED_FEED_URL?.trim() || null;
 export const KTC_AUTHORIZED_FEED_TOKEN = process.env.KTC_AUTHORIZED_FEED_TOKEN?.trim() || null;
 
-// Permanent Orlando historical baseline. These values were preserved in the
-// database as the June 7 seed checkpoint; future short-term changes compare to
-// the immediately previous checkpoint while long-term delta remains anchored here.
-export const ORLANDO_BASELINE_DATE = "2026-06-07T12:00:00.000Z";
+// Permanent Orlando historical baseline. These values were recovered from the
+// June 7 checkpoint in the conversation; short-term changes compare to the
+// immediately previous checkpoint while long-term delta remains anchored here.
+export const ORLANDO_BASELINE_DATE = "2026-06-07T04:00:00.000Z";
 export const PRE_BASELINE_DATE = ORLANDO_BASELINE_DATE;
 export const DISPLAY_TIMEZONE = "America/New_York";
 
