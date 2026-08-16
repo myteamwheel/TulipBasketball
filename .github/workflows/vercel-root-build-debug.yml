@@ -1,0 +1,28 @@
+name: vercel-root-build-debug
+
+on:
+  push:
+    paths:
+      - '.github/workflows/vercel-root-build-debug.yml'
+      - 'package.json'
+      - 'vercel.json'
+      - 'recovered-app/**'
+  workflow_dispatch:
+
+jobs:
+  reproduce-vercel-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Root install
+        run: npm install
+      - name: Run exact Vercel build command
+        run: npm run vercel-build
+      - name: Verify Next output
+        run: |
+          test -f .next/BUILD_ID
+          test -d .next/server
+          echo "ROOT_NEXT_BUILD_OK"
