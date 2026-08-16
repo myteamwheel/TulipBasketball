@@ -6,14 +6,27 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Inspect canonical production errors
+      - name: Wait for healthy Patch 13.3 production
+        shell: bash
         run: |
+          set +e
           BASE='https://dynasty-boys-dashboard.vercel.app'
-          for path in / /settings /api/refresh /api/recovery-old-db-audit /api/recovery-backup-audit; do
-            echo "===== $path ====="
-            curl -L --max-time 45 -sS -D /tmp/h -o /tmp/b -w 'HTTP=%{http_code}\n' "$BASE$path" || true
-            grep -Ei '^(x-vercel-id|x-vercel-cache|x-matched-path|server|content-type):' /tmp/h || true
-            echo 'BODY:'
-            head -c 5000 /tmp/b || true
-            echo; echo
+          for i in {1..30}; do
+            code=$(curl -L --max-time 30 -sS -o /tmp/settings -w '%{http_code}' "$BASE/settings")
+            root=$(curl -L --max-time 30 -sS -o /tmp/root -w '%{http_code}' "$BASE/")
+            echo "attempt=$i settings=$code root=$root"
+            if [ "$code" = "200" ] && [ "$root" = "200" ] && grep -q 'Build: PATCH 13' /tmp/settings && grep -q 'Decision Desk' /tmp/root; then echo 'PATCH13_3_HEALTHY'; break; fi
+            sleep 8
           done
+          echo '===== SETTINGS MARKERS ====='
+          grep -o 'Build: PATCH 13[^<]*' /tmp/settings | head || true
+          grep -o 'Dynasty Dealer' /tmp/settings | head || true
+          grep -o 'Values by Dynasty Dealer' /tmp/settings | head || true
+          echo '===== ROOT MARKER ====='
+          grep -o 'Decision Desk' /tmp/root | head || true
+          echo '===== REFRESH STATUS ====='
+          curl -L --max-time 45 -sS -w '\nHTTP=%{http_code}\n' "$BASE/api/refresh" || true
+          echo '===== BACKUP AUDIT ====='
+          curl -L --max-time 45 -sS -w '\nHTTP=%{http_code}\n' "$BASE/api/recovery-backup-audit" || true
+          echo '===== OLD PRISMA AUDIT ====='
+          curl -L --max-time 45 -sS -w '\nHTTP=%{http_code}\n' "$BASE/api/recovery-old-db-audit" || true
