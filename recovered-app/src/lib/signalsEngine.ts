@@ -77,7 +77,7 @@ function applyPerformanceContext(base: SignalResult, performance: StoredPerforma
   reasons.push({
     code: "RECENT_GAME_FORM",
     label: "Recent game performance",
-    detail: `${games.length} most recent played game${games.length === 1 ? "" : "s"}: weighted grade ${form.toFixed(1)}/100. Game form is capped at ±6 asset-health points; preseason games count at 35% weight.`,
+    detail: `${performance.latestGame?.performanceSummary ? `Latest game — ${performance.latestGame.performanceSummary} ` : ""}${games.length}-game weighted form: ${form.toFixed(1)}/100. Game form is capped at ±6 asset-health points; preseason games count at 35% weight.`,
     impact: form >= 78 ? "POSITIVE" : form < 60 ? "NEGATIVE" : "NEUTRAL",
   });
   if (profile?.draftRound) {
