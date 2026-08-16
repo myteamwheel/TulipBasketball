@@ -1,0 +1,30 @@
+name: probe-ktc-rendered-joe
+on:
+  push:
+    branches: [dynasty-patch14-market-integrity-20260816]
+    paths: ['.github/workflows/probe-ktc-rendered-joe.yml']
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect rendered KTC page around Joe Mixon
+        shell: bash
+        run: |
+          set -euo pipefail
+          for PAGE in 8 9 10 11 12; do
+            curl -fsSL --max-time 30 -A 'Mozilla/5.0' "https://keeptradecut.com/dynasty-rankings?page=$PAGE" -o "/tmp/ktc-$PAGE.html"
+            echo "===== PAGE $PAGE ====="
+            python3 - "$PAGE" <<'PY'
+          import sys,re,html
+          p=sys.argv[1]
+          raw=open(f'/tmp/ktc-{p}.html',errors='ignore').read()
+          low=raw.lower()
+          needle='joe mixon'
+          i=low.find(needle)
+          print('bytes',len(raw),'joe_index',i)
+          if i>=0:
+              chunk=raw[max(0,i-2500):i+3500]
+              chunk=re.sub(r'\s+',' ',chunk)
+              print(chunk)
+          PY
+          done
