@@ -12,7 +12,7 @@ jobs:
           set +e
           BASE='https://dynasty-boys-dashboard.vercel.app'
           echo 'Waiting for production promotion...'
-          for i in {1..15}; do
+          for i in {1..18}; do
             curl -L --max-time 30 -sS "$BASE/settings" -o /tmp/settings
             if grep -q 'Independent automatic backup' /tmp/settings; then break; fi
             sleep 10
@@ -33,7 +33,7 @@ jobs:
           echo '===== START REFRESH ====='
           curl -L --max-time 30 -sS -X POST -H 'content-type: application/json' "$BASE/api/refresh" || true
           echo
-          sleep 20
+          sleep 22
           echo '===== REFRESH AFTER ====='
           curl -L --max-time 30 -sS "$BASE/api/refresh" || true
           echo
@@ -41,4 +41,4 @@ jobs:
           curl -L --max-time 30 -sS "$BASE/settings" -o /tmp/settings2
           grep -o 'Independent automatic backup' /tmp/settings2 | head || true
           grep -o 'Healthy' /tmp/settings2 | head || true
-          # validated deployment probe
+          # recovery-routed production probe
