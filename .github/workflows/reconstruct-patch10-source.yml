@@ -1,0 +1,45 @@
+name: Reconstruct Patch 10 Source
+
+on:
+  push:
+    branches:
+      - dynasty-dashboard-patch10-deploy
+    paths:
+      - '.github/workflows/reconstruct-patch10-source.yml'
+  workflow_dispatch:
+
+jobs:
+  reconstruct:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout patch branch
+        uses: actions/checkout@v4
+        with:
+          ref: dynasty-dashboard-patch10-deploy
+      - name: Reconstruct source from payload
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+          const zlib = require('zlib');
+          const dir = path.join(process.cwd(), 'deploy', 'dynasty-patch10');
+          const chunks = fs.readdirSync(dir).filter(f => /^payload\.\d+\.txt$/.test(f)).sort((a,b)=>Number(a.split('.')[1])-Number(b.split('.')[1]));
+          console.log('chunks', chunks.join(', '));
+          const packed = chunks.map(f => fs.readFileSync(path.join(dir, f), 'utf8').trim()).join('');
+          console.log('packed chars', packed.length);
+          const payload = JSON.parse(zlib.brotliDecompressSync(Buffer.from(packed, 'base64')).toString('utf8'));
+          const out = path.join(process.cwd(), 'reconstructed-patch10');
+          fs.rmSync(out, { recursive: true, force: true });
+          fs.mkdirSync(out, { recursive: true });
+          for (const [rel, item] of Object.entries(payload)) {
+            const dest = path.join(out, rel);
+            fs.mkdirSync(path.dirname(dest), { recursive: true });
+            fs.writeFileSync(dest, item.encoding === 'base64' ? Buffer.from(item.data, 'base64') : item.data);
+          }
+          console.log('files', Object.keys(payload).length);
+          NODE
+      - name: Upload reconstructed source
+        uses: actions/upload-artifact@v4
+        with:
+          name: reconstructed-patch10-source
+          path: reconstructed-patch10
