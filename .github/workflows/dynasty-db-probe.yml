@@ -6,34 +6,32 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Verify direct-routed production
+      - name: Verify Patch 13 QOL production
         shell: bash
         run: |
           set +e
           BASE='https://dynasty-boys-dashboard.vercel.app'
-          echo 'Waiting for healthy exact Patch 12...'
-          for i in {1..15}; do
-            code=$(curl -L --max-time 30 -sS -o /tmp/settings -w '%{http_code}' "$BASE/settings")
+          echo 'Waiting for Patch 13 production...'
+          for i in {1..18}; do
+            code=$(curl -L --max-time 30 -sS -o /tmp/root -w '%{http_code}' "$BASE/")
             echo "attempt=$i status=$code"
-            if [ "$code" = "200" ] && grep -q 'Independent automatic backup' /tmp/settings; then break; fi
+            if [ "$code" = "200" ] && grep -q 'Decision Desk' /tmp/root; then break; fi
             sleep 10
           done
           echo '===== ROOT ====='
           curl -L --max-time 30 -sS -D /tmp/h "$BASE/" -o /tmp/root
           cat /tmp/h
+          grep -o 'Decision Desk' /tmp/root | head || true
           grep -o '≥2 fresh sources required' /tmp/root | head || true
-          grep -o 'KTC anchor; secondary source optional' /tmp/root | head || true
+          echo '===== PLAYERS ====='
+          curl -L --max-time 30 -sS "$BASE/players" -o /tmp/players
+          grep -o 'Sell high' /tmp/players | head || true
+          grep -o 'Cut / exit' /tmp/players | head || true
           echo '===== SETTINGS ====='
+          curl -L --max-time 30 -sS "$BASE/settings" -o /tmp/settings
           grep -o 'SOURCE TRUST + WAIVER CALIBRATION PATCH 12' /tmp/settings | head || true
           grep -o 'Independent automatic backup' /tmp/settings | head || true
           grep -o '8:00 AM Eastern' /tmp/settings | head || true
-          echo '===== REFRESH BEFORE ====='
-          curl -L --max-time 30 -sS "$BASE/api/refresh" || true
-          echo
-          echo '===== START REFRESH ====='
-          curl -L --max-time 30 -sS -X POST -H 'content-type: application/json' "$BASE/api/refresh" || true
-          echo
-          sleep 22
-          echo '===== REFRESH AFTER ====='
+          echo '===== REFRESH STATUS ====='
           curl -L --max-time 30 -sS "$BASE/api/refresh" || true
           echo
