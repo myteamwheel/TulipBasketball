@@ -15,7 +15,8 @@ import SectionHeader from "@/components/SectionHeader";
 import SignalBadge from "@/components/SignalBadge";
 import { formatDateEastern, formatPoints, formatSigned, trendColorClass, timeAgo } from "@/lib/format";
 import { ORLANDO_BASELINE_DATE } from "@/lib/config";
-import { getCurrentMarketMix, getLatestMarketSourceStatuses } from "@/lib/marketSources";
+import { getLatestMarketSourceStatuses } from "@/lib/marketSources";
+import { getFreshCurrentMarketMix } from "@/lib/currentMarket";
 
 export const dynamic = "force-dynamic";
 
@@ -52,7 +53,7 @@ export default async function HomePage() {
   const playerIds = roster.map((p) => p.id);
   const [marketData, marketMix, sourceStatuses, signals] = await Promise.all([
     computeMarketDataForPlayers(playerIds),
-    getCurrentMarketMix(playerIds),
+    getFreshCurrentMarketMix(playerIds),
     getLatestMarketSourceStatuses(),
     computeSignalsForCurrentRoster(),
   ]);
