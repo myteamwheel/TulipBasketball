@@ -6,18 +6,27 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Probe all aliases now
+      - name: Refresh and verify three-source production
+        shell: bash
         run: |
-          for base in \
-          'https://dynasty-boys-dashboard-r8tzxkzqh-myteamwheel-8058s-projects.vercel.app' \
-          'https://dynasty-boys-dashboard-myteamwheel-8058s-projects.vercel.app' \
-          'https://dynasty-boys-dashboard.vercel.app'; do
-            echo "===== $base ====="
-            for path in / /settings /api/recovery-backup-audit; do
-              code=$(curl -L --max-time 30 -sS -o /tmp/b -w '%{http_code}' "$base$path" || true)
-              echo "$path HTTP=$code"
-              grep -o 'Build: PATCH 13[^<]*' /tmp/b | head || true
-              grep -o 'Decision Desk' /tmp/b | head || true
-              head -c 200 /tmp/b | tr '\n' ' '; echo
-            done
+          set +e
+          BASE='https://dynasty-boys-dashboard.vercel.app'
+          echo '===== START REFRESH ====='
+          curl -L --max-time 45 -sS -X POST -H 'content-type: application/json' "$BASE/api/refresh"; echo
+          for i in {1..12}; do
+            sleep 5
+            body=$(curl -L --max-time 45 -sS "$BASE/api/refresh")
+            echo "attempt=$i ${body:0:600}"
+            echo "$body" > /tmp/status
+            if echo "$body" | grep -q '"status":"SUCCESS"'; then break; fi
           done
+          echo '===== FINAL REFRESH STATUS ====='
+          cat /tmp/status; echo
+          echo '===== SETTINGS SOURCE HEALTH ====='
+          curl -L --max-time 45 -sS "$BASE/settings" -o /tmp/settings
+          grep -o 'Build: PATCH 13[^<]*' /tmp/settings | head || true
+          grep -o 'Dynasty Dealer' /tmp/settings | head -10 || true
+          grep -o 'fresh' /tmp/settings | head -10 || true
+          echo '===== ROOT ====='
+          curl -L --max-time 45 -sS -o /tmp/root -w 'HTTP=%{http_code}\n' "$BASE/"
+          grep -o 'Decision Desk' /tmp/root | head || true
