@@ -4,13 +4,13 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3400",
-    "build": "next build",
+    "build": "node patch14-runtime.cjs && next build",
     "start": "next start",
     "lint": "eslint",
     "seed:baseline": "tsx scripts/seed-baseline.ts",
     "refresh": "tsx scripts/run-refresh.ts",
     "postinstall": "prisma generate",
-    "vercel-build": "next build"
+    "vercel-build": "node patch14-runtime.cjs && next build"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.1",
