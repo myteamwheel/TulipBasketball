@@ -26,8 +26,8 @@ jobs:
           FANTASYCALC_REFRESH_ENABLED: "true"
           STATSGUY_REFRESH_ENABLED: "false"
         run: |
-          cat > /tmp/provider-check.ts <<'TS'
-          import { fetchKtcSnapshot, fetchFantasyCalcSnapshot } from process.cwd() + '/src/lib/marketSources.ts';
+          cat > provider-check.ts <<'TS'
+          const { fetchKtcSnapshot, fetchFantasyCalcSnapshot } = await import('./src/lib/marketSources.ts');
           const ktc = await fetchKtcSnapshot();
           const joeKtc = ktc.rows.find((r:any) => r.name === 'Joe Mixon');
           if (!joeKtc) throw new Error(`Joe Mixon still missing from KTC merged collector (${ktc.rows.length} rows)`);
@@ -41,4 +41,4 @@ jobs:
             fantasyCalcJoe: { value: joeFc.rawValue, rank: joeFc.rank, positionRank: joeFc.positionRank, sleeperId: joeFc.sleeperId },
           }, null, 2));
           TS
-          npx tsx /tmp/provider-check.ts
+          npx tsx provider-check.ts
