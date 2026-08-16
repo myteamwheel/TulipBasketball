@@ -4,11 +4,14 @@ import {
   CONSENSUS_WEIGHTS,
   KTC_DIRECT_REFRESH_ENABLED,
   MARKET_SOURCE_MAX_AGE_MS,
+  FANTASYCALC_REFRESH_ENABLED,
   STATSGUY_REFRESH_ENABLED,
+  SECONDARY_DISAGREEMENT_ABS,
+  SECONDARY_DISAGREEMENT_REL,
 } from "@/lib/config";
 import { commitKtcImport, type KtcImportRow } from "@/lib/ktcImport";
 
-export type MarketSourceKey = "KTC" | "STATSGUY";
+export type MarketSourceKey = "KTC" | "FANTASYCALC" | "STATSGUY";
 const marketDb = prisma as typeof prisma & {
   marketObservation: any;
   consensusObservation: any;
@@ -33,6 +36,7 @@ export interface MarketRefreshResult {
   consensusPlayersStored: number;
   marketObservationsStored: number;
   draftPickObservationsStored: number;
+  fantasyCalcCalibrationPairs: number;
   statsGuyCalibrationPairs: number;
 }
 
@@ -58,6 +62,7 @@ interface ProviderSnapshot {
 }
 
 const KTC_URL = "https://keeptradecut.com/dynasty-rankings";
+const FANTASYCALC_URL = "https://api.fantasycalc.com/values/current?isDynasty=true&numQbs=2&numTeams=12&ppr=0.5&includeAdp=false";
 const STATSGUY_URL = "https://api.statsguyfantasy.com/api/v1/players";
 const MIN_PROVIDER_ROWS = 200;
 
@@ -153,50 +158,127 @@ function parseKtcValue(item: Record<string, unknown>): { value: number; rank?: n
 
 export async function fetchKtcSnapshot(): Promise<ProviderSnapshot> {
   const fetchedAt = new Date();
-  const response = await fetch(KTC_URL, {
-    cache: "no-store",
-    signal: withTimeout(30000),
-    headers: {
-      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-      "Accept-Language": "en-US,en;q=0.9",
-      "Cache-Control": "no-cache, no-store, max-age=0",
-      Pragma: "no-cache",
-      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
-    },
-  });
-  if (!response.ok) throw new Error(`KTC public rankings request failed (${response.status})`);
-  const html = await response.text();
-  if (html.length < 10000) throw new Error(`KTC returned an unexpectedly small page (${html.length} bytes)`);
-  const sourceUpdatedAt = parseKtcFreshness(html, fetchedAt);
+  const headers = {
+    Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Cache-Control": "no-cache, no-store, max-age=0",
+    Pragma: "no-cache",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+  };
+  async function getPage(url: string): Promise<string> {
+    const response = await fetch(url, { cache: "no-store", signal: withTimeout(30000), headers });
+    if (!response.ok) throw new Error(`KTC public rankings request failed (${response.status}) for ${url}`);
+    const html = await response.text();
+    if (html.length < 10000) throw new Error(`KTC returned an unexpectedly small page (${html.length} bytes) for ${url}`);
+    return html;
+  }
+
+  const baseHtml = await getPage(KTC_URL);
+  const sourceUpdatedAt = parseKtcFreshness(baseHtml, fetchedAt);
   assertFresh("KTC", sourceUpdatedAt, fetchedAt);
 
-  const rows: ProviderRow[] = [];
-  for (const raw of extractKtcRows(html)) {
-    if (!raw || typeof raw !== "object") continue;
-    const p = raw as Record<string, unknown>;
-    const parsed = parseKtcValue(p);
-    if (!parsed) continue;
-    const name = String(p.playerName ?? p.name ?? "").trim();
-    if (!name) continue;
-    rows.push({
-      ktcId: String(p.playerID ?? p.id ?? "").trim() || undefined,
-      name,
-      position: String(p.position ?? "").trim().toUpperCase() || undefined,
-      team: String(p.team ?? "").trim() || undefined,
-      rawValue: parsed.value,
-      rank: parsed.rank,
-      positionRank: parsed.positionRank,
-      metadata: { age: p.age ?? null },
-    });
+  // The base embedded array does not include every deep player. Joe Mixon is a
+  // concrete regression case: his current public KTC profile exists, but he was
+  // absent from the base array. Merge the public ranking pages so rostered deep
+  // assets are not silently treated as "no KTC value".
+  const pageNumbers = Array.from({ length: 11 }, (_, i) => i + 2); // pages 2..12
+  const extraPages = await Promise.allSettled(pageNumbers.map((page) => getPage(`${KTC_URL}?page=${page}`)));
+  const htmlPages = [baseHtml, ...extraPages.filter((r): r is PromiseFulfilledResult<string> => r.status === "fulfilled").map((r) => r.value)];
+
+  const rowsByKey = new Map<string, ProviderRow>();
+  for (const html of htmlPages) {
+    let rawRows: unknown[] = [];
+    try { rawRows = extractKtcRows(html); } catch { continue; }
+    for (const raw of rawRows) {
+      if (!raw || typeof raw !== "object") continue;
+      const item = raw as Record<string, unknown>;
+      const parsed = parseKtcValue(item);
+      if (!parsed) continue;
+      const name = String(item.playerName ?? item.name ?? "").trim();
+      if (!name) continue;
+      const position = String(item.position ?? "").trim().toUpperCase() || undefined;
+      const ktcId = String(item.playerID ?? item.id ?? "").trim() || undefined;
+      const row: ProviderRow = {
+        ktcId,
+        name,
+        position,
+        team: String(item.team ?? "").trim() || undefined,
+        rawValue: parsed.value,
+        rank: parsed.rank,
+        positionRank: parsed.positionRank,
+        metadata: { age: item.age ?? null },
+      };
+      const key = ktcId ? `id:${ktcId}` : `np:${normalizePlayerName(name)}|${position ?? ""}`;
+      rowsByKey.set(key, row);
+    }
   }
-  if (rows.length < MIN_PROVIDER_ROWS) throw new Error(`KTC returned only ${rows.length} valued assets; refusing partial snapshot`);
+  const rows = [...rowsByKey.values()];
+  if (rows.length < MIN_PROVIDER_ROWS) throw new Error(`KTC returned only ${rows.length} valued assets after pagination; refusing partial snapshot`);
+  const pageSuccesses = htmlPages.length;
   return {
     source: "KTC",
     sourceUrl: KTC_URL,
     fetchedAt,
     sourceUpdatedAt,
     rows,
-    message: `KTC live rankings; ${rows.length} assets; page updated ${Math.round(sourceAge(sourceUpdatedAt, fetchedAt) / 60000)}m before this refresh`,
+    message: `KTC live rankings; ${rows.length} unique assets across ${pageSuccesses} public ranking pages; page updated ${Math.round(sourceAge(sourceUpdatedAt, fetchedAt) / 60000)}m before this refresh`,
+  };
+}
+
+interface FantasyCalcPlayer {
+  name?: string;
+  sleeperId?: string;
+  position?: string;
+  maybeTeam?: string | null;
+}
+interface FantasyCalcValueRow {
+  player?: FantasyCalcPlayer;
+  value?: number;
+  overallRank?: number;
+  positionRank?: number;
+  trend30Day?: number;
+}
+
+export async function fetchFantasyCalcSnapshot(): Promise<ProviderSnapshot> {
+  const fetchedAt = new Date();
+  const response = await fetch(FANTASYCALC_URL, {
+    cache: "no-store",
+    signal: withTimeout(20000),
+    headers: { Accept: "application/json", "Cache-Control": "no-cache" },
+  });
+  if (!response.ok) throw new Error(`FantasyCalc live values API failed (${response.status})`);
+  const data = await response.json() as FantasyCalcValueRow[];
+  const rows: ProviderRow[] = (Array.isArray(data) ? data : []).flatMap((entry) => {
+    const player = entry.player;
+    const rawValue = Number(entry.value);
+    const name = player?.name?.trim();
+    if (!player?.sleeperId || !name || !Number.isFinite(rawValue) || rawValue < 0) return [];
+    return [{
+      sleeperId: String(player.sleeperId),
+      name,
+      position: player.position?.toUpperCase(),
+      team: player.maybeTeam ?? undefined,
+      rawValue: Math.round(rawValue),
+      rank: Number.isFinite(Number(entry.overallRank)) ? Math.round(Number(entry.overallRank)) : undefined,
+      positionRank: Number.isFinite(Number(entry.positionRank)) ? Math.round(Number(entry.positionRank)) : undefined,
+      metadata: {
+        trend30Day: Number.isFinite(Number(entry.trend30Day)) ? Number(entry.trend30Day) : null,
+        exactFormat: "12-team Superflex / 0.5 PPR / no TEP",
+        sourceTimestampVerified: false,
+        freshnessBasis: "live API fetch; provider-published 3-hour recalculation cadence",
+      },
+    }];
+  });
+  if (rows.length < 300) throw new Error(`FantasyCalc returned only ${rows.length} valued players; refusing partial snapshot`);
+  // FantasyCalc's current endpoint does not expose a per-snapshot source timestamp.
+  // Store fetchedAt as the observation anchor, but say that explicitly in metadata/UI.
+  return {
+    source: "FANTASYCALC",
+    sourceUrl: FANTASYCALC_URL,
+    fetchedAt,
+    sourceUpdatedAt: fetchedAt,
+    rows,
+    message: `FantasyCalc live API; ${rows.length} assets for exact league format; fetched now (provider advertises a 3-hour recalculation cadence; endpoint exposes no snapshot timestamp)`,
   };
 }
 
@@ -324,6 +406,38 @@ async function persistKtc(snapshot: ProviderSnapshot, refreshRunId: string): Pro
   return stored;
 }
 
+async function persistFantasyCalc(snapshot: ProviderSnapshot, refreshRunId: string): Promise<number> {
+  const leaguePlayers = await currentLeaguePlayers();
+  const bySleeper = new Map(leaguePlayers.map((p) => [p.sleeperId, p]));
+  let stored = 0;
+  const seen = new Set<string>();
+  for (const row of snapshot.rows) {
+    const player = row.sleeperId ? bySleeper.get(row.sleeperId) : undefined;
+    if (!player || seen.has(player.id)) continue;
+    seen.add(player.id);
+    try {
+      await marketDb.marketObservation.create({ data: {
+        playerId: player.id,
+        source: "FANTASYCALC",
+        rawValue: row.rawValue,
+        normalizedValue: row.rawValue,
+        observedAt: snapshot.fetchedAt,
+        sourceUpdatedAt: snapshot.sourceUpdatedAt,
+        sourceUrl: snapshot.sourceUrl,
+        refreshRunId,
+        sourceRank: row.rank,
+        positionRank: row.positionRank,
+        metadata: JSON.stringify({ ...(row.metadata ?? {}), scale: "FANTASYCALC_RAW_PENDING_KTC_CALIBRATION" }),
+      }});
+      stored++;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (!message.toLowerCase().includes("unique")) throw err;
+    }
+  }
+  return stored;
+}
+
 async function persistStatsGuy(snapshot: ProviderSnapshot, refreshRunId: string): Promise<number> {
   const leaguePlayers = await currentLeaguePlayers();
   const bySleeper = new Map(leaguePlayers.map((p) => [p.sleeperId, p]));
@@ -406,59 +520,65 @@ function applyQuantileMap(map: QuantileMap, value: number): number {
   return Math.round(ys[ys.length - 1]);
 }
 
-async function calibrateStatsGuyToKtc(
+async function calibrateSecondaryToKtc(
   refreshRunId: string,
+  source: "FANTASYCALC" | "STATSGUY",
   ktcSnapshot: ProviderSnapshot,
-  statsGuySnapshot: ProviderSnapshot,
+  secondarySnapshot: ProviderSnapshot,
 ): Promise<number> {
-  // Calibrate on the full overlapping provider universe, not only this league's
-  // rostered players. That makes the translation much less sensitive to the
-  // particular construction of one 12-team league.
   const ktcByNamePos = new Map<string, ProviderRow>();
   for (const row of ktcSnapshot.rows) {
     if (parseDraftPickRow(row)) continue;
-    const pos=(row.position ?? '').toUpperCase();
-    if(!['QB','RB','WR','TE'].includes(pos)) continue;
+    const pos = (row.position ?? "").toUpperCase();
+    if (!["QB", "RB", "WR", "TE"].includes(pos)) continue;
     ktcByNamePos.set(`${normalizePlayerName(row.name)}|${pos}`, row);
   }
-  const fullPairs:{sg:number;ktc:number;position:string}[]=[];
-  for(const row of statsGuySnapshot.rows){
-    const pos=(row.position ?? '').toUpperCase();
-    const ktc=ktcByNamePos.get(`${normalizePlayerName(row.name)}|${pos}`);
-    if(ktc) fullPairs.push({sg:row.rawValue,ktc:ktc.rawValue,position:pos});
+  const fullPairs: { secondary: number; ktc: number; position: string }[] = [];
+  for (const row of secondarySnapshot.rows) {
+    const pos = (row.position ?? "").toUpperCase();
+    const ktc = ktcByNamePos.get(`${normalizePlayerName(row.name)}|${pos}`);
+    if (ktc) fullPairs.push({ secondary: row.rawValue, ktc: ktc.rawValue, position: pos });
   }
-  const overall=buildQuantileMap(fullPairs);
-  if(!overall) return 0;
-  const positionMaps=new Map<string,QuantileMap>();
-  for(const pos of ['QB','RB','WR','TE']){
-    const map=buildQuantileMap(fullPairs.filter((p)=>p.position===pos));
-    if(map) positionMaps.set(pos,map);
+  const toPair = (p: { secondary: number; ktc: number }) => ({ sg: p.secondary, ktc: p.ktc });
+  const overall = buildQuantileMap(fullPairs.map(toPair));
+  if (!overall) return 0;
+  const positionMaps = new Map<string, QuantileMap>();
+  for (const pos of ["QB", "RB", "WR", "TE"]) {
+    const map = buildQuantileMap(fullPairs.filter((p) => p.position === pos).map(toPair));
+    if (map) positionMaps.set(pos, map);
   }
 
-  const sgRows=await marketDb.marketObservation.findMany({
-    where:{refreshRunId,source:'STATSGUY'},
-    include:{player:{select:{position:true}}},
+  const secondaryRows = await marketDb.marketObservation.findMany({
+    where: { refreshRunId, source },
+    include: { player: { select: { position: true } } },
   });
-  for(const sg of sgRows as any[]){
-    const pos=String(sg.player?.position ?? '').toUpperCase();
-    const map=positionMaps.get(pos) ?? overall;
-    const equivalent=Math.max(0,Math.min(10000,applyQuantileMap(map,sg.rawValue)));
-    let oldMeta:Record<string,unknown>={};
-    try{oldMeta=JSON.parse(sg.metadata||'{}')}catch{}
-    await marketDb.marketObservation.update({where:{id:sg.id},data:{
-      normalizedValue:equivalent,
-      metadata:JSON.stringify({
+  for (const row of secondaryRows as any[]) {
+    const pos = String(row.player?.position ?? "").toUpperCase();
+    const map = positionMaps.get(pos) ?? overall;
+    const equivalent = Math.max(0, Math.min(10000, applyQuantileMap(map, row.rawValue)));
+    let oldMeta: Record<string, unknown> = {};
+    try { oldMeta = JSON.parse(row.metadata || "{}"); } catch {}
+    await marketDb.marketObservation.update({ where: { id: row.id }, data: {
+      normalizedValue: equivalent,
+      metadata: JSON.stringify({
         ...oldMeta,
-        scale:'KTC_EQUIVALENT',
-        scaleMethod:positionMaps.has(pos)?'POSITION_QUANTILE_MAP_FULL_UNIVERSE':'OVERALL_QUANTILE_MAP_FULL_UNIVERSE',
-        calibrationPairs:map.pairCount,
-        calibrationUniversePairs:fullPairs.length,
-        rawStatsGuyValue:sg.rawValue,
-        ktcEquivalentValue:equivalent,
+        scale: "KTC_EQUIVALENT",
+        scaleMethod: positionMaps.has(pos) ? "POSITION_QUANTILE_MAP_FULL_UNIVERSE" : "OVERALL_QUANTILE_MAP_FULL_UNIVERSE",
+        calibrationPairs: map.pairCount,
+        calibrationUniversePairs: fullPairs.length,
+        rawSecondaryValue: row.rawValue,
+        ktcEquivalentValue: equivalent,
       }),
     }});
   }
   return fullPairs.length;
+}
+
+async function calibrateFantasyCalcToKtc(refreshRunId: string, ktcSnapshot: ProviderSnapshot, fantasyCalcSnapshot: ProviderSnapshot): Promise<number> {
+  return calibrateSecondaryToKtc(refreshRunId, "FANTASYCALC", ktcSnapshot, fantasyCalcSnapshot);
+}
+async function calibrateStatsGuyToKtc(refreshRunId: string, ktcSnapshot: ProviderSnapshot, statsGuySnapshot: ProviderSnapshot): Promise<number> {
+  return calibrateSecondaryToKtc(refreshRunId, "STATSGUY", ktcSnapshot, statsGuySnapshot);
 }
 
 async function buildConsensus(refreshRunId: string, observedAt = new Date()): Promise<number> {
@@ -471,24 +591,49 @@ async function buildConsensus(refreshRunId: string, observedAt = new Date()): Pr
   }
   let stored = 0;
   for (const [playerId, list] of byPlayer) {
-    const eligible = list.filter((o: any) => {
-      if (o.source !== "KTC" && o.source !== "STATSGUY") return false;
+    const fresh = list.filter((o: any) => {
       const anchor = o.sourceUpdatedAt ?? o.observedAt;
       return observedAt.getTime() - anchor.getTime() <= MARKET_SOURCE_MAX_AGE_MS;
     });
-    if (!eligible.some((o: any) => o.source === "KTC") || !eligible.some((o: any) => o.source === "STATSGUY")) continue;
-    const totalConfigured = eligible.reduce((sum: number, o: any) => sum + CONSENSUS_WEIGHTS[o.source as MarketSourceKey], 0);
-    const effectiveWeights: Record<string, number> = {};
-    let weighted = 0;
-    for (const obs of eligible) {
-      const w = CONSENSUS_WEIGHTS[obs.source as MarketSourceKey] / totalConfigured;
-      effectiveWeights[obs.source] = w;
-      weighted += obs.normalizedValue * w;
+    const ktc = fresh.find((o: any) => o.source === "KTC");
+    if (!ktc) continue; // Never manufacture a consensus without the KTC anchor.
+
+    const fantasyCalc = fresh.find((o: any) => o.source === "FANTASYCALC");
+    const eligible: any[] = [ktc];
+    let effectiveWeights: Record<string, number> = { KTC: 1 };
+    let exclusionReason: string | null = null;
+
+    if (fantasyCalc) {
+      const absGap = Math.abs(fantasyCalc.normalizedValue - ktc.rawValue);
+      const relGap = absGap / Math.max(ktc.rawValue, 1);
+      if (absGap >= SECONDARY_DISAGREEMENT_ABS && relGap >= SECONDARY_DISAGREEMENT_REL) {
+        exclusionReason = `High source disagreement: FantasyCalc KTC-equivalent differs from KTC by ${absGap} (${Math.round(relGap * 100)}%)`;
+        let meta: Record<string, unknown> = {};
+        try { meta = JSON.parse(fantasyCalc.metadata || "{}"); } catch {}
+        await marketDb.marketObservation.update({ where: { id: fantasyCalc.id }, data: {
+          metadata: JSON.stringify({ ...meta, consensusEligible: false, consensusExclusionReason: exclusionReason, ktcAnchorValue: ktc.rawValue }),
+        }}).catch(() => undefined);
+      } else {
+        eligible.push(fantasyCalc);
+        effectiveWeights = { KTC: CONSENSUS_WEIGHTS.KTC, FANTASYCALC: CONSENSUS_WEIGHTS.FANTASYCALC };
+      }
     }
+
+    const value = eligible.length === 1
+      ? ktc.rawValue
+      : Math.round(ktc.rawValue * effectiveWeights.KTC + fantasyCalc.normalizedValue * effectiveWeights.FANTASYCALC);
     await marketDb.consensusObservation.upsert({
       where: { playerId_refreshRunId: { playerId, refreshRunId } },
       update: {},
-      create: { playerId, value: Math.round(weighted), observedAt, refreshRunId, sourcesUsed: JSON.stringify(eligible.map((o: any) => o.source)), sourceCount: eligible.length, weights: JSON.stringify(effectiveWeights) },
+      create: {
+        playerId,
+        value,
+        observedAt,
+        refreshRunId,
+        sourcesUsed: JSON.stringify(eligible.map((o: any) => o.source)),
+        sourceCount: eligible.length,
+        weights: JSON.stringify({ ...effectiveWeights, ...(exclusionReason ? { excluded: { FANTASYCALC: exclusionReason } } : {}) }),
+      },
     });
     stored++;
   }
@@ -500,9 +645,10 @@ function disabledStatus(source: MarketSourceKey): MarketSourceStatus {
 }
 
 export async function refreshLiveMarketSources(refreshRunId: string): Promise<MarketRefreshResult> {
-  const [ktcResult, sgResult] = await Promise.allSettled([
+  const [ktcResult, fcResult, sgResult] = await Promise.allSettled([
     KTC_DIRECT_REFRESH_ENABLED ? fetchKtcSnapshot() : Promise.reject(new Error("KTC disabled")),
-    STATSGUY_REFRESH_ENABLED ? fetchStatsGuySnapshot() : Promise.reject(new Error("Stats Guy disabled")),
+    FANTASYCALC_REFRESH_ENABLED ? fetchFantasyCalcSnapshot() : Promise.reject(new Error("FantasyCalc disabled")),
+    STATSGUY_REFRESH_ENABLED ? fetchStatsGuySnapshot() : Promise.reject(new Error("Stats Guy diagnostic disabled")),
   ]);
   const statuses: MarketSourceStatus[] = [];
   let pickStored = 0;
@@ -513,36 +659,51 @@ export async function refreshLiveMarketSources(refreshRunId: string): Promise<Ma
       assertFresh("KTC", snap.sourceUpdatedAt, snap.fetchedAt);
       pickStored = await persistDraftPickObservations(snap, refreshRunId);
       const stored = await persistKtc(snap, refreshRunId);
-      statuses.push({ source:"KTC", enabled:true, ok:true, eligibleForConsensus:true, fetchedAt:snap.fetchedAt.toISOString(), sourceUpdatedAt:snap.sourceUpdatedAt.toISOString(), sourceAgeMs:sourceAge(snap.sourceUpdatedAt,snap.fetchedAt), rowsReceived:snap.rows.length, rowsStored:stored, message:`${snap.message}; ${pickStored} KTC draft-pick buckets stored` });
+      statuses.push({ source: "KTC", enabled: true, ok: true, eligibleForConsensus: true, fetchedAt: snap.fetchedAt.toISOString(), sourceUpdatedAt: snap.sourceUpdatedAt.toISOString(), sourceAgeMs: sourceAge(snap.sourceUpdatedAt, snap.fetchedAt), rowsReceived: snap.rows.length, rowsStored: stored, message: `${snap.message}; ${pickStored} KTC draft-pick buckets stored` });
     } catch (err) {
-      statuses.push({ source:"KTC", enabled:true, ok:false, eligibleForConsensus:false, fetchedAt:new Date().toISOString(), sourceUpdatedAt:null, sourceAgeMs:null, rowsReceived:0, rowsStored:0, message:err instanceof Error?err.message:String(err) });
+      statuses.push({ source: "KTC", enabled: true, ok: false, eligibleForConsensus: false, fetchedAt: new Date().toISOString(), sourceUpdatedAt: null, sourceAgeMs: null, rowsReceived: 0, rowsStored: 0, message: err instanceof Error ? err.message : String(err) });
     }
-  } else statuses.push({ source:"KTC", enabled:KTC_DIRECT_REFRESH_ENABLED, ok:false, eligibleForConsensus:false, fetchedAt:new Date().toISOString(), sourceUpdatedAt:null, sourceAgeMs:null, rowsReceived:0, rowsStored:0, message:ktcResult.reason instanceof Error?ktcResult.reason.message:String(ktcResult.reason) });
+  } else statuses.push({ source: "KTC", enabled: KTC_DIRECT_REFRESH_ENABLED, ok: false, eligibleForConsensus: false, fetchedAt: new Date().toISOString(), sourceUpdatedAt: null, sourceAgeMs: null, rowsReceived: 0, rowsStored: 0, message: ktcResult.reason instanceof Error ? ktcResult.reason.message : String(ktcResult.reason) });
+
+  if (fcResult.status === "fulfilled") {
+    const snap = fcResult.value;
+    try {
+      const stored = await persistFantasyCalc(snap, refreshRunId);
+      statuses.push({ source: "FANTASYCALC", enabled: true, ok: true, eligibleForConsensus: true, fetchedAt: snap.fetchedAt.toISOString(), sourceUpdatedAt: snap.sourceUpdatedAt.toISOString(), sourceAgeMs: 0, rowsReceived: snap.rows.length, rowsStored: stored, message: snap.message });
+    } catch (err) {
+      statuses.push({ source: "FANTASYCALC", enabled: true, ok: false, eligibleForConsensus: false, fetchedAt: new Date().toISOString(), sourceUpdatedAt: null, sourceAgeMs: null, rowsReceived: 0, rowsStored: 0, message: err instanceof Error ? err.message : String(err) });
+    }
+  } else statuses.push({ source: "FANTASYCALC", enabled: FANTASYCALC_REFRESH_ENABLED, ok: false, eligibleForConsensus: false, fetchedAt: new Date().toISOString(), sourceUpdatedAt: null, sourceAgeMs: null, rowsReceived: 0, rowsStored: 0, message: fcResult.reason instanceof Error ? fcResult.reason.message : String(fcResult.reason) });
 
   if (sgResult.status === "fulfilled") {
     const snap = sgResult.value;
     try {
       assertFresh("Stats Guy", snap.sourceUpdatedAt, snap.fetchedAt);
       const stored = await persistStatsGuy(snap, refreshRunId);
-      statuses.push({ source:"STATSGUY", enabled:true, ok:true, eligibleForConsensus:true, fetchedAt:snap.fetchedAt.toISOString(), sourceUpdatedAt:snap.sourceUpdatedAt.toISOString(), sourceAgeMs:sourceAge(snap.sourceUpdatedAt,snap.fetchedAt), rowsReceived:snap.rows.length, rowsStored:stored, message:snap.message });
+      statuses.push({ source: "STATSGUY", enabled: true, ok: true, eligibleForConsensus: false, fetchedAt: snap.fetchedAt.toISOString(), sourceUpdatedAt: snap.sourceUpdatedAt.toISOString(), sourceAgeMs: sourceAge(snap.sourceUpdatedAt, snap.fetchedAt), rowsReceived: snap.rows.length, rowsStored: stored, message: `${snap.message}; diagnostic only — excluded from consensus` });
     } catch (err) {
-      statuses.push({ source:"STATSGUY", enabled:true, ok:false, eligibleForConsensus:false, fetchedAt:new Date().toISOString(), sourceUpdatedAt:null, sourceAgeMs:null, rowsReceived:0, rowsStored:0, message:err instanceof Error?err.message:String(err) });
+      statuses.push({ source: "STATSGUY", enabled: true, ok: false, eligibleForConsensus: false, fetchedAt: new Date().toISOString(), sourceUpdatedAt: null, sourceAgeMs: null, rowsReceived: 0, rowsStored: 0, message: err instanceof Error ? err.message : String(err) });
     }
-  } else statuses.push({ source:"STATSGUY", enabled:STATSGUY_REFRESH_ENABLED, ok:false, eligibleForConsensus:false, fetchedAt:new Date().toISOString(), sourceUpdatedAt:null, sourceAgeMs:null, rowsReceived:0, rowsStored:0, message:sgResult.reason instanceof Error?sgResult.reason.message:String(sgResult.reason) });
+  } else statuses.push({ source: "STATSGUY", enabled: STATSGUY_REFRESH_ENABLED, ok: false, eligibleForConsensus: false, fetchedAt: new Date().toISOString(), sourceUpdatedAt: null, sourceAgeMs: null, rowsReceived: 0, rowsStored: 0, message: sgResult.reason instanceof Error ? sgResult.reason.message : String(sgResult.reason) });
 
-  let calibrationPairs = 0;
-  if (ktcResult.status === "fulfilled" && sgResult.status === "fulfilled" && statuses.find((s)=>s.source==="KTC")?.ok && statuses.find((s)=>s.source==="STATSGUY")?.ok) {
-    calibrationPairs = await calibrateStatsGuyToKtc(refreshRunId, ktcResult.value, sgResult.value);
-    const sgStatus = statuses.find((s)=>s.source==="STATSGUY");
-    if (sgStatus) sgStatus.message += `; ${calibrationPairs} same-refresh player pairs used to translate onto KTC scale`;
+  let fantasyCalcCalibrationPairs = 0;
+  let statsGuyCalibrationPairs = 0;
+  if (ktcResult.status === "fulfilled" && fcResult.status === "fulfilled" && statuses.find((s) => s.source === "KTC")?.ok && statuses.find((s) => s.source === "FANTASYCALC")?.ok) {
+    fantasyCalcCalibrationPairs = await calibrateFantasyCalcToKtc(refreshRunId, ktcResult.value, fcResult.value);
+    const fcStatus = statuses.find((s) => s.source === "FANTASYCALC");
+    if (fcStatus) fcStatus.message += `; ${fantasyCalcCalibrationPairs} same-refresh overlap pairs translated onto KTC scale`;
   }
-  const consensusPlayersStored = calibrationPairs > 0 ? await buildConsensus(refreshRunId) : 0;
+  if (ktcResult.status === "fulfilled" && sgResult.status === "fulfilled" && statuses.find((s) => s.source === "KTC")?.ok && statuses.find((s) => s.source === "STATSGUY")?.ok) {
+    statsGuyCalibrationPairs = await calibrateStatsGuyToKtc(refreshRunId, ktcResult.value, sgResult.value);
+  }
+  const consensusPlayersStored = statuses.find((s) => s.source === "KTC")?.ok ? await buildConsensus(refreshRunId) : 0;
   return {
     statuses,
     consensusPlayersStored,
-    marketObservationsStored: statuses.reduce((sum,s)=>sum+s.rowsStored,0),
+    marketObservationsStored: statuses.reduce((sum, s) => sum + s.rowsStored, 0),
     draftPickObservationsStored: pickStored,
-    statsGuyCalibrationPairs: calibrationPairs,
+    fantasyCalcCalibrationPairs,
+    statsGuyCalibrationPairs,
   };
 }
 
@@ -553,13 +714,15 @@ export interface CurrentMarketMix {
   consensusSourceCount: number;
   consensusSources: string[];
   ktcValue: number | null;
-  statsGuyValue: number | null; // KTC-equivalent translated value
+  fantasyCalcValue: number | null;
+  fantasyCalcRawValue: number | null;
+  statsGuyValue: number | null;
   statsGuyRawValue: number | null;
 }
 
 export async function getCurrentMarketMix(playerIds: string[]): Promise<Map<string, CurrentMarketMix>> {
   const result = new Map<string, CurrentMarketMix>();
-  for (const playerId of playerIds) result.set(playerId, { playerId, consensusValue:null, consensusObservedAt:null, consensusSourceCount:0, consensusSources:[], ktcValue:null, statsGuyValue:null, statsGuyRawValue:null });
+  for (const playerId of playerIds) result.set(playerId, { playerId, consensusValue: null, consensusObservedAt: null, consensusSourceCount: 0, consensusSources: [], ktcValue: null, fantasyCalcValue: null, fantasyCalcRawValue: null, statsGuyValue: null, statsGuyRawValue: null });
   if (!playerIds.length) return result;
   const [consensus, market] = await Promise.all([
     marketDb.consensusObservation.findMany({ where: { playerId: { in: playerIds } }, orderBy: { observedAt: "desc" } }),
@@ -567,30 +730,39 @@ export async function getCurrentMarketMix(playerIds: string[]): Promise<Map<stri
   ]);
   const seenConsensus = new Set<string>();
   for (const c of consensus as any[]) {
-    if (seenConsensus.has(c.playerId) || Date.now()-c.observedAt.getTime()>MARKET_SOURCE_MAX_AGE_MS) continue;
-    let sources: string[]=[]; try { sources=JSON.parse(c.sourcesUsed); } catch {}
-    if (!sources.includes("KTC") || !sources.includes("STATSGUY")) continue;
+    if (seenConsensus.has(c.playerId) || Date.now() - c.observedAt.getTime() > MARKET_SOURCE_MAX_AGE_MS) continue;
+    let sources: string[] = []; try { sources = JSON.parse(c.sourcesUsed); } catch {}
+    if (!sources.includes("KTC")) continue;
     seenConsensus.add(c.playerId);
-    const row=result.get(c.playerId)!; row.consensusValue=c.value; row.consensusObservedAt=c.observedAt.toISOString(); row.consensusSourceCount=c.sourceCount; row.consensusSources=sources;
+    const row = result.get(c.playerId)!;
+    row.consensusValue = c.value;
+    row.consensusObservedAt = c.observedAt.toISOString();
+    row.consensusSourceCount = c.sourceCount;
+    row.consensusSources = sources;
   }
-  const seenSource=new Set<string>();
+  const seenSource = new Set<string>();
   for (const m of market as any[]) {
-    if (m.source!=="KTC"&&m.source!=="STATSGUY") continue;
-    const key=`${m.playerId}:${m.source}`; if(seenSource.has(key)) continue;
-    const anchor=m.sourceUpdatedAt??m.observedAt; if(Date.now()-anchor.getTime()>MARKET_SOURCE_MAX_AGE_MS) continue;
-    seenSource.add(key); const row=result.get(m.playerId)!;
-    if(m.source==="KTC") row.ktcValue=m.rawValue;
-    if(m.source==="STATSGUY") { row.statsGuyRawValue=m.rawValue; row.statsGuyValue=m.normalizedValue; }
+    if (!["KTC", "FANTASYCALC", "STATSGUY"].includes(m.source)) continue;
+    const key = `${m.playerId}:${m.source}`;
+    if (seenSource.has(key)) continue;
+    const anchor = m.sourceUpdatedAt ?? m.observedAt;
+    if (Date.now() - anchor.getTime() > MARKET_SOURCE_MAX_AGE_MS) continue;
+    seenSource.add(key);
+    const row = result.get(m.playerId)!;
+    if (m.source === "KTC") row.ktcValue = m.rawValue;
+    if (m.source === "FANTASYCALC") { row.fantasyCalcRawValue = m.rawValue; row.fantasyCalcValue = m.normalizedValue; }
+    if (m.source === "STATSGUY") { row.statsGuyRawValue = m.rawValue; row.statsGuyValue = m.normalizedValue; }
   }
   return result;
 }
 
 export async function getLatestMarketSourceStatuses(): Promise<Record<MarketSourceKey, { observedAt:string|null; sourceUpdatedAt:string|null; ageMs:number|null; stale:boolean }>> {
-  const out={} as Record<MarketSourceKey,{observedAt:string|null;sourceUpdatedAt:string|null;ageMs:number|null;stale:boolean}>;
-  for(const source of ["KTC","STATSGUY"] as MarketSourceKey[]){
-    const obs=await marketDb.marketObservation.findFirst({where:{source},orderBy:{observedAt:"desc"}});
-    const anchor=obs?.sourceUpdatedAt??obs?.observedAt??null; const ageMs=anchor?Date.now()-anchor.getTime():null;
-    out[source]={observedAt:obs?.observedAt.toISOString()??null,sourceUpdatedAt:obs?.sourceUpdatedAt?.toISOString()??null,ageMs,stale:ageMs===null||ageMs>MARKET_SOURCE_MAX_AGE_MS};
+  const out = {} as Record<MarketSourceKey, {observedAt:string|null;sourceUpdatedAt:string|null;ageMs:number|null;stale:boolean}>;
+  for (const source of ["KTC", "FANTASYCALC", "STATSGUY"] as MarketSourceKey[]) {
+    const obs = await marketDb.marketObservation.findFirst({ where: { source }, orderBy: { observedAt: "desc" } });
+    const anchor = obs?.sourceUpdatedAt ?? obs?.observedAt ?? null;
+    const ageMs = anchor ? Date.now() - anchor.getTime() : null;
+    out[source] = { observedAt: obs?.observedAt.toISOString() ?? null, sourceUpdatedAt: obs?.sourceUpdatedAt?.toISOString() ?? null, ageMs, stale: ageMs === null || ageMs > MARKET_SOURCE_MAX_AGE_MS };
   }
   return out;
 }

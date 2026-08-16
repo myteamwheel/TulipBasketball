@@ -11,7 +11,10 @@ export const KTC_FORMAT_LABEL = "Superflex / 0.5 PPR / No TE Premium";
 // without bypassing authentication, bot challenges, CAPTCHAs, or access controls.
 // Product requirement: KTC collection is always attempted on every dashboard refresh.
 export const KTC_DIRECT_REFRESH_ENABLED = true;
-export const STATSGUY_REFRESH_ENABLED = process.env.STATSGUY_REFRESH_ENABLED !== "false";
+export const FANTASYCALC_REFRESH_ENABLED = process.env.FANTASYCALC_REFRESH_ENABLED !== "false";
+// Stats Guy remains available for diagnostics only. It is OFF by default and never
+// participates in consensus unless this implementation is intentionally revisited.
+export const STATSGUY_REFRESH_ENABLED = process.env.STATSGUY_REFRESH_ENABLED === "true";
 export const KTC_AUTO_REFRESH_ENABLED = KTC_DIRECT_REFRESH_ENABLED;
 export const AUTO_REFRESH_ON_VISIT = true;
 
@@ -24,9 +27,16 @@ export const MARKET_SOURCE_MAX_AGE_MS = MARKET_SOURCE_MAX_AGE_HOURS * 60 * 60 * 
 // KTC is the canonical market-value scale. Stats Guy is a fresh secondary signal
 // that is translated onto KTC scale before it can enter the live consensus.
 export const CONSENSUS_WEIGHTS = {
-  KTC: 0.75,
-  STATSGUY: 0.25,
+  KTC: 0.80,
+  FANTASYCALC: 0.20,
+  STATSGUY: 0.00,
 } as const;
+
+// A secondary market can disagree with KTC, but it must never manufacture the
+// primary value. Large disagreements are surfaced as review flags and excluded
+// from consensus rather than averaged blindly.
+export const SECONDARY_DISAGREEMENT_ABS = 500;
+export const SECONDARY_DISAGREEMENT_REL = 0.50;
 
 // Optional authorized feed remains supported as an emergency/manual alternative.
 export const KTC_AUTHORIZED_FEED_URL = process.env.KTC_AUTHORIZED_FEED_URL?.trim() || null;
