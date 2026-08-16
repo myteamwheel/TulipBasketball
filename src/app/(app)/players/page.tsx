@@ -12,17 +12,21 @@ export default async function PlayersPage() {
   const [entries, slotMap] = await Promise.all([getAllCurrentRosterEntries(), getLatestSlotMap()]);
   const rosteredPlayerIds = new Set(entries.map((e) => e.playerId));
 
-  const freeAgents = await prisma.player.findMany({
+  const trackedFreeAgents = await prisma.player.findMany({
     where: { id: { notIn: Array.from(rosteredPlayerIds) }, ktcId: { not: null } },
   });
 
-  const allIds = [...entries.map((e) => e.playerId), ...freeAgents.map((p) => p.id)];
-  const [marketData, marketMix] = await Promise.all([computeMarketDataForPlayers(allIds), getCurrentMarketMix(allIds)]);
-  const signals = await computeSignalsForCurrentRoster();
+  const allIds = [...entries.map((e) => e.playerId), ...trackedFreeAgents.map((p) => p.id)];
+  const [marketData, marketMix, signals] = await Promise.all([
+    computeMarketDataForPlayers(allIds),
+    getCurrentMarketMix(allIds),
+    computeSignalsForCurrentRoster(),
+  ]);
 
   const rosteredRows: PlayerRow[] = entries.map((e) => {
     const m = marketData.get(e.playerId)!;
     const mix = marketMix.get(e.playerId)!;
+    const signal = signals.get(e.playerId)?.result ?? null;
     return {
       id: e.player.id,
       fullName: e.player.fullName,
@@ -54,17 +58,14 @@ export default async function PlayersPage() {
       distFromLowPercent: m.distanceFromLow?.percent ?? null,
       sparkline: m.sparkline,
       ownerTeam: e.manager.teamName ?? e.manager.displayName,
-      signal: signals.get(e.playerId)?.result.signal ?? null,
-      signalScore: signals.get(e.playerId)?.result.score ?? null,
-      signalConfidence: signals.get(e.playerId)?.result.confidence ?? null,
-      signalReason: signals
-        .get(e.playerId)
-        ?.result.reasonCodes.map((r) => r.detail)
-        .join(" · "),
+      signal: signal?.signal ?? null,
+      signalScore: signal?.score ?? null,
+      signalConfidence: signal?.confidence ?? null,
+      signalReason: signal?.reasonCodes.filter((r) => !r.code.startsWith("SLOT_")).slice(0, 2).map((r) => r.detail).join(" · ") ?? null,
     };
   });
 
-  const freeAgentRows: PlayerRow[] = freeAgents.map((p) => {
+  const freeAgentRows: PlayerRow[] = trackedFreeAgents.map((p) => {
     const m = marketData.get(p.id)!;
     const mix = marketMix.get(p.id)!;
     return {
@@ -102,25 +103,22 @@ export default async function PlayersPage() {
   });
 
   return (
-    <div className="space-y-8">
+    <div className="min-w-0 space-y-8">
       <div>
         <h1 className="text-xl font-semibold text-neutral-100">Players</h1>
-        <p className="text-sm text-neutral-500">All rostered players across the Dynasty Boys league.</p>
+        <p className="mt-1 text-sm text-neutral-500">Current league rosters from the last successful Sleeper sync.</p>
       </div>
       <PlayerTable rows={rosteredRows} showOwner />
 
-      {freeAgentRows.length > 0 && (
-        <div>
-          <h2 className="mb-2 text-sm font-semibold text-neutral-100">
-            Free Agent Market ({freeAgentRows.length})
-          </h2>
-          <p className="mb-3 text-xs text-neutral-500">
-            Unrostered players with a known KTC value — potential waiver targets. Kept separate from
-            league-wide rostered movers.
+      {freeAgentRows.length > 0 ? (
+        <section>
+          <h2 className="text-sm font-semibold text-neutral-100">Tracked free agents ({freeAgentRows.length})</h2>
+          <p className="mb-3 mt-1 text-xs leading-5 text-neutral-500">
+            These are unrostered players already known to this dashboard from a prior roster/import. This is <strong className="font-medium text-neutral-400">not an exhaustive Sleeper waiver pool</strong> and is intentionally labeled as tracked-only.
           </p>
           <PlayerTable rows={freeAgentRows} />
-        </div>
-      )}
+        </section>
+      ) : null}
     </div>
   );
 }
