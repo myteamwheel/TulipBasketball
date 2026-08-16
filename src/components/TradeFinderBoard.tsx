@@ -111,7 +111,7 @@ function TargetCard({ target, onDismiss }: { target: TradeFinderTarget; onDismis
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <h3 className="text-[10px] font-semibold uppercase tracking-wide text-neutral-600">Offers</h3>
-            <span className="text-[10px] text-neutral-700">Player-only starting points · live KTC</span>
+            <span className="text-[10px] text-neutral-700">Players + owned picks · KTC-scale values</span>
           </div>
           {target.offers.map((offer, index) => <OfferLane key={index} offer={offer} index={index} />)}
         </div>
@@ -153,8 +153,9 @@ export default function TradeFinderBoard({ data }: { data: TradeFinderData }) {
         ))}
       </section>
 
-      <section className="rounded-lg border border-neutral-800 bg-neutral-900/60 p-3 text-[11px] text-neutral-500">
-        <span className="font-medium text-neutral-300">Protected from generated offers:</span> {data.protectedNames.join(" · ")}. The engine found {data.tradeChipCount} other Orlando assets with current KTC values to build packages from.
+      <section className="rounded-lg border border-neutral-800 bg-neutral-900/60 p-3 text-[11px] leading-5 text-neutral-500">
+        <div><span className="font-medium text-neutral-300">Protected from generated offers:</span> {data.protectedNames.join(" · ")}.</div>
+        <div>The engine can currently package <span className="text-neutral-300">{data.playerTradeChipCount} non-protected Orlando players</span> and <span className="text-neutral-300">{data.pickTradeChipCount} Sleeper-owned future picks</span> that have a resolvable current pick-market value.</div>
       </section>
 
       <div className="flex flex-wrap items-center justify-between gap-3">

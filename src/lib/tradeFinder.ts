@@ -1,15 +1,17 @@
-import { getAllCurrentRosterEntries, getPrimaryManager } from "@/lib/queries";
+import { getAllCurrentRosterEntries, getAllManagers, getPrimaryManager } from "@/lib/queries";
 import { computeMarketDataForPlayers } from "@/lib/metrics";
 import { computeAllTeamValuations, getLatestSlotMap } from "@/lib/teamMetrics";
-import { getCurrentMarketMix } from "@/lib/marketSources";
+import { fetchCurrentDraftPickMarketValues, getCurrentMarketMix } from "@/lib/marketSources";
+import { getTradedPicks } from "@/lib/sleeper";
 import { normalizePlayerName } from "@/lib/normalize";
+import { prisma } from "@/lib/prisma";
+import { SLEEPER_LEAGUE_ID } from "@/lib/config";
 
 const POSITIONS = ["QB", "RB", "WR", "TE"] as const;
 type Position = (typeof POSITIONS)[number];
 
-// These are user strategy constraints, not roster hardcoding. Sleeper still owns
-// the live roster/ownership state and a player only appears here if Sleeper says
-// he is currently rostered in this league.
+// Strategy constraints are intentionally separate from live roster state.
+// Sleeper still determines whether any of these players are actually on Orlando.
 const PROTECTED_ORLANDO = new Set(
   [
     "Cam Ward",
@@ -35,6 +37,7 @@ const POSITION_PRIORITY: Record<Position, number> = { QB: 34, WR: 27, RB: 25, TE
 
 export type TradeFinderAsset = {
   id: string;
+  assetType: "player" | "pick";
   name: string;
   position: string;
   value: number;
@@ -72,7 +75,8 @@ export type TradeFinderData = {
   targets: TradeFinderTarget[];
   orlandoNeeds: { position: string; leagueRank: number; note: string }[];
   protectedNames: string[];
-  tradeChipCount: number;
+  playerTradeChipCount: number;
+  pickTradeChipCount: number;
 };
 
 type LiveAsset = TradeFinderAsset & {
@@ -109,7 +113,8 @@ function needsForManager(
 }
 
 function combinations(chips: LiveAsset[]): LiveAsset[][] {
-  const pool = chips.slice(0, 18);
+  // Keep the search bounded while still allowing player+pick and pick+pick packages.
+  const pool = chips.slice(0, 24);
   const result: LiveAsset[][] = pool.map((chip) => [chip]);
   for (let i = 0; i < pool.length; i++) {
     for (let j = i + 1; j < pool.length; j++) result.push([pool[i], pool[j]]);
@@ -124,18 +129,20 @@ function offerCandidates(target: LiveAsset, chips: LiveAsset[], ownerNeeds: Posi
       const giveValue = give.reduce((sum, x) => sum + x.value, 0);
       const ratio = targetValue > 0 ? giveValue / targetValue : 99;
       const needMatches = [...new Set(give.map((x) => x.position).filter((p) => ownerNeeds.includes(p as Position)))];
-      const benchCount = give.filter((x) => x.slot !== "STARTER").length;
+      const benchCount = give.filter((x) => x.assetType === "pick" || x.slot !== "STARTER").length;
+      const containsPick = give.some((x) => x.assetType === "pick");
       const acceptablePenalty = ratio < 0.72 || ratio > 1.28 ? 2400 : 0;
       const closenessPenalty = Math.abs(giveValue - targetValue);
       const needBonus = needMatches.length * 525;
       const depthBonus = benchCount * 120;
+      const structureBonus = containsPick ? 100 : 0;
       return {
         give,
         giveValue,
         getValue: targetValue,
         delta: targetValue - giveValue,
         ownerNeedMatch: needMatches,
-        rankScore: closenessPenalty + acceptablePenalty - needBonus - depthBonus,
+        rankScore: closenessPenalty + acceptablePenalty - needBonus - depthBonus - structureBonus,
       };
     })
     .sort((a, b) => a.rankScore - b.rankScore);
@@ -143,14 +150,20 @@ function offerCandidates(target: LiveAsset, chips: LiveAsset[], ownerNeeds: Posi
   const selected: typeof packages = [];
   for (const candidate of packages) {
     if (selected.some((x) => x.give.map((p) => p.id).sort().join(":") === candidate.give.map((p) => p.id).sort().join(":"))) continue;
-    if (selected.length === 1 && selected[0].give.length === candidate.give.length) continue;
+    // Prefer structurally different alternatives: e.g. one asset vs two, or
+    // a player-heavy offer vs a pick-containing offer.
+    if (selected.length === 1) {
+      const firstHasPick = selected[0].give.some((x) => x.assetType === "pick");
+      const candidateHasPick = candidate.give.some((x) => x.assetType === "pick");
+      if (selected[0].give.length === candidate.give.length && firstHasPick === candidateHasPick) continue;
+    }
     selected.push(candidate);
     if (selected.length === 2) break;
   }
 
   return selected.map(({ give, giveValue, getValue, delta, ownerNeedMatch }) => ({
-    give: give.map(({ id, name, position, value, slot }) => ({ id, name, position, value, slot })),
-    get: [{ id: target.id, name: target.name, position: target.position, value: target.value, slot: target.slot }],
+    give: give.map(({ id, assetType, name, position, value, slot }) => ({ id, assetType, name, position, value, slot })),
+    get: [{ id: target.id, assetType: "player", name: target.name, position: target.position, value: target.value, slot: target.slot }],
     giveValue,
     getValue,
     delta,
@@ -167,17 +180,28 @@ function confidenceFor(score: number, offers: TradeFinderOffer[]): "HIGH" | "MED
   return "LOW";
 }
 
+function ordinalRound(round: number): string {
+  if (round === 1) return "1st";
+  if (round === 2) return "2nd";
+  if (round === 3) return "3rd";
+  return `${round}th`;
+}
+
 export async function buildTradeFinderData(): Promise<TradeFinderData | null> {
   const primary = await getPrimaryManager();
   if (!primary) return null;
 
   const entries = await getAllCurrentRosterEntries();
   const playerIds = entries.map((e) => e.playerId);
-  const [market, mix, valuations, slotMap] = await Promise.all([
+  const [market, mix, valuations, slotMap, managers, tradedPicks, pickMarket, league] = await Promise.all([
     computeMarketDataForPlayers(playerIds),
     getCurrentMarketMix(playerIds),
     computeAllTeamValuations(),
     getLatestSlotMap(),
+    getAllManagers(),
+    getTradedPicks(SLEEPER_LEAGUE_ID).catch(() => []),
+    fetchCurrentDraftPickMarketValues().catch(() => []),
+    prisma.league.findFirst({ where: { sleeperId: SLEEPER_LEAGUE_ID }, select: { settings: true } }),
   ]);
 
   const assets: LiveAsset[] = entries
@@ -186,6 +210,7 @@ export async function buildTradeFinderData(): Promise<TradeFinderData | null> {
       const mx = mix.get(entry.playerId);
       return {
         id: entry.player.id,
+        assetType: "player" as const,
         name: entry.player.fullName,
         position: entry.player.position,
         value: m.currentValue ?? 0,
@@ -209,11 +234,65 @@ export async function buildTradeFinderData(): Promise<TradeFinderData | null> {
     { position: "RB", leagueRank: orlandoRanks.RB, note: "Add startable RB value when the price is efficient" },
   ];
 
-  const chips = assets
+  const playerChips = assets
     .filter((a) => a.managerId === primary.id)
     .filter((a) => !PROTECTED_ORLANDO.has(normalizePlayerName(a.name)))
     .filter((a) => a.value >= 500)
     .sort((a, b) => b.value - a.value);
+
+  let draftRounds = 4;
+  try {
+    const settings = league?.settings ? JSON.parse(league.settings) : null;
+    const parsed = Number(settings?.settings?.draft_rounds);
+    if (Number.isFinite(parsed) && parsed >= 1 && parsed <= 10) draftRounds = parsed;
+  } catch {}
+
+  const currentYear = new Date().getUTCFullYear();
+  const futureSeasons = [...new Set(pickMarket.map((p) => Number(p.season)).filter((year) => Number.isFinite(year) && year > currentYear))]
+    .sort((a, b) => a - b)
+    .slice(0, 4);
+
+  function neutralPickValue(season: number, round: number): number | null {
+    const matching = pickMarket.filter((p) => Number(p.season) === season && p.round === round);
+    if (!matching.length) return null;
+    const slotRows = matching.filter((p) => p.slot !== null);
+    const pool = slotRows.length >= 3 ? slotRows : matching;
+    if (!pool.length) return null;
+    return Math.round(pool.reduce((sum, p) => sum + p.value, 0) / pool.length);
+  }
+
+  const managerByRosterId = new Map(managers.map((m) => [m.sleeperRosterId, m]));
+  const pickChips: LiveAsset[] = [];
+  for (const season of futureSeasons) {
+    for (let round = 1; round <= draftRounds; round++) {
+      const value = neutralPickValue(season, round);
+      if (!value || value < 250) continue;
+      for (const origin of managers) {
+        const moved = tradedPicks.find(
+          (p) => Number(p.season) === season && p.round === round && p.roster_id === origin.sleeperRosterId,
+        );
+        const currentOwnerRosterId = moved?.owner_id ?? origin.sleeperRosterId;
+        if (currentOwnerRosterId !== primary.sleeperRosterId) continue;
+        const originTeam = managerByRosterId.get(origin.sleeperRosterId);
+        const originName = originTeam?.teamName ?? originTeam?.displayName ?? `Roster ${origin.sleeperRosterId}`;
+        pickChips.push({
+          id: `pick:${season}:${round}:${origin.sleeperRosterId}`,
+          assetType: "pick",
+          name: `${season} ${ordinalRound(round)} · ${originName} original`,
+          position: "PICK",
+          value,
+          slot: "PICK",
+          managerId: primary.id,
+          managerName: primary.teamName ?? primary.displayName,
+          nflTeam: null,
+          consensusValue: null,
+          change30d: null,
+        });
+      }
+    }
+  }
+
+  const chips = [...playerChips, ...pickChips].sort((a, b) => b.value - a.value);
 
   const targets = assets
     .filter((a) => a.managerId !== primary.id)
@@ -268,6 +347,7 @@ export async function buildTradeFinderData(): Promise<TradeFinderData | null> {
           score += 6;
           tags.push(`Matches ${target.managerName} need`);
         }
+        if (offers.some((offer) => offer.give.some((asset) => asset.assetType === "pick"))) tags.push("Pick structure available");
       }
 
       const fitScore = Math.max(1, Math.min(99, Math.round(score)));
@@ -293,7 +373,7 @@ export async function buildTradeFinderData(): Promise<TradeFinderData | null> {
         change30d: target.change30d,
         fitScore,
         confidence,
-        tags: [...new Set(tags)].slice(0, 5),
+        tags: [...new Set(tags)].slice(0, 6),
         ownerNeeds,
         why,
         offers,
@@ -316,6 +396,7 @@ export async function buildTradeFinderData(): Promise<TradeFinderData | null> {
       "Emeka Egbuka",
       "Michael Penix Jr.",
     ],
-    tradeChipCount: chips.length,
+    playerTradeChipCount: playerChips.length,
+    pickTradeChipCount: pickChips.length,
   };
 }
