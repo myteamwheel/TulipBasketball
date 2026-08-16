@@ -1,0 +1,33 @@
+name: probe-tradyr-api
+on:
+  push:
+    paths: ['.github/workflows/probe-tradyr-api.yml']
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe Tradyr players pagination behavior
+        run: |
+          set -euo pipefail
+          for qs in \
+            'format=dynasty&numQbs=2&tep=false&limit=1000&offset=0' \
+            'format=dynasty&numQbs=2&tep=false&limit=500&offset=0' \
+            'format=dynasty&numQbs=2&tep=false&limit=200&offset=0' \
+            'format=dynasty&numQbs=2&tep=false&limit=50&offset=0' \
+            'format=dynasty&numQbs=2&tep=false&limit=50&offset=50'; do
+            url="https://api.tradyr.app/v1/players?${qs}"
+            echo "===== ${qs} ====="
+            curl -sS --max-time 30 -D /tmp/h -o /tmp/b "$url"
+            grep -iE '^(HTTP/|content-type:|x-ratelimit|cache-control:|etag:)' /tmp/h || true
+            python3 - <<'PY'
+import json
+p=json.load(open('/tmp/b'))
+data=p.get('data') if isinstance(p,dict) else None
+meta=p.get('meta') if isinstance(p,dict) else None
+print('rows=', len(data) if isinstance(data,list) else None)
+print('meta=', meta)
+if isinstance(data,list) and data:
+    print('first=', {k:data[0].get(k) for k in ('name','rank','composite','slug')})
+    print('last=', {k:data[-1].get(k) for k in ('name','rank','composite','slug')})
+PY
+          done
