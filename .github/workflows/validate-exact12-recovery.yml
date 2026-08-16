@@ -25,13 +25,29 @@ jobs:
           const overlayPacked=overlayParts.map(f=>fs.readFileSync(path.join('deploy/exact12-overlay',f),'utf8').trim()).join('');
           const overlay=JSON.parse(zlib.brotliDecompressSync(Buffer.from(overlayPacked,'base64')).toString('utf8'));
           apply(overlay);
+
           const mp=path.join('recovered-app','src/lib/marketSources.ts');
-          const before='if (statuses.find((s)=>s.source==="KTC")?.ok && statuses.find((s)=>s.source==="STATSGUY")?.ok) {';
-          const after='if (ktcResult.status === "fulfilled" && sgResult.status === "fulfilled" && statuses.find((s)=>s.source==="KTC")?.ok && statuses.find((s)=>s.source==="STATSGUY")?.ok) {';
-          const src=fs.readFileSync(mp,'utf8');
-          if(!src.includes(before)) throw new Error('Patch 12 calibration guard not found');
-          fs.writeFileSync(mp,src.replace(before,after));
-          console.log(`reconstructed ${Object.keys(base).length} + ${Object.keys(overlay).length}; applied compiler-only settled-result guard`);
+          const marketBefore='if (statuses.find((s)=>s.source==="KTC")?.ok && statuses.find((s)=>s.source==="STATSGUY")?.ok) {';
+          const marketAfter='if (ktcResult.status === "fulfilled" && sgResult.status === "fulfilled" && statuses.find((s)=>s.source==="KTC")?.ok && statuses.find((s)=>s.source==="STATSGUY")?.ok) {';
+          const marketSrc=fs.readFileSync(mp,'utf8');
+          if(!marketSrc.includes(marketBefore)) throw new Error('Patch 12 calibration guard not found');
+          fs.writeFileSync(mp,marketSrc.replace(marketBefore,marketAfter));
+
+          const pp=path.join('recovered-app','src/lib/prisma.ts');
+          const prismaSrc=fs.readFileSync(pp,'utf8');
+          const prismaBefore='const pool = globalForPrisma.pgPool ?? new Pool({ connectionString: process.env.DATABASE_URL });';
+          const prismaAfter='const databaseUrl = process.env.RECOVERY_DATABASE_URL?.trim() || process.env.DATABASE_URL;\nif (!databaseUrl) throw new Error("Database connection is not configured.");\nconst pool = globalForPrisma.pgPool ?? new Pool({ connectionString: databaseUrl });';
+          if(!prismaSrc.includes(prismaBefore)) throw new Error('Prisma connection line not found');
+          fs.writeFileSync(pp,prismaSrc.replace(prismaBefore,prismaAfter));
+
+          const bp=path.join('recovered-app','src/lib/secondaryBackup.ts');
+          const backupSrc=fs.readFileSync(bp,'utf8');
+          const backupBefore='const url = process.env.BACKUP_DATABASE_URL?.trim();';
+          const backupAfter='const url = process.env.RECOVERY_BACKUP_DATABASE_URL?.trim() || process.env.BACKUP_DATABASE_URL?.trim();';
+          if(!backupSrc.includes(backupBefore)) throw new Error('Backup connection line not found');
+          fs.writeFileSync(bp,backupSrc.replace(backupBefore,backupAfter));
+
+          console.log(`reconstructed ${Object.keys(base).length} + ${Object.keys(overlay).length}; applied compiler-only guard and recovery-specific DB routing`);
           NODE
       - name: Install, typecheck, and build
         working-directory: recovered-app
@@ -41,6 +57,7 @@ jobs:
           npx tsc --noEmit
           npm run build
         env:
-          DATABASE_URL: postgresql://user:pass@localhost:5432/postgres
-          BACKUP_DATABASE_URL: postgresql://user:pass@localhost:5432/postgres
+          DATABASE_URL: postgresql://old:blocked@localhost:5432/postgres
+          RECOVERY_DATABASE_URL: postgresql://recovery:good@localhost:5432/postgres
+          RECOVERY_BACKUP_DATABASE_URL: postgresql://backup:good@localhost:5432/postgres
           STATSGUY_REFRESH_ENABLED: "false"
