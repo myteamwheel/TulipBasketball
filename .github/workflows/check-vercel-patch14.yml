@@ -1,0 +1,32 @@
+name: Check Vercel Patch 14
+
+on:
+  push:
+    branches: [dynasty-patch11-deploy]
+  workflow_dispatch:
+
+jobs:
+  verify-production:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for Patch 14 production markers
+        shell: bash
+        run: |
+          set -euo pipefail
+          base='https://dynasty-boys-dashboard.vercel.app'
+          for attempt in $(seq 1 40); do
+            stamp="$(date +%s)-${attempt}"
+            echo "Attempt ${attempt}/40"
+            home="$(curl -fsSL --max-time 30 -H 'Cache-Control: no-cache' "${base}/?patch14=${stamp}" || true)"
+            settings="$(curl -fsSL --max-time 30 -H 'Cache-Control: no-cache' "${base}/settings?patch14=${stamp}" || true)"
+            if grep -Fq 'Biggest KTC changes' <<<"$home" \
+              && grep -Fq 'Build: PATCH 14' <<<"$settings" \
+              && grep -Fq 'Tradyr' <<<"$settings" \
+              && grep -Fq '90 daily recovery points' <<<"$settings"; then
+              echo 'PATCH 14 IS LIVE ON PRODUCTION'
+              exit 0
+            fi
+            sleep 15
+          done
+          echo 'Patch 14 markers did not reach production in 10 minutes.'
+          exit 1
