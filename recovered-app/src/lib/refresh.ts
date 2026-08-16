@@ -7,6 +7,7 @@ import { persistSignalsForRun } from "@/lib/signalsEngine";
 import { refreshLiveMarketSources, type MarketSourceStatus } from "@/lib/marketSources";
 import { refreshTradyrSource } from "@/lib/tradyrSource";
 import { writeSecondaryBackup } from "@/lib/secondaryBackup";
+import { refreshPlayerStats } from "@/lib/playerStats";
 
 export interface RefreshRunView {
   runId: string;
@@ -24,6 +25,9 @@ export interface RefreshRunView {
   transactionsRecorded: number;
   marketObservationsStored: number;
   consensusPlayersStored: number;
+  playerStatsGamesStored: number;
+  playerStatsProfilesStored: number;
+  playerStatsHistoricalBackfill: boolean;
   marketSourceStatuses: MarketSourceStatus[];
   errors: { source: string; message: string }[];
 }
@@ -34,7 +38,7 @@ function parseJsonArray(value: string | null): unknown[] {
 }
 function parseSummary(value: string | null): Record<string, unknown> {
   if (!value) return {};
-  try { const parsed = JSON.parse(value); return parsed && typeof parsed === "object" ? parsed : {}; } catch { return {}; }
+  try { const parsed = JSON.parse(value); return parsed && typeof parsed === "object" ? parsed as Record<string, unknown> : {}; } catch { return {}; }
 }
 
 function toView(run: {
@@ -48,13 +52,26 @@ function toView(run: {
   const statuses = Array.isArray(summary.marketSourceStatuses) ? summary.marketSourceStatuses as MarketSourceStatus[] : [];
   const ktc = statuses.find((s) => s.source === "KTC");
   return {
-    runId: run.id, status: run.status as RefreshRunView["status"], startedAt: run.startedAt.toISOString(),
-    finishedAt: run.finishedAt?.toISOString() ?? null, requestedSources: parseJsonArray(run.requestedSources).map(String),
-    sleeperSyncOk: run.sleeperSyncOk, ktcSyncOk: run.ktcSyncOk, rosterChangesCount: run.rosterChangesCount,
-    playersRefreshed: run.playersRefreshed, ktcPlayersStored: Number(summary.ktcPlayersStored ?? ktc?.rowsStored ?? 0),
-    ktcFlagged: Number(summary.ktcFlagged ?? 0), mappingWarningsCount: Number(summary.mappingWarningsCount ?? mappingWarnings.length),
-    transactionsRecorded: Number(summary.transactionsRecorded ?? 0), marketObservationsStored: Number(summary.marketObservationsStored ?? 0),
-    consensusPlayersStored: Number(summary.consensusPlayersStored ?? 0), marketSourceStatuses: statuses, errors,
+    runId: run.id,
+    status: run.status as RefreshRunView["status"],
+    startedAt: run.startedAt.toISOString(),
+    finishedAt: run.finishedAt?.toISOString() ?? null,
+    requestedSources: parseJsonArray(run.requestedSources).map(String),
+    sleeperSyncOk: run.sleeperSyncOk,
+    ktcSyncOk: run.ktcSyncOk,
+    rosterChangesCount: run.rosterChangesCount,
+    playersRefreshed: run.playersRefreshed,
+    ktcPlayersStored: Number(summary.ktcPlayersStored ?? ktc?.rowsStored ?? 0),
+    ktcFlagged: Number(summary.ktcFlagged ?? 0),
+    mappingWarningsCount: Number(summary.mappingWarningsCount ?? mappingWarnings.length),
+    transactionsRecorded: Number(summary.transactionsRecorded ?? 0),
+    marketObservationsStored: Number(summary.marketObservationsStored ?? 0),
+    consensusPlayersStored: Number(summary.consensusPlayersStored ?? 0),
+    playerStatsGamesStored: Number(summary.playerStatsGamesStored ?? 0),
+    playerStatsProfilesStored: Number(summary.playerStatsProfilesStored ?? 0),
+    playerStatsHistoricalBackfill: Boolean(summary.playerStatsHistoricalBackfill ?? false),
+    marketSourceStatuses: statuses,
+    errors,
   };
 }
 
@@ -85,10 +102,13 @@ async function createRefreshRun(trigger?: string): Promise<string> {
   if (await isRefreshLocked()) throw new Error("A refresh is already in progress. Please wait for it to finish.");
   const sleeperLeague = await getLeague(SLEEPER_LEAGUE_ID).catch(() => null);
   const league = await prisma.league.upsert({ where: { sleeperId: SLEEPER_LEAGUE_ID }, update: {}, create: {
-    sleeperId: SLEEPER_LEAGUE_ID, name: sleeperLeague?.name ?? "Dynasty Bois", season: sleeperLeague?.season ?? "unknown",
-    format: "Superflex, 0.5 PPR, no TE premium", settings: "{}",
+    sleeperId: SLEEPER_LEAGUE_ID,
+    name: sleeperLeague?.name ?? "Dynasty Bois",
+    season: sleeperLeague?.season ?? "unknown",
+    format: "Superflex, 0.5 PPR, no TE premium",
+    settings: "{}",
   }});
-  const requestedSources = ["sleeper", "ktc", "tradyr", "dynastydealer", "statsguy-diagnostic", "consensus", "nflverse-context", "secondary-backup"];
+  const requestedSources = ["sleeper", "ktc", "tradyr", "dynastydealer", "statsguy-diagnostic", "consensus", "nflverse-player-history", "sleeper-current-game-stats", "performance-grades", "secondary-backup-every-refresh"];
   if (trigger) requestedSources.push(trigger);
   try {
     const run = await prisma.refreshRun.create({ data: { leagueId: league.id, requestedSources: JSON.stringify(requestedSources), status: "RUNNING" } });
@@ -105,8 +125,7 @@ export async function startRefresh(): Promise<{ runId: string }> {
   return { runId };
 }
 
-/** Runs a complete refresh synchronously. Used by the scheduled 8 AM cron so
- * Vercel can record whether the daily snapshot actually completed. */
+/** Runs a complete refresh synchronously. Used by the scheduled 8 AM cron. */
 export async function runScheduledRefresh(): Promise<RefreshRunView> {
   const runId = await createRefreshRun("scheduled:8am-eastern");
   await executeRefresh(runId);
@@ -123,16 +142,17 @@ async function executeRefresh(runId: string): Promise<void> {
   let mappingWarnings: { sleeperId: string; name: string; reason: string }[] = [];
   let marketSourceStatuses: MarketSourceStatus[] = [];
   let marketObservationsStored = 0, consensusPlayersStored = 0;
+  let playerStatsGamesStored = 0, playerStatsProfilesStored = 0, playerStatsHistoricalBackfill = false;
 
   try {
-    const r = await syncSleeperState(runId); sleeperSyncOk = true; rosterChangesCount = r.rosterChangesCount;
-    playersRefreshed = r.playersRefreshed; mappingWarnings = r.mappingWarnings; transactionsRecorded = r.transactionsRecorded;
+    const r = await syncSleeperState(runId);
+    sleeperSyncOk = true;
+    rosterChangesCount = r.rosterChangesCount;
+    playersRefreshed = r.playersRefreshed;
+    mappingWarnings = r.mappingWarnings;
+    transactionsRecorded = r.transactionsRecorded;
   } catch (err) { errors.push({ source: "sleeper", message: err instanceof Error ? err.message : String(err) }); }
 
-  // Market collection is intentionally attempted on EVERY refresh run, even
-  // when Sleeper has a transient failure. That guarantees a page visit still
-  // checks KTC and appends a fresh observation against the last-known league
-  // roster instead of silently skipping the market update.
   try {
     const market = await refreshLiveMarketSources(runId);
     marketSourceStatuses = market.statuses;
@@ -147,8 +167,7 @@ async function executeRefresh(runId: string): Promise<void> {
     errors.push({ source: "market", message: err instanceof Error ? err.message : String(err) });
   }
 
-  // Tradyr is run after KTC so it can be translated onto KTC scale and then
-  // rebuild consensus without including Stats Guy distortions.
+  // Tradyr runs after KTC so its raw scale can be translated onto the KTC scale.
   try {
     const tradyr = await refreshTradyrSource(runId);
     marketSourceStatuses.push(tradyr.status as unknown as MarketSourceStatus);
@@ -159,16 +178,11 @@ async function executeRefresh(runId: string): Promise<void> {
     errors.push({ source: "tradyr", message: err instanceof Error ? err.message : String(err) });
   }
 
-  // Sleeper identifies every rostered player by ID. A player should only be
-  // listed as unresolved if the refresh cannot find a current usable market
-  // observation from KTC, Tradyr, or Dynasty Dealer. No more "Unmapped player"
-  // placeholders for known Sleeper assets.
+  // Resolve every rostered asset by Sleeper identity first. Missing market
+  // values are reported as a valuation gap, never as an "unmapped player".
   try {
     const remaining = await prisma.player.findMany({
-      where: {
-        mappingStatus: { not: "MAPPED" },
-        ownershipIntervals: { some: { validTo: null, manager: { league: { sleeperId: SLEEPER_LEAGUE_ID } } } },
-      },
+      where: { mappingStatus: { not: "MAPPED" }, ownershipIntervals: { some: { validTo: null, manager: { league: { sleeperId: SLEEPER_LEAGUE_ID } } } } },
       select: { id: true, sleeperId: true, fullName: true, position: true },
     });
     const cutoff = new Date(Date.now() - MARKET_SOURCE_MAX_AGE_MS);
@@ -177,11 +191,26 @@ async function executeRefresh(runId: string): Promise<void> {
       select: { playerId: true, source: true },
     }) : [];
     const valuedIds = new Set((valued as { playerId: string }[]).map((v) => v.playerId));
-    mappingWarnings = remaining
-      .filter((p) => !valuedIds.has(p.id))
-      .map((p) => ({ sleeperId: p.sleeperId, name: `${p.fullName} (${p.position})`, reason: `Identified via Sleeper ID ${p.sleeperId}, but no current KTC/Tradyr/Dynasty Dealer market value was found in this refresh.` }));
+    mappingWarnings = remaining.filter((p) => !valuedIds.has(p.id)).map((p) => ({
+      sleeperId: p.sleeperId,
+      name: `${p.fullName} (${p.position})`,
+      reason: `Identified via Sleeper ID ${p.sleeperId}; no current KTC/Tradyr/Dynasty Dealer market value was found in this refresh.`,
+    }));
   } catch (err) {
     errors.push({ source: "mapping", message: err instanceof Error ? err.message : String(err) });
+  }
+
+  // Persist game-by-game history before calculating signals. nflverse supplies
+  // historical regular/postseason data and a robust ID crosswalk; Sleeper adds
+  // current/preseason week stats so a game can show up before the next nflverse release.
+  try {
+    const stats = await refreshPlayerStats(runId);
+    playerStatsGamesStored = stats.gamesStored;
+    playerStatsProfilesStored = stats.profilesStored;
+    playerStatsHistoricalBackfill = stats.historicalBackfill;
+    for (const warning of stats.warnings) errors.push({ source: "player-stats-warning", message: warning });
+  } catch (err) {
+    errors.push({ source: "player-stats", message: err instanceof Error ? err.message : String(err) });
   }
 
   if (sleeperSyncOk || marketObservationsStored > 0) {
@@ -195,16 +224,33 @@ async function executeRefresh(runId: string): Promise<void> {
       ? "PARTIAL_FAILURE"
       : "SUCCESS";
   const summary = {
-    rosterChangesCount, playersRefreshed, mappingWarningsCount: mappingWarnings.length, transactionsRecorded,
-    ktcPlayersStored, ktcFlagged, marketObservationsStored, consensusPlayersStored, marketSourceStatuses,
+    rosterChangesCount,
+    playersRefreshed,
+    mappingWarningsCount: mappingWarnings.length,
+    transactionsRecorded,
+    ktcPlayersStored,
+    ktcFlagged,
+    marketObservationsStored,
+    consensusPlayersStored,
+    marketSourceStatuses,
+    playerStatsGamesStored,
+    playerStatsProfilesStored,
+    playerStatsHistoricalBackfill,
   };
   await prisma.refreshRun.update({ where: { id: runId }, data: {
-    status, finishedAt: new Date(), sleeperSyncOk, ktcSyncOk, rosterChangesCount, playersRefreshed,
-    mappingWarnings: JSON.stringify(mappingWarnings), errors: JSON.stringify(errors), summary: JSON.stringify(summary),
+    status,
+    finishedAt: new Date(),
+    sleeperSyncOk,
+    ktcSyncOk,
+    rosterChangesCount,
+    playersRefreshed,
+    mappingWarnings: JSON.stringify(mappingWarnings),
+    errors: JSON.stringify(errors),
+    summary: JSON.stringify(summary),
   }});
 
-  // Independent recovery copy. This is deliberately outside the primary database
-  // so a provider/account failure cannot strand the only copy of saved history.
+  // This is a required part of every refresh. Failure downgrades the refresh to
+  // PARTIAL_FAILURE rather than silently pretending the new data is protected.
   const secondaryBackup = await writeSecondaryBackup(runId);
   const finalErrors = secondaryBackup.ok ? errors : [...errors, { source: "backup", message: secondaryBackup.message }];
   const finalStatus = status === "FAILED" ? status : secondaryBackup.ok ? status : "PARTIAL_FAILURE";
