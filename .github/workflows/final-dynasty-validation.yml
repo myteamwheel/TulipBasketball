@@ -1,0 +1,37 @@
+name: final-dynasty-validation
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/final-dynasty-validation.yml']
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: recovered-app
+    env:
+      DATABASE_URL: postgresql://user:pass@localhost:5432/postgres
+      BACKUP_DATABASE_URL: postgresql://user:pass@localhost:5432/postgres
+      STATSGUY_REFRESH_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: recovered-app/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npx prisma generate
+      - run: npx tsc --noEmit
+      - run: npm run build
+      - name: Verify requested features are present
+        run: |
+          grep -q 'Biggest KTC changes' 'src/app/(app)/page.tsx'
+          grep -q 'Previous checkpoint' src/components/PlayerTable.tsx
+          grep -q 'PlayerPerformancePanel' 'src/app/(app)/players/[id]/page.tsx'
+          grep -q 'refreshPlayerStats' src/lib/refresh.ts
+          grep -q 'refresh:' src/lib/secondaryBackup.ts
+          grep -q 'TRADYR' src/lib/tradyrSource.ts
+          grep -q '2026-06-07T12:00:00.000Z' src/lib/config.ts
