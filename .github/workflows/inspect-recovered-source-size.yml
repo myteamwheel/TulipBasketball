@@ -1,0 +1,15 @@
+name: inspect-recovered-source-size
+on:
+  push:
+    paths: ['.github/workflows/inspect-recovered-source-size.yml']
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show largest source files
+        run: |
+          echo '=== largest files excluding .next ==='
+          find recovered-app -type f -not -path 'recovered-app/.next/*' -not -path 'recovered-app/node_modules/*' -printf '%s %p\n' | sort -nr | head -80
+          echo '=== directory totals ==='
+          du -sh recovered-app/src recovered-app/prisma recovered-app/public recovered-app/scripts recovered-app/package-lock.json recovered-app/patch14-runtime.cjs 2>/dev/null || true
