@@ -1,0 +1,26 @@
+name: ktc-endpoint-discovery
+on:
+  push:
+    branches: [dynasty-db-diagnostic-probe-20260816]
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect KTC scripts and profile data
+        run: |
+          node <<'NODE'
+          const base='https://keeptradecut.com';
+          const r=await fetch(base+'/dynasty-rankings',{headers:{'user-agent':'Mozilla/5.0','cache-control':'no-cache'}}); const html=await r.text();
+          console.log('root',r.status,'len',html.length,'joeIndex',html.toLowerCase().indexOf('joe mixon'));
+          const scripts=[...html.matchAll(/<script[^>]+src="([^"]+)"/g)].map(m=>m[1]);
+          console.log('scripts',scripts.length,scripts);
+          for(const src of scripts){
+            try{const u=src.startsWith('http')?src:base+src; const t=await (await fetch(u,{headers:{'user-agent':'Mozilla/5.0'}})).text();
+              const hits=[]; for(const pat of [/\/api\/[A-Za-z0-9_?=&/.-]+/g,/dynasty-rankings\/players[^"'` )]*/g,/history[^"'` )]{0,100}/gi,/autocomplete[^"'` )]{0,100}/gi,/search[^"'` )]{0,100}/gi]){for(const m of t.matchAll(pat)){if(!hits.includes(m[0]))hits.push(m[0]);if(hits.length>=50)break}}
+              if(hits.length)console.log('\nSCRIPT',src,'LEN',t.length,'HITS',hits.slice(0,50));
+            }catch(e){console.log('ERR',src,String(e))}
+          }
+          const p=await (await fetch(base+'/dynasty-rankings/players/joe-mixon-273',{headers:{'user-agent':'Mozilla/5.0','cache-control':'no-cache'}})).text();
+          console.log('\nPROFILE len',p.length);
+          for(const term of ['history','values','superflex','chart','series','dataPoints','playerValue']){const idx=p.toLowerCase().indexOf(term.toLowerCase());if(idx>=0)console.log('TERM',term,p.slice(Math.max(0,idx-500),idx+1500).replace(/\s+/g,' '));}
+          NODE
