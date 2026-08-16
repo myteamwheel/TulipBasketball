@@ -1,0 +1,49 @@
+name: apply-patch14-market-integrity
+on:
+  push:
+    branches: [dynasty-patch14-market-integrity-20260816]
+    paths:
+      - recovery/apply_patch14.py
+      - .github/workflows/apply-patch14-market-integrity.yml
+permissions:
+  contents: write
+jobs:
+  patch-and-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply market-integrity patch
+        run: python3 recovery/apply_patch14.py
+      - name: Validate source
+        working-directory: recovered-app
+        env:
+          DATABASE_URL: postgresql://user:pass@localhost:5432/postgres
+          BACKUP_DATABASE_URL: postgresql://user:pass@localhost:5432/postgres
+          FANTASYCALC_REFRESH_ENABLED: "true"
+          STATSGUY_REFRESH_ENABLED: "false"
+        run: |
+          npm install --ignore-scripts
+          npx prisma generate
+          npx tsc --noEmit
+          npm run build
+      - name: Static regression checks
+        working-directory: recovered-app
+        run: |
+          grep -q 'FANTASYCALC' src/lib/marketSources.ts
+          grep -q 'Never manufacture a consensus without the KTC anchor' src/lib/marketSources.ts
+          grep -q 'pages 2..12' src/lib/marketSources.ts
+          grep -q 'MARKET INTEGRITY + RECOVERY PATCH 14' 'src/app/(app)/settings/page.tsx'
+      - name: Commit patched source
+        run: |
+          git config user.name 'ChatGPT Market Integrity'
+          git config user.email 'actions@users.noreply.github.com'
+          git add recovered-app
+          if git diff --cached --quiet; then
+            echo 'No source changes to commit'
+          else
+            git commit -m 'Patch 14: KTC coverage and trustworthy multi-market consensus'
+            git push
+          fi
