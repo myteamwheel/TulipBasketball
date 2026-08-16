@@ -24,9 +24,24 @@ jobs:
           BACKUP_DATABASE_URL: postgresql://user:pass@localhost:5432/postgres
           TRADYR_REFRESH_ENABLED: "true"
         run: npx tsc --noEmit
-      - name: Build root production app
+      - name: Capture root production build
+        id: build
+        continue-on-error: true
         env:
           DATABASE_URL: postgresql://user:pass@localhost:5432/postgres
           BACKUP_DATABASE_URL: postgresql://user:pass@localhost:5432/postgres
           TRADYR_REFRESH_ENABLED: "true"
-        run: npm run build
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run build 2>&1 | tee root-build.log
+      - name: Upload root build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: root-build-log
+          path: root-build.log
+          if-no-files-found: error
+      - name: Fail if root build failed
+        if: steps.build.outcome != 'success'
+        run: exit 1
