@@ -61,7 +61,8 @@ interface ProviderSnapshot {
 }
 
 const KTC_URL = "https://keeptradecut.com/dynasty-rankings";
-const TRADYR_URL = "https://api.tradyr.app/v1/players?format=dynasty&numQbs=2&tep=false&limit=1000";
+const TRADYR_BASE_URL = "https://api.tradyr.app/v1/players";
+const TRADYR_SOURCE_URL = "https://api.tradyr.app/v1/players?format=dynasty&numQbs=2&tep=false";
 const DYNASTY_DEALER_URL = "https://www.dynastydealer.com/api/player-values";
 const DYNASTY_DEALER_ATTRIBUTION_URL = "https://www.dynastydealer.com/";
 const FANTASYCALC_URL = "https://api.fantasycalc.com/values/current?isDynasty=true&numQbs=2&numTeams=12&ppr=0.5";
@@ -229,25 +230,101 @@ export async function fetchKtcSnapshot(): Promise<ProviderSnapshot> {
 }
 
 
+interface TradyrMeta {
+  generatedAt?: string;
+  sources?: unknown;
+  attribution?: string;
+  version?: string;
+  total?: number;
+  limit?: number;
+  offset?: number;
+  access?: {
+    limited?: boolean;
+    returned?: number;
+    total?: number;
+    reason?: string;
+    message?: string;
+  };
+}
+
 interface TradyrPayload {
   data?: Array<Record<string, unknown>>;
-  meta?: { generatedAt?: string; sources?: unknown; attribution?: string; version?: string };
+  meta?: TradyrMeta;
+}
+
+function tradyrPageUrl(offset: number, limit = 50): string {
+  const url = new URL(TRADYR_BASE_URL);
+  url.searchParams.set("format", "dynasty");
+  url.searchParams.set("numQbs", "2");
+  url.searchParams.set("tep", "false");
+  url.searchParams.set("limit", String(limit));
+  url.searchParams.set("offset", String(offset));
+  return url.toString();
 }
 
 export async function fetchTradyrSnapshot(): Promise<ProviderSnapshot> {
   const fetchedAt = new Date();
-  const response = await fetch(TRADYR_URL, {
-    cache: "no-store",
-    signal: withTimeout(20000),
-    headers: { Accept: "application/json", "Cache-Control": "no-cache, no-store, max-age=0", Pragma: "no-cache" },
-  });
-  if (!response.ok) throw new Error(`Tradyr public API failed (${response.status})`);
-  const payload = await response.json() as TradyrPayload;
-  const sourceUpdatedAt = new Date(payload.meta?.generatedAt ?? "");
-  if (!Number.isFinite(sourceUpdatedAt.getTime())) throw new Error("Tradyr meta.generatedAt was missing or invalid");
-  assertFresh("Tradyr", sourceUpdatedAt, fetchedAt);
-  const data = Array.isArray(payload.data) ? payload.data : [];
-  const rows: ProviderRow[] = data.flatMap((raw) => {
+  const pageSize = 50;
+  const maxPages = 20;
+  const allData: Array<Record<string, unknown>> = [];
+  let latestMeta: TradyrMeta | undefined;
+  let latestGeneratedAt: Date | null = null;
+  let expectedTotal: number | null = null;
+  let pagesFetched = 0;
+
+  for (let page = 0; page < maxPages; page++) {
+    const offset = page * pageSize;
+    const response = await fetch(tradyrPageUrl(offset, pageSize), {
+      cache: "no-store",
+      signal: withTimeout(20000),
+      headers: {
+        Accept: "application/json",
+        "Cache-Control": "no-cache, no-store, max-age=0",
+        Pragma: "no-cache",
+      },
+    });
+    if (!response.ok) throw new Error(`Tradyr public API failed (${response.status}) at offset ${offset}`);
+
+    const payload = await response.json() as TradyrPayload;
+    const pageData = Array.isArray(payload.data) ? payload.data : [];
+    const generatedAt = new Date(payload.meta?.generatedAt ?? "");
+    if (!Number.isFinite(generatedAt.getTime())) {
+      throw new Error(`Tradyr meta.generatedAt was missing or invalid at offset ${offset}`);
+    }
+    if (!latestGeneratedAt || generatedAt > latestGeneratedAt) latestGeneratedAt = generatedAt;
+    latestMeta = payload.meta ?? latestMeta;
+    pagesFetched++;
+
+    const totalCandidate = Number(payload.meta?.total ?? payload.meta?.access?.total);
+    if (Number.isFinite(totalCandidate) && totalCandidate > 0) expectedTotal = Math.round(totalCandidate);
+
+    allData.push(...pageData);
+    if (pageData.length === 0) break;
+    if (expectedTotal != null && allData.length >= expectedTotal) break;
+    if (pageData.length < pageSize) break;
+  }
+
+  if (!latestGeneratedAt) throw new Error("Tradyr did not provide a valid update timestamp");
+  assertFresh("Tradyr", latestGeneratedAt, fetchedAt);
+  if (expectedTotal != null && allData.length < expectedTotal) {
+    throw new Error(`Tradyr pagination stopped at ${allData.length}/${expectedTotal} rows; refusing partial snapshot`);
+  }
+
+  const deduped = new Map<string, Record<string, unknown>>();
+  for (const raw of allData) {
+    const sleeperCandidate = raw.sleeperId ?? raw.sleeper_id;
+    const slug = String(raw.slug ?? "").trim().toLowerCase();
+    const name = String(raw.name ?? "").trim();
+    const position = String(raw.position ?? "").trim().toUpperCase();
+    const key = sleeperCandidate != null
+      ? `sleeper:${String(sleeperCandidate)}`
+      : slug
+        ? `slug:${slug}`
+        : `name:${normalizePlayerName(name)}|${position}`;
+    if (!deduped.has(key)) deduped.set(key, raw);
+  }
+
+  const rows: ProviderRow[] = Array.from(deduped.values()).flatMap((raw, index) => {
     const name = String(raw.name ?? "").trim();
     const value = Number(raw.composite ?? raw.value);
     if (!name || !Number.isFinite(value) || value <= 0) return [];
@@ -258,25 +335,38 @@ export async function fetchTradyrSnapshot(): Promise<ProviderSnapshot> {
       position: String(raw.position ?? "").trim().toUpperCase() || undefined,
       team: String(raw.team ?? "").trim() || undefined,
       rawValue: Math.round(value),
-      rank: Number.isFinite(Number(raw.rank)) ? Number(raw.rank) : undefined,
-      positionRank: Number.isFinite(Number(raw.positionRank ?? raw.position_rank)) ? Number(raw.positionRank ?? raw.position_rank) : undefined,
+      // Tradyr's anonymous paginated response restarts `rank` on each page,
+      // so use the full-board sequence after concatenation instead.
+      rank: index + 1,
+      positionRank: Number.isFinite(Number(raw.positionRank ?? raw.position_rank))
+        ? Number(raw.positionRank ?? raw.position_rank)
+        : undefined,
       metadata: {
         confidence: raw.confidence ?? null,
         slug: raw.slug ?? null,
-        sources: raw.sources ?? payload.meta?.sources ?? null,
-        apiVersion: payload.meta?.version ?? null,
-        attribution: payload.meta?.attribution ?? "Powered by Tradyr",
+        sources: raw.sources ?? latestMeta?.sources ?? null,
+        apiVersion: latestMeta?.version ?? null,
+        attribution: latestMeta?.attribution ?? "Powered by Tradyr",
+        anonymousPagination: true,
+        pagesFetched,
       },
     }];
   });
-  if (rows.length < MIN_PROVIDER_ROWS) throw new Error(`Tradyr returned only ${rows.length} valued players; refusing partial snapshot`);
+
+  if (rows.length < MIN_PROVIDER_ROWS) {
+    throw new Error(`Tradyr returned only ${rows.length} valued players after pagination; refusing partial snapshot`);
+  }
+  if (expectedTotal != null && rows.length < Math.min(expectedTotal, MIN_PROVIDER_ROWS)) {
+    throw new Error(`Tradyr produced only ${rows.length}/${expectedTotal} unique valued players; refusing incomplete snapshot`);
+  }
+
   return {
     source: "TRADYR",
-    sourceUrl: TRADYR_URL,
+    sourceUrl: TRADYR_SOURCE_URL,
     fetchedAt,
-    sourceUpdatedAt,
+    sourceUpdatedAt: latestGeneratedAt,
     rows,
-    message: `Tradyr public API; ${rows.length} dynasty-superflex players; generated ${sourceUpdatedAt.toISOString()}`,
+    message: `Tradyr public API; ${rows.length}${expectedTotal ? `/${expectedTotal}` : ""} dynasty-superflex players across ${pagesFetched} anonymous pages; generated ${latestGeneratedAt.toISOString()}`,
   };
 }
 
