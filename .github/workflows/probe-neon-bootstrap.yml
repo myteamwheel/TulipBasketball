@@ -1,0 +1,29 @@
+name: probe-neon-bootstrap
+
+on:
+  push:
+    paths: ['.github/workflows/probe-neon-bootstrap.yml']
+  workflow_dispatch:
+
+jobs:
+  fetch-ciphertext:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for encrypted bootstrap payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          url='https://dynasty-boys-dashboard.vercel.app/api/neon-bridge-bootstrap-7b4f1c'
+          for attempt in $(seq 1 40); do
+            stamp="$(date +%s%N)"
+            code=$(curl -sS --max-time 30 -o /tmp/body -w '%{http_code}' -H 'Cache-Control: no-cache' "${url}?probe=${stamp}" || true)
+            echo "attempt=${attempt} status=${code}"
+            if [ "$code" = "200" ]; then
+              cat /tmp/body
+              echo
+              exit 0
+            fi
+            sleep 15
+          done
+          echo 'bootstrap route did not become available'
+          exit 1
