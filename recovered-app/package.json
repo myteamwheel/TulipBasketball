@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3400",
-    "build": "node patch14-runtime.cjs && next build",
+    "build": "node patch14-runtime.cjs && next build && mkdir -p .next/standalone/.next && cp -R .next/static .next/standalone/.next/static",
     "start": "next start",
     "lint": "eslint",
     "seed:baseline": "tsx scripts/seed-baseline.ts",
@@ -47,7 +47,7 @@
     "unrs-resolver@1.12.2": true,
     "esbuild@0.28.2": true,
     "better-sqlite3@12.11.1": true,
-    "fsevents@2.3.3": true,
+    "fsevents@12.11.1": true,
     "esbuild@0.27.7": true,
     "esbuild@0.27.0": true
   }
