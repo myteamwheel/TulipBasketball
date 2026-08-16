@@ -7,18 +7,19 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Probe Vercel env capability and public domain
+      - name: Probe clean and generated Vercel domains
         run: |
           set +e
           for u in \
+            'https://dynasty-env-capability-test.vercel.app/api/test' \
+            'https://dynasty-env-capability-test.vercel.app/' \
             'https://dynasty-env-capability-test-lq2fdtmzg.vercel.app/api/test' \
-            'https://dynasty-env-capability-test-lq2fdtmzg.vercel.app/' \
             'https://dynasty-boys-dashboard.vercel.app/api/debug-home'; do
             echo "===== $u ====="
             curl -L --max-time 30 -sS -D /tmp/h -o /tmp/b "$u"
-            echo "curl_exit=$? status=$(awk 'NR==1{print $2}' /tmp/h) final=$(tail -1 /tmp/h | tr -d '\r')"
+            echo "curl_exit=$? status=$(awk 'NR==1{print $2}' /tmp/h)"
             grep -Ei '^(location|x-vercel|content-type|http/)' /tmp/h | head -30 || true
             echo '--- BODY ---'
-            head -c 3000 /tmp/b || true
+            head -c 1500 /tmp/b || true
             echo
           done
