@@ -6,16 +6,34 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Capture production runtime error
+      - name: Verify direct-routed production
         shell: bash
         run: |
           set +e
           BASE='https://dynasty-boys-dashboard.vercel.app'
-          for path in / /settings /api/refresh; do
-            echo "===== $path ====="
-            curl -L --max-time 30 -sS -D /tmp/h "$BASE$path" -o /tmp/body
-            cat /tmp/h
-            echo '--- BODY ---'
-            head -c 16000 /tmp/body
-            echo
+          echo 'Waiting for healthy exact Patch 12...'
+          for i in {1..15}; do
+            code=$(curl -L --max-time 30 -sS -o /tmp/settings -w '%{http_code}' "$BASE/settings")
+            echo "attempt=$i status=$code"
+            if [ "$code" = "200" ] && grep -q 'Independent automatic backup' /tmp/settings; then break; fi
+            sleep 10
           done
+          echo '===== ROOT ====='
+          curl -L --max-time 30 -sS -D /tmp/h "$BASE/" -o /tmp/root
+          cat /tmp/h
+          grep -o '≥2 fresh sources required' /tmp/root | head || true
+          grep -o 'KTC anchor; secondary source optional' /tmp/root | head || true
+          echo '===== SETTINGS ====='
+          grep -o 'SOURCE TRUST + WAIVER CALIBRATION PATCH 12' /tmp/settings | head || true
+          grep -o 'Independent automatic backup' /tmp/settings | head || true
+          grep -o '8:00 AM Eastern' /tmp/settings | head || true
+          echo '===== REFRESH BEFORE ====='
+          curl -L --max-time 30 -sS "$BASE/api/refresh" || true
+          echo
+          echo '===== START REFRESH ====='
+          curl -L --max-time 30 -sS -X POST -H 'content-type: application/json' "$BASE/api/refresh" || true
+          echo
+          sleep 22
+          echo '===== REFRESH AFTER ====='
+          curl -L --max-time 30 -sS "$BASE/api/refresh" || true
+          echo
