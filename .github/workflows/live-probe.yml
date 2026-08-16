@@ -1,0 +1,25 @@
+name: p13-live-probe
+on:
+  push:
+    branches: [dynasty-p13-live-probe-20260816]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe deployment URLs
+        run: |
+          for base in \
+            'https://dynasty-boys-dashboard-58s9g1pwx-myteamwheel-8058s-projects.vercel.app' \
+            'https://dynasty-boys-dashboard-myteamwheel-8058s-projects.vercel.app' \
+            'https://dynasty-boys-dashboard.vercel.app'; do
+            echo "===== $base ====="
+            curl -L --max-time 30 -sS -o /tmp/settings -w 'settings=%{http_code}\n' "$base/settings" || true
+            grep -o 'Build: PATCH 13[^<]*' /tmp/settings | head || true
+            grep -o 'Dynasty Dealer' /tmp/settings | head || true
+            curl -L --max-time 30 -sS -o /tmp/root -w 'root=%{http_code}\n' "$base/" || true
+            grep -o 'Decision Desk' /tmp/root | head || true
+            curl -L --max-time 45 -sS -o /tmp/old -w 'old=%{http_code}\n' "$base/api/recovery-old-db-audit" || true
+            cat /tmp/old; echo
+            curl -L --max-time 45 -sS -o /tmp/bak -w 'backup=%{http_code}\n' "$base/api/recovery-backup-audit" || true
+            cat /tmp/bak; echo
+          done
