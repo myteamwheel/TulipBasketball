@@ -1,0 +1,27 @@
+name: probe-ktc-profile-id-routing
+on:
+  push:
+    branches: [dynasty-patch14-market-integrity-20260816]
+    paths: ['.github/workflows/probe-ktc-profile-id-routing.yml']
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test numeric-ID profile routing
+        shell: bash
+        run: |
+          set -euo pipefail
+          for URL in \
+            'https://keeptradecut.com/dynasty-rankings/players/x-273' \
+            'https://keeptradecut.com/dynasty-rankings/players/joe-mixon-273' \
+            'https://keeptradecut.com/dynasty-rankings/players/x-1320' \
+            'https://keeptradecut.com/dynasty-rankings/players/chigoziem-okonkwo-1320'; do
+            echo "=== $URL"
+            curl -sSL --max-time 30 -A 'Mozilla/5.0' -w '\nHTTP=%{http_code} FINAL=%{url_effective}\n' "$URL" -o /tmp/profile.html
+            python3 - <<'PY'
+          import re
+          raw=open('/tmp/profile.html',errors='ignore').read()
+          m=re.search(r'<h1[^>]*>(.*?)</h1>', raw, re.S|re.I)
+          print('h1=',re.sub('<[^>]+>','',m.group(1)).strip() if m else 'none','bytes=',len(raw))
+          PY
+          done
