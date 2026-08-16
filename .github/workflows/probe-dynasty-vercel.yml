@@ -7,16 +7,18 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Probe public production diagnostics
+      - name: Probe Vercel env capability and public domain
         run: |
           set +e
-          for path in '/api/debug-home' '/api/recovery-backup-audit' '/settings' '/'; do
-            u="https://dynasty-boys-dashboard.vercel.app${path}"
+          for u in \
+            'https://dynasty-env-capability-test-lq2fdtmzg.vercel.app/api/test' \
+            'https://dynasty-env-capability-test-lq2fdtmzg.vercel.app/' \
+            'https://dynasty-boys-dashboard.vercel.app/api/debug-home'; do
             echo "===== $u ====="
-            curl --max-time 30 -sS -D /tmp/h -o /tmp/b "$u"
-            echo "curl_exit=$? status=$(awk 'NR==1{print $2}' /tmp/h)"
-            head -12 /tmp/h || true
+            curl -L --max-time 30 -sS -D /tmp/h -o /tmp/b "$u"
+            echo "curl_exit=$? status=$(awk 'NR==1{print $2}' /tmp/h) final=$(tail -1 /tmp/h | tr -d '\r')"
+            grep -Ei '^(location|x-vercel|content-type|http/)' /tmp/h | head -30 || true
             echo '--- BODY ---'
-            head -c 12000 /tmp/b || true
+            head -c 3000 /tmp/b || true
             echo
           done
