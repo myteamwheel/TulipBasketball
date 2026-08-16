@@ -16,41 +16,31 @@ export interface MoverRow {
 }
 
 const WINDOWS = [
-  { key: "changeSinceLastRefresh", label: "Since Refresh" },
-  { key: "change7dPoints", label: "7 Day" },
-  { key: "change30dPoints", label: "30 Day" },
+  { key: "changeSinceLastRefresh", label: "Latest Δ" },
+  { key: "change7dPoints", label: "7 days" },
+  { key: "change30dPoints", label: "30 days" },
 ] as const;
 
 type WindowKey = (typeof WINDOWS)[number]["key"];
 
-function MoverList({
-  rows,
-  valueKey,
-  positive,
-}: {
-  rows: MoverRow[];
-  valueKey: WindowKey;
-  positive: boolean;
-}) {
+function MoverList({ rows, valueKey, positive }: { rows: MoverRow[]; valueKey: WindowKey; positive: boolean }) {
   return (
     <ol className="space-y-1.5">
       {rows.map((r, i) => (
-        <li key={r.id} className="flex items-center justify-between text-sm">
-          <span className="flex items-center gap-2">
-            <span className="w-4 text-right text-[11px] text-neutral-600">{i + 1}</span>
-            <Link href={`/players/${r.id}`} className="text-neutral-100 hover:text-emerald-400">
+        <li key={r.id} className="grid min-w-0 grid-cols-[20px_1fr_auto] items-center gap-2 rounded-md bg-neutral-950 px-2.5 py-2">
+          <span className="text-right text-[10px] text-neutral-600">{i + 1}</span>
+          <div className="min-w-0">
+            <Link href={`/players/${r.id}`} className="block truncate text-xs font-medium text-neutral-100 hover:text-emerald-300">
               {r.fullName}
             </Link>
-            <span className="text-[11px] text-neutral-500">
-              {r.position} · {r.teamName}
-            </span>
-          </span>
-          <span className={`font-medium ${positive ? "text-emerald-400" : "text-red-400"}`}>
+            <div className="truncate text-[9px] text-neutral-600">{r.position} · {r.teamName}</div>
+          </div>
+          <span className={`shrink-0 text-xs font-semibold tabular-nums ${positive ? "text-emerald-300" : "text-red-300"}`}>
             {formatSigned(r[valueKey])}
           </span>
         </li>
       ))}
-      {rows.length === 0 && <li className="text-sm text-neutral-500">No data for this window.</li>}
+      {rows.length === 0 ? <li className="rounded-md bg-neutral-950 p-3 text-xs text-neutral-500">No valid comparisons for this window yet.</li> : null}
     </ol>
   );
 }
@@ -59,31 +49,44 @@ export default function RiserFallerTabs({ rows }: { rows: MoverRow[] }) {
   const [windowKey, setWindowKey] = useState<WindowKey>("changeSinceLastRefresh");
 
   const withValue = rows.filter((r) => r[windowKey] !== null);
-  const risers = [...withValue].sort((a, b) => (b[windowKey] ?? 0) - (a[windowKey] ?? 0)).slice(0, 10);
-  const fallers = [...withValue].sort((a, b) => (a[windowKey] ?? 0) - (b[windowKey] ?? 0)).slice(0, 10);
+  const risers = [...withValue]
+    .filter((r) => (r[windowKey] ?? 0) > 0)
+    .sort((a, b) => (b[windowKey] ?? 0) - (a[windowKey] ?? 0))
+    .slice(0, 10);
+  const fallers = [...withValue]
+    .filter((r) => (r[windowKey] ?? 0) < 0)
+    .sort((a, b) => (a[windowKey] ?? 0) - (b[windowKey] ?? 0))
+    .slice(0, 10);
 
   return (
-    <div>
-      <div className="mb-3 flex gap-1">
+    <div className="min-w-0">
+      <div className="no-scrollbar mb-3 flex min-w-0 gap-1 overflow-x-auto">
         {WINDOWS.map((w) => (
           <button
             key={w.key}
             onClick={() => setWindowKey(w.key)}
-            className={`rounded-md px-2.5 py-1 text-xs ${
-              windowKey === w.key ? "bg-emerald-600 text-white" : "bg-neutral-800 text-neutral-400 hover:bg-neutral-700"
+            className={`shrink-0 rounded-md px-3 py-1.5 text-[11px] font-medium ${
+              windowKey === w.key ? "bg-emerald-700 text-white" : "bg-neutral-800 text-neutral-400 hover:bg-neutral-700"
             }`}
           >
             {w.label}
           </button>
         ))}
+        <span className="ml-auto hidden self-center text-[10px] text-neutral-600 sm:block">{withValue.length}/{rows.length} comparable</span>
       </div>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
-          <h3 className="mb-2 text-sm font-semibold text-emerald-400">Top 10 Risers</h3>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div className="min-w-0 rounded-lg border border-neutral-800 bg-neutral-900 p-3 sm:p-4">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h3 className="text-xs font-semibold text-emerald-300">Risers</h3>
+            <span className="text-[9px] text-neutral-600">{withValue.length}/{rows.length} comparable</span>
+          </div>
           <MoverList rows={risers} valueKey={windowKey} positive />
         </div>
-        <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
-          <h3 className="mb-2 text-sm font-semibold text-red-400">Top 10 Fallers</h3>
+        <div className="min-w-0 rounded-lg border border-neutral-800 bg-neutral-900 p-3 sm:p-4">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h3 className="text-xs font-semibold text-red-300">Fallers</h3>
+            <span className="text-[9px] text-neutral-600">Zero/flat values omitted</span>
+          </div>
           <MoverList rows={fallers} valueKey={windowKey} positive={false} />
         </div>
       </div>
