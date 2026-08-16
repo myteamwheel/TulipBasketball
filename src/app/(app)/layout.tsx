@@ -12,6 +12,7 @@ export const dynamic = "force-dynamic";
 const NAV = [
   { href: "/", label: "My Team" },
   { href: "/league", label: "League Market" },
+  { href: "/trade-finder", label: "Trade Finder" },
   { href: "/transactions", label: "Transactions" },
   { href: "/players", label: "Players" },
   { href: "/refresh-history", label: "Refresh History" },
