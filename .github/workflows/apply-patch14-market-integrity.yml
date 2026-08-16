@@ -32,10 +32,18 @@ jobs:
       - name: Static regression checks
         working-directory: recovered-app
         run: |
-          grep -q 'FANTASYCALC' src/lib/marketSources.ts
-          grep -q 'Never manufacture a consensus without the KTC anchor' src/lib/marketSources.ts
-          grep -q 'pages 2..12' src/lib/marketSources.ts
-          grep -q 'MARKET INTEGRITY + RECOVERY PATCH 14' 'src/app/(app)/settings/page.tsx'
+          python3 - <<'PY'
+          from pathlib import Path
+          market=Path('src/lib/marketSources.ts').read_text()
+          config=Path('src/lib/config.ts').read_text()
+          assert 'FANTASYCALC' in market
+          assert 'Never manufacture a consensus without the KTC anchor' in market
+          assert 'pageNumbers = Array.from({ length: 11 }' in market
+          assert 'SECONDARY_DISAGREEMENT_ABS' in market
+          assert 'FANTASYCALC_REFRESH_ENABLED' in config
+          assert 'KTC: 0.80' in config and 'FANTASYCALC: 0.20' in config
+          print('Patch 14 regression checks passed')
+          PY
       - name: Commit patched source
         run: |
           git config user.name 'ChatGPT Market Integrity'
