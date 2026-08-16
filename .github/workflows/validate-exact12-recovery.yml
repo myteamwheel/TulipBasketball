@@ -25,7 +25,13 @@ jobs:
           const overlayPacked=overlayParts.map(f=>fs.readFileSync(path.join('deploy/exact12-overlay',f),'utf8').trim()).join('');
           const overlay=JSON.parse(zlib.brotliDecompressSync(Buffer.from(overlayPacked,'base64')).toString('utf8'));
           apply(overlay);
-          console.log(`reconstructed ${Object.keys(base).length} + ${Object.keys(overlay).length}`);
+          const mp=path.join('recovered-app','src/lib/marketSources.ts');
+          const before='if (statuses.find((s)=>s.source==="KTC")?.ok && statuses.find((s)=>s.source==="STATSGUY")?.ok) {';
+          const after='if (ktcResult.status === "fulfilled" && sgResult.status === "fulfilled" && statuses.find((s)=>s.source==="KTC")?.ok && statuses.find((s)=>s.source==="STATSGUY")?.ok) {';
+          const src=fs.readFileSync(mp,'utf8');
+          if(!src.includes(before)) throw new Error('Patch 12 calibration guard not found');
+          fs.writeFileSync(mp,src.replace(before,after));
+          console.log(`reconstructed ${Object.keys(base).length} + ${Object.keys(overlay).length}; applied compiler-only settled-result guard`);
           NODE
       - name: Install and typecheck
         working-directory: recovered-app
