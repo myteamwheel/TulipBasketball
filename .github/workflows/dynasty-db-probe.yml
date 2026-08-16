@@ -29,4 +29,8 @@ jobs:
           echo '===== REFRESH STATUS AFTER ====='
           curl -L --max-time 30 -sS "$BASE/api/refresh" || true
           echo
-          # recovery probe 2
+          echo '===== ROOT AFTER ====='
+          curl -L --max-time 30 -sS "$BASE/" -o /tmp/root2
+          grep -o 'KTC anchor; secondary source optional' /tmp/root2 || true
+          grep -o 'SOURCE TRUST + WAIVER CALIBRATION PATCH 12' /tmp/root2 || true
+          # recovery probe 3
