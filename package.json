@@ -4,5 +4,10 @@
   "private": true,
   "scripts": {
     "vercel-build": "cp -R recovered-app/. . && npm ci --ignore-scripts && DATABASE_URL=${DATABASE_URL:-postgresql://user:pass@localhost:5432/postgres} npx prisma generate && DATABASE_URL=${DATABASE_URL:-postgresql://user:pass@localhost:5432/postgres} BACKUP_DATABASE_URL=${BACKUP_DATABASE_URL:-postgresql://user:pass@localhost:5432/postgres} npm run build"
+  },
+  "dependencies": {
+    "next": "16.3.1",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
   }
 }
