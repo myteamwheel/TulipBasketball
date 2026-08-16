@@ -1,7 +1,8 @@
 import { getAllCurrentRosterEntries, getAllManagers, getPrimaryManager } from "@/lib/queries";
 import { computeMarketDataForPlayers } from "@/lib/metrics";
 import { computeAllTeamValuations, getLatestSlotMap } from "@/lib/teamMetrics";
-import { fetchCurrentDraftPickMarketValues, getCurrentMarketMix } from "@/lib/marketSources";
+import { fetchCurrentDraftPickMarketValues } from "@/lib/marketSources";
+import { getFreshCurrentMarketMix } from "@/lib/currentMarket";
 import { getTradedPicks } from "@/lib/sleeper";
 import { normalizePlayerName } from "@/lib/normalize";
 import { prisma } from "@/lib/prisma";
@@ -10,8 +11,6 @@ import { SLEEPER_LEAGUE_ID } from "@/lib/config";
 const POSITIONS = ["QB", "RB", "WR", "TE"] as const;
 type Position = (typeof POSITIONS)[number];
 
-// Strategy constraints are separate from live roster state. Sleeper still
-// determines whether any named player is actually on Orlando or another team.
 const PROTECTED_ORLANDO = new Set(
   [
     "Cam Ward",
@@ -29,8 +28,6 @@ const DO_NOT_TARGET = new Set(
   ["Geno Smith", "Kenneth Walker", "Kenneth Walker III", "TreVeyon Henderson"].map(normalizePlayerName),
 );
 
-// Explicit current strategic boosts only. Elijah Hampton was removed from this
-// list because that was an older target request and should no longer bias rank.
 const STRATEGIC_TARGETS = new Set(
   ["Tua Tagovailoa", "Makai Lemon"].map(normalizePlayerName),
 );
@@ -194,7 +191,7 @@ export async function buildTradeFinderData(): Promise<TradeFinderData | null> {
   const playerIds = entries.map((e) => e.playerId);
   const [market, mix, valuations, slotMap, managers, tradedPicks, pickMarket, league] = await Promise.all([
     computeMarketDataForPlayers(playerIds),
-    getCurrentMarketMix(playerIds),
+    getFreshCurrentMarketMix(playerIds),
     computeAllTeamValuations(),
     getLatestSlotMap(),
     getAllManagers(),
@@ -329,7 +326,7 @@ export async function buildTradeFinderData(): Promise<TradeFinderData | null> {
       }
       if (target.consensusValue !== null && target.consensusValue > target.value * 1.04) {
         score += 8;
-        tags.push("Consensus > KTC");
+        tags.push("Fresh consensus > KTC");
       }
       if (ownerHasSurplus) {
         score += 9;
