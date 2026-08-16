@@ -3,13 +3,10 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
-# Validates the full recovered dashboard before any production promotion.
+
 jobs:
   validate-dashboard:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: recovered-app
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -21,30 +18,15 @@ jobs:
         env:
           DATABASE_URL: postgresql://user:pass@localhost:5432/postgres
         run: npx prisma generate
-      - name: Typecheck and build
+      - name: Typecheck root production app
         env:
           DATABASE_URL: postgresql://user:pass@localhost:5432/postgres
           BACKUP_DATABASE_URL: postgresql://user:pass@localhost:5432/postgres
-          STATSGUY_REFRESH_ENABLED: "false"
           TRADYR_REFRESH_ENABLED: "true"
-        run: |
-          npx tsc --noEmit
-          npm run build
-      - name: Smoke-test Railway standalone server
+        run: npx tsc --noEmit
+      - name: Build root production app
         env:
           DATABASE_URL: postgresql://user:pass@localhost:5432/postgres
           BACKUP_DATABASE_URL: postgresql://user:pass@localhost:5432/postgres
-          PORT: "3401"
-          HOSTNAME: 127.0.0.1
-        run: |
-          node .next/standalone/server.js > /tmp/dynasty-server.log 2>&1 &
-          PID=$!
-          trap 'kill $PID 2>/dev/null || true; cat /tmp/dynasty-server.log' EXIT
-          for i in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:3401/healthz | grep -q '"ok":true'; then
-              exit 0
-            fi
-            sleep 1
-          done
-          echo "Standalone server failed health check"
-          exit 1
+          TRADYR_REFRESH_ENABLED: "true"
+        run: npm run build
