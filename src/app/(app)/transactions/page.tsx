@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getObservationSeries, closestObservation } from "@/lib/metrics";
-import { fetchCurrentDraftPickMarketValues } from "@/lib/marketSources";
+import { fetchFreshDraftPickMarketValues } from "@/lib/pickMarket";
+import { calculatePackageTradeValue } from "@/lib/tradeValue";
 import { SLEEPER_LEAGUE_ID } from "@/lib/config";
 import { formatDateTimeEastern, formatPoints, formatSigned, trendColorClass } from "@/lib/format";
 
@@ -40,16 +41,17 @@ export default async function TransactionsPage() {
     }),
     prisma.manager.findMany({ where: { league: { sleeperId: SLEEPER_LEAGUE_ID } } }),
     prisma.player.findMany({ select: { id: true, sleeperId: true, fullName: true, position: true } }),
-    fetchCurrentDraftPickMarketValues().catch(() => []),
+    fetchFreshDraftPickMarketValues().catch(() => []),
   ]);
 
-  const managerByRosterId = new Map(managers.map((m) => [m.sleeperRosterId, m]));
-  const playerBySleeperId = new Map(players.map((p) => [p.sleeperId, p]));
-  const series = await getObservationSeries(players.map((p) => p.id));
+  const managerByRosterId = new Map(managers.map((manager) => [manager.sleeperRosterId, manager]));
+  const playerBySleeperId = new Map(players.map((player) => [player.sleeperId, player]));
+  const series = await getObservationSeries(players.map((player) => player.id));
+  const pickMarketAvailable = pickMarket.length > 0;
 
   function managerName(rosterId: number) {
-    const m = managerByRosterId.get(rosterId);
-    return m?.teamName ?? m?.displayName ?? `Roster ${rosterId}`;
+    const manager = managerByRosterId.get(rosterId);
+    return manager?.teamName ?? manager?.displayName ?? `Roster ${rosterId}`;
   }
 
   function playerAsset(sleeperPid: string, rosterId: number, txDate: Date, kind: "add" | "drop") {
@@ -67,9 +69,10 @@ export default async function TransactionsPage() {
         valueAtTxApprox: false,
       };
     }
-    const obs = series.get(player.id) ?? [];
-    const atTx = closestObservation(obs, txDate, "before") ?? closestObservation(obs, txDate, "after");
-    const latest = obs.filter((o) => o.validationStatus === "VALID").slice(-1)[0] ?? null;
+
+    const observations = series.get(player.id) ?? [];
+    const atTx = closestObservation(observations, txDate, "before") ?? closestObservation(observations, txDate, "after");
+    const latest = observations.filter((observation) => observation.validationStatus === "VALID").slice(-1)[0] ?? null;
     return {
       assetType: "player" as const,
       label: `${player.fullName} (${player.position})`,
@@ -84,22 +87,22 @@ export default async function TransactionsPage() {
   }
 
   function currentPickValue(season: string, round: number) {
-    const matching = pickMarket.filter((p) => p.season === String(season) && p.round === Number(round));
-    const generic = matching.find((p) => p.slot === null);
+    const matching = pickMarket.filter((pick) => pick.season === String(season) && pick.round === Number(round));
+    const generic = matching.find((pick) => pick.slot === null);
     if (generic) return { value: generic.value, label: generic.label };
     if (!matching.length) return { value: null, label: null };
     return {
-      value: Math.round(matching.reduce((sum, p) => sum + p.value, 0) / matching.length),
+      value: Math.round(matching.reduce((sum, pick) => sum + pick.value, 0) / matching.length),
       label: `${season} R${round} neutral current value`,
     };
   }
 
-  const rows = transactions.map((t) => {
-    const adds = t.adds ? (JSON.parse(t.adds) as Record<string, number>) : {};
-    const drops = t.drops ? (JSON.parse(t.drops) as Record<string, number>) : {};
-    const draftPicks = t.draftPicks ? (JSON.parse(t.draftPicks) as TradedPick[]) : [];
-    const playerAdds = Object.entries(adds).map(([pid, rid]) => playerAsset(pid, rid, t.sleeperCreatedAt, "add"));
-    const playerDrops = Object.entries(drops).map(([pid, rid]) => playerAsset(pid, rid, t.sleeperCreatedAt, "drop"));
+  const rows = transactions.map((transaction) => {
+    const adds = transaction.adds ? (JSON.parse(transaction.adds) as Record<string, number>) : {};
+    const drops = transaction.drops ? (JSON.parse(transaction.drops) as Record<string, number>) : {};
+    const draftPicks = transaction.draftPicks ? (JSON.parse(transaction.draftPicks) as TradedPick[]) : [];
+    const playerAdds = Object.entries(adds).map(([pid, rosterId]) => playerAsset(pid, rosterId, transaction.sleeperCreatedAt, "add"));
+    const playerDrops = Object.entries(drops).map(([pid, rosterId]) => playerAsset(pid, rosterId, transaction.sleeperCreatedAt, "drop"));
     const pickAssets = draftPicks.map((pick) => {
       const market = currentPickValue(pick.season, pick.round);
       return {
@@ -118,37 +121,52 @@ export default async function TransactionsPage() {
     });
     const assets = [...playerAdds, ...playerDrops, ...pickAssets];
 
-    const tradeSides = [...new Set(t.rosterIdsInvolved ? (JSON.parse(t.rosterIdsInvolved) as number[]) : [])]
+    const tradeSides = [...new Set(
+      transaction.rosterIdsInvolved ? (JSON.parse(transaction.rosterIdsInvolved) as number[]) : [],
+    )]
       .map((rosterId) => {
-        const acquiredPlayers = playerAdds.filter((a) => a.rosterId === rosterId);
-        const acquiredPicks = pickAssets.filter((a) => a.rosterId === rosterId);
+        const acquiredPlayers = playerAdds.filter((asset) => asset.rosterId === rosterId);
+        const acquiredPicks = pickAssets.filter((asset) => asset.rosterId === rosterId);
         const acquired = [...acquiredPlayers, ...acquiredPicks];
-        const currentKnown = acquired.filter((a) => a.currentValue !== null);
-        const currentTotal = currentKnown.reduce((sum, a) => sum + (a.currentValue ?? 0), 0);
+        const currentKnown = acquired.filter((asset) => asset.currentValue !== null);
+        const complete = acquired.length > 0 && currentKnown.length === acquired.length;
+        const rawTotal = currentKnown.reduce((sum, asset) => sum + (asset.currentValue ?? 0), 0);
+        const packageValue = complete
+          ? calculatePackageTradeValue(currentKnown.map((asset) => ({
+              value: asset.currentValue ?? 0,
+              assetType: asset.assetType,
+              name: asset.label,
+            })))
+          : null;
+
         return {
           rosterId,
           name: managerName(rosterId),
-          currentTotal,
+          rawTotal,
+          adjustedTotal: packageValue?.adjustedValue ?? null,
+          packageAdjustment: packageValue?.consolidationAdjustment ?? null,
           covered: currentKnown.length,
           totalAssets: acquired.length,
-          complete: acquired.length > 0 && currentKnown.length === acquired.length,
+          complete,
         };
       })
       .filter((side) => side.totalAssets > 0);
 
-    const tradeCoverageComplete = tradeSides.length >= 2 && tradeSides.every((side) => side.complete);
-    const sortedSides = tradeCoverageComplete ? [...tradeSides].sort((a, b) => b.currentTotal - a.currentTotal) : [];
-    const currentWinner = t.type === "trade" && sortedSides.length >= 2 ? sortedSides[0] : null;
+    const tradeCoverageComplete = tradeSides.length >= 2 && tradeSides.every((side) => side.complete && side.adjustedTotal !== null);
+    const sortedSides = tradeCoverageComplete
+      ? [...tradeSides].sort((a, b) => (b.adjustedTotal ?? 0) - (a.adjustedTotal ?? 0))
+      : [];
+    const currentWinner = transaction.type === "trade" && sortedSides.length >= 2 ? sortedSides[0] : null;
     const runnerUp = currentWinner ? sortedSides[1] : null;
 
     const rosterMoveAssets = [...playerAdds, ...playerDrops];
-    const moveCoverageComplete = rosterMoveAssets.length > 0 && rosterMoveAssets.every((a) => a.valueAtTx !== null);
-    const addAtTx = moveCoverageComplete ? playerAdds.reduce((sum, a) => sum + (a.valueAtTx ?? 0), 0) : 0;
-    const dropAtTx = moveCoverageComplete ? playerDrops.reduce((sum, a) => sum + (a.valueAtTx ?? 0), 0) : 0;
-    const rosterMoveNet = t.type !== "trade" && moveCoverageComplete ? addAtTx - dropAtTx : null;
+    const moveCoverageComplete = rosterMoveAssets.length > 0 && rosterMoveAssets.every((asset) => asset.valueAtTx !== null);
+    const addAtTx = moveCoverageComplete ? playerAdds.reduce((sum, asset) => sum + (asset.valueAtTx ?? 0), 0) : 0;
+    const dropAtTx = moveCoverageComplete ? playerDrops.reduce((sum, asset) => sum + (asset.valueAtTx ?? 0), 0) : 0;
+    const rosterMoveNet = transaction.type !== "trade" && moveCoverageComplete ? addAtTx - dropAtTx : null;
 
     return {
-      ...t,
+      ...transaction,
       assets,
       tradeSides,
       tradeCoverageComplete,
@@ -165,84 +183,109 @@ export default async function TransactionsPage() {
       <div>
         <h1 className="text-xl font-semibold text-neutral-100">Transactions</h1>
         <p className="mt-1 max-w-3xl text-sm leading-5 text-neutral-500">
-          Current trade value includes players and resolvable draft picks. Historical player value uses the nearest stored KTC observation. A winner or grade is withheld when required asset coverage is incomplete.
+          Historical player value uses the nearest stored KTC observation. Current trade audits require complete asset coverage and use consolidation-adjusted package value instead of simple addition.
         </p>
       </div>
 
+      {!pickMarketAvailable ? (
+        <div className="rounded-lg border border-amber-900/70 bg-amber-950/20 p-3 text-[10px] leading-4 text-amber-300">
+          A fresh current draft-pick market could not be verified. Trades containing picks therefore remain incomplete rather than assigning stale or invented pick values.
+        </div>
+      ) : null}
+
       <div className="space-y-3">
-        {rows.map((t) => (
-          <article key={t.id} className="min-w-0 rounded-lg border border-neutral-800 bg-neutral-900 p-3 sm:p-4">
+        {rows.map((transaction) => (
+          <article key={transaction.id} className="min-w-0 rounded-lg border border-neutral-800 bg-neutral-900 p-3 sm:p-4">
             <div className="mb-3 flex min-w-0 items-center justify-between gap-3 text-[10px] text-neutral-600">
-              <span className="rounded bg-neutral-800 px-2 py-1 font-medium text-neutral-300">{TYPE_LABEL[t.type] ?? t.type}</span>
-              <span className="shrink-0 text-right">{formatDateTimeEastern(t.sleeperCreatedAt.toISOString())}</span>
+              <span className="rounded bg-neutral-800 px-2 py-1 font-medium text-neutral-300">{TYPE_LABEL[transaction.type] ?? transaction.type}</span>
+              <span className="shrink-0 text-right">{formatDateTimeEastern(transaction.sleeperCreatedAt.toISOString())}</span>
             </div>
 
-            {t.type === "trade" && t.tradeSides.length >= 2 ? (
+            {transaction.type === "trade" && transaction.tradeSides.length >= 2 ? (
               <div className="mb-3 rounded-lg border border-neutral-800 bg-neutral-950 p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-[10px] font-medium uppercase tracking-wide text-neutral-500">Current trade value · picks included</span>
-                  {t.tradeCoverageComplete && t.currentWinner && t.runnerUp ? (
-                    <span className="text-[10px] text-emerald-300">Complete coverage · edge {formatSigned(t.currentWinner.currentTotal - t.runnerUp.currentTotal)}</span>
+                  <span className="text-[10px] font-medium uppercase tracking-wide text-neutral-500">Current trade audit · consolidation adjusted</span>
+                  {transaction.tradeCoverageComplete && transaction.currentWinner && transaction.runnerUp ? (
+                    <span className="text-[10px] text-emerald-300">
+                      Complete coverage · adjusted edge {formatSigned((transaction.currentWinner.adjustedTotal ?? 0) - (transaction.runnerUp.adjustedTotal ?? 0))}
+                    </span>
                   ) : (
-                    <span className="text-[10px] text-amber-300">Incomplete coverage · no winner declared</span>
+                    <span className="text-[10px] text-amber-300">Incomplete coverage · no leader declared</span>
                   )}
                 </div>
+
                 <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                  {t.tradeSides.map((side) => (
-                    <div key={side.rosterId} className="flex min-w-0 items-center justify-between gap-3 rounded-md bg-neutral-900 px-3 py-2">
+                  {transaction.tradeSides.map((side) => (
+                    <div key={side.rosterId} className="grid min-w-0 grid-cols-[1fr_auto] items-center gap-3 rounded-md bg-neutral-900 px-3 py-2">
                       <span className="min-w-0 truncate text-xs text-neutral-300">{side.name}</span>
                       <div className="shrink-0 text-right">
-                        <div className="text-sm font-semibold tabular-nums text-neutral-100">{formatPoints(side.currentTotal)}</div>
-                        <div className={`text-[9px] ${side.complete ? "text-neutral-600" : "text-amber-500"}`}>{side.covered}/{side.totalAssets} valued</div>
+                        <div className="text-sm font-semibold tabular-nums text-neutral-100">
+                          {side.adjustedTotal !== null ? formatPoints(side.adjustedTotal) : "—"}
+                        </div>
+                        <div className="text-[9px] text-neutral-600">adjusted · raw {formatPoints(side.rawTotal)}</div>
+                        <div className={`text-[9px] ${side.complete ? "text-neutral-700" : "text-amber-500"}`}>
+                          {side.covered}/{side.totalAssets} assets valued{side.packageAdjustment ? ` · −${formatPoints(side.packageAdjustment)} package adj.` : ""}
+                        </div>
                       </div>
                     </div>
                   ))}
                 </div>
-                {t.tradeCoverageComplete && t.currentWinner ? (
-                  <p className="mt-2 text-[10px] leading-4 text-neutral-500">Current-value leader: <span className="font-medium text-emerald-300">{t.currentWinner.name}</span>. This is a current market comparison, not a claim about who made the better decision at the transaction date.</p>
+
+                {transaction.tradeCoverageComplete && transaction.currentWinner ? (
+                  <p className="mt-2 text-[10px] leading-4 text-neutral-500">
+                    Current adjusted-value leader: <span className="font-medium text-emerald-300">{transaction.currentWinner.name}</span>. Raw totals remain visible for audit. This is a current market comparison, not a judgment of the decision at the original trade date.
+                  </p>
                 ) : (
-                  <p className="mt-2 text-[10px] leading-4 text-neutral-500">At least one acquired asset lacks a current value, so side totals are shown only as partial information. Missing value is not treated as zero.</p>
+                  <p className="mt-2 text-[10px] leading-4 text-neutral-500">
+                    At least one acquired asset lacks a current verified value. Missing value is never treated as zero, so the dashboard withholds a winner.
+                  </p>
                 )}
               </div>
             ) : null}
 
-            {t.type !== "trade" ? (
-              t.rosterMoveNet !== null ? (
+            {transaction.type !== "trade" ? (
+              transaction.rosterMoveNet !== null ? (
                 <div className="mb-3 flex min-w-0 items-center justify-between gap-3 rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2 text-xs">
                   <span className="min-w-0 text-neutral-500">Move value at nearest stored KTC snapshot</span>
-                  <span className={`shrink-0 ${trendColorClass(t.rosterMoveNet)}`}><strong>{t.rosterMoveGrade}</strong> · {formatSigned(t.rosterMoveNet)}</span>
+                  <span className={`shrink-0 ${trendColorClass(transaction.rosterMoveNet)}`}><strong>{transaction.rosterMoveGrade}</strong> · {formatSigned(transaction.rosterMoveNet)}</span>
                 </div>
-              ) : t.assets.length ? (
-                <div className="mb-3 rounded-md border border-amber-900/60 bg-amber-950/20 px-3 py-2 text-[10px] leading-4 text-amber-300">No move grade: at least one added/dropped player has no usable KTC observation near the transaction date.</div>
+              ) : transaction.assets.length ? (
+                <div className="mb-3 rounded-md border border-amber-900/60 bg-amber-950/20 px-3 py-2 text-[10px] leading-4 text-amber-300">
+                  No move grade: at least one added/dropped player has no usable KTC observation near the transaction date.
+                </div>
               ) : null
             ) : null}
 
             <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
-              {t.assets.map((a, i) => (
-                <div key={i} className="grid min-w-0 grid-cols-[1fr_auto] items-center gap-3 rounded-md bg-neutral-950 px-3 py-2">
+              {transaction.assets.map((asset, index) => (
+                <div key={index} className="grid min-w-0 grid-cols-[1fr_auto] items-center gap-3 rounded-md bg-neutral-950 px-3 py-2">
                   <div className="min-w-0">
                     <div className="min-w-0 truncate text-xs">
-                      <span className={a.kind === "add" ? "text-emerald-400" : "text-red-400"}>{a.kind === "add" ? "+ " : "− "}</span>
-                      {a.playerId ? <Link href={`/players/${a.playerId}`} className="text-neutral-100 hover:text-emerald-300">{a.label}</Link> : <span className="text-neutral-100">{a.label}</span>}
+                      <span className={asset.kind === "add" ? "text-emerald-400" : "text-red-400"}>{asset.kind === "add" ? "+ " : "− "}</span>
+                      {asset.playerId ? <Link href={`/players/${asset.playerId}`} className="text-neutral-100 hover:text-emerald-300">{asset.label}</Link> : <span className="text-neutral-100">{asset.label}</span>}
                     </div>
-                    <div className="mt-0.5 truncate text-[9px] text-neutral-600">{a.managerName}{a.assetType === "pick" && "previousManagerName" in a ? ` · from ${a.previousManagerName}` : ""}</div>
+                    <div className="mt-0.5 truncate text-[9px] text-neutral-600">
+                      {asset.managerName}{asset.assetType === "pick" && "previousManagerName" in asset ? ` · from ${asset.previousManagerName}` : ""}
+                    </div>
                   </div>
                   <div className="shrink-0 text-right text-[10px]">
-                    {a.assetType === "player" ? (
+                    {asset.assetType === "player" ? (
                       <>
-                        <div className="text-neutral-500">at move {formatPoints(a.valueAtTx)}{a.valueAtTxApprox ? <span className="text-neutral-700"> · nearest</span> : null}</div>
-                        {a.currentValue !== null && a.valueAtTx !== null ? <div className={trendColorClass(a.currentValue - a.valueAtTx)}>now {formatPoints(a.currentValue)} · {formatSigned(a.currentValue - a.valueAtTx)}</div> : <div className="text-neutral-700">current {formatPoints(a.currentValue)}</div>}
+                        <div className="text-neutral-500">at move {formatPoints(asset.valueAtTx)}{asset.valueAtTxApprox ? <span className="text-neutral-700"> · nearest</span> : null}</div>
+                        {asset.currentValue !== null && asset.valueAtTx !== null ? (
+                          <div className={trendColorClass(asset.currentValue - asset.valueAtTx)}>now {formatPoints(asset.currentValue)} · {formatSigned(asset.currentValue - asset.valueAtTx)}</div>
+                        ) : <div className="text-neutral-700">current {formatPoints(asset.currentValue)}</div>}
                       </>
                     ) : (
                       <>
-                        <div className="text-neutral-400">current {formatPoints(a.currentValue)}</div>
-                        <div className="text-[9px] text-neutral-700">neutral KTC-scale pick market</div>
+                        <div className="text-neutral-400">current {formatPoints(asset.currentValue)}</div>
+                        <div className="text-[9px] text-neutral-700">fresh neutral KTC-scale pick market</div>
                       </>
                     )}
                   </div>
                 </div>
               ))}
-              {t.assets.length === 0 ? <p className="text-xs text-neutral-500">No player or pick assets recorded for this transaction.</p> : null}
+              {transaction.assets.length === 0 ? <p className="text-xs text-neutral-500">No player or pick assets recorded for this transaction.</p> : null}
             </div>
           </article>
         ))}
