@@ -64,11 +64,12 @@ export default async function PlayerDetailPage(props: { params: Promise<{ id: st
     ? ((market.currentValue - market.low.value) / (market.high.value - market.low.value)) * 100
     : null;
   const priceZone = rangePct === null ? "Range forming" : rangePct >= 85 ? "Peak zone" : rangePct <= 15 ? "Floor zone" : "Mid-range";
+  const freshKtc = signalEntry?.ktcValue ?? null;
   const sourceCandidates = [
     { label:"SG→KTC", value:signalEntry?.statsGuyValue ?? null },
     { label:"DD→KTC", value:signalEntry?.dynastyDealerValue ?? null },
-  ].filter((x): x is {label:string;value:number} => market.currentValue !== null && market.currentValue > 0 && x.value !== null);
-  const sourceGapEntry = sourceCandidates.map((x)=>({ ...x, gap:((x.value-market.currentValue!)/market.currentValue!)*100 })).sort((a,b)=>Math.abs(b.gap)-Math.abs(a.gap))[0] ?? null;
+  ].filter((x): x is {label:string;value:number} => freshKtc !== null && freshKtc > 0 && x.value !== null);
+  const sourceGapEntry = sourceCandidates.map((x)=>({ ...x, gap:((x.value-freshKtc!)/freshKtc!)*100 })).sort((a,b)=>Math.abs(b.gap)-Math.abs(a.gap))[0] ?? null;
   const sourceGap = sourceGapEntry?.gap ?? null;
   const p7 = market.change7d?.percent ?? null;
   const p30 = market.change30d?.percent ?? null;
@@ -131,6 +132,12 @@ export default async function PlayerDetailPage(props: { params: Promise<{ id: st
           <p className="mt-3 text-[10px] leading-relaxed text-neutral-600">This is a live rules-based dynasty signal, recalculated from saved KTC history, current roster/depth context, fresh Stats Guy → KTC scale market data, and nflverse production data when the current NFL season has games. It is not a static player label.</p>
         </section>
       )}
+
+      {market.currentValue !== null && freshKtc === null && (signalEntry?.statsGuyValue !== null || signalEntry?.dynastyDealerValue !== null) ? (
+        <div className="rounded-lg border border-amber-700/40 bg-amber-950/20 p-3 text-xs leading-relaxed text-amber-200">
+          <span className="font-semibold">Current KTC anchor unavailable.</span> The KTC number in saved history is historical, not a freshness-qualified live observation. Secondary markets are shown as context only; they are not blended into consensus and cannot trigger a directional recommendation until a fresh KTC anchor is available.
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
         <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-4">

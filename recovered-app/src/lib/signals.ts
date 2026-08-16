@@ -248,10 +248,12 @@ export function computeSignal(market: PlayerMarketData, ctx: RosterContext): Sig
   } else {
     signal = "HOLD";
   }
+  if (ctx.currentKtc === null) signal = "WATCH";
 
   let confidence: Confidence = "MEDIUM";
   if (market.observationCount < 4 || market.isStale || regression.spanDays < 5) confidence = "LOW";
   else if (market.observationCount >= 8 && regression.spanDays >= 14 && !highVol && Math.abs(sourceGapPct ?? 0) < 25) confidence = "HIGH";
+  if (ctx.currentKtc === null) confidence = "LOW";
 
   const summaryMap: Record<SignalType, string> = {
     HOLD: "The evidence is not strong enough to force a move. Hold unless the trade market gives you a clear overpay, the player role changes, or your roster build makes the asset expendable.",
@@ -268,6 +270,10 @@ export function computeSignal(market: PlayerMarketData, ctx: RosterContext): Sig
   if (signal === "WATCH") whatWouldChange.push("Two or more additional non-flat market observations will improve trend confidence.", "A consistent 7-day/30-day direction plus stable NFL role will move the label toward HOLD, BUY LOW, or SELL HIGH.");
   if (signal === "HOLD") whatWouldChange.push("A sharp value spike without matching usage growth could create a SELL HIGH setup.", "A sustained value decline plus depth-chart/usage deterioration could shift the label toward WATCH or CUT LOSSES.");
 
+  if (ctx.currentKtc === null) {
+    reasons.push({ code: "NO_FRESH_KTC_ANCHOR", label: "Current KTC anchor unavailable", detail: "The saved KTC history is retained for context, but there is no freshness-qualified KTC observation in the current market ingest. Secondary values are not allowed to create an action call by themselves.", impact: "NEGATIVE" });
+    whatWouldChange.unshift("A fresh KTC observation is required before the model will issue a directional BUY LOW, SELL HIGH, CUT LOSSES, or CUT BAIT call.");
+  }
   if (market.isStale) reasons.push({ code: "STALE_DATA", label: "Freshness warning", detail: "No confirmed KTC value in the last 48 hours; confidence is reduced", impact: "NEGATIVE" });
   if (market.observationCount < 4) reasons.push({ code: "LOW_SAMPLE", label: "Limited history", detail: `Only ${market.observationCount} valid KTC observations are stored`, impact: "NEUTRAL" });
 

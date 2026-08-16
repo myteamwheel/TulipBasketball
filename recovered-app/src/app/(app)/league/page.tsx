@@ -63,7 +63,7 @@ export default async function LeaguePage() {
   });
 
   const disagreement = entries.map((e) => {
-    const mix=marketMix.get(e.playerId); const ktc=marketData.get(e.playerId)?.currentValue??null;
+    const mix=marketMix.get(e.playerId); const ktc=mix?.ktcValue??null;
     const candidates=[{source:"Stats Guy",value:mix?.statsGuyValue??null},{source:"Dynasty Dealer",value:mix?.dynastyDealerValue??null}]
       .map((x)=>({...x,gap:sourceGapPct(ktc,x.value)})).filter((x):x is typeof x & {gap:number}=>x.gap!==null).sort((a,b)=>Math.abs(b.gap)-Math.abs(a.gap));
     const largest=candidates[0]??null; return {e,ktc,source:largest?.source??null,secondary:largest?.value??null,gap:largest?.gap??null};
@@ -131,7 +131,7 @@ export default async function LeaguePage() {
 
       <section className="grid gap-3 lg:grid-cols-2">
         <div className="space-y-3">
-          <SectionHeader eyebrow="Market disagreement" title="Largest source gaps" description="Stats Guy and Dynasty Dealer are independently translated onto the KTC scale first. Extreme or extrapolated gaps are excluded from consensus; this board is a review queue, not a buy/sell list." />
+          <SectionHeader eyebrow="Market disagreement" title="Largest source gaps" description="Stats Guy and Dynasty Dealer are independently translated onto the KTC scale first. Extreme or extrapolated gaps are excluded from consensus, and no comparison is shown unless the KTC anchor itself is fresh. This board is a review queue, not a buy/sell list." />
           <div className="panel divide-y divide-neutral-800/80 px-4">
             {disagreement.map(({ e, ktc, source, secondary, gap }) => <Link key={e.playerId} href={`/players/${e.playerId}`} className="flex items-center justify-between gap-3 py-3"><div className="min-w-0"><div className="truncate text-sm font-medium text-neutral-100">{e.player.fullName}</div><div className="text-[10px] text-neutral-600">{e.manager.teamName ?? e.manager.displayName} · KTC {formatPoints(ktc)} · {source}→KTC {formatPoints(secondary)}</div></div><div className={`shrink-0 text-sm font-bold ${gap >= 0 ? "text-sky-300" : "text-amber-300"}`}>{gap > 0 ? "+" : ""}{gap.toFixed(1)}%</div></Link>)}
           </div>
