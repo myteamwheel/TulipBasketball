@@ -1,9 +1,10 @@
-FROM node:22-bookworm-slim AS builder
+FROM node:22-bookworm-slim AS app
 
 WORKDIR /app/recovered-app
 
-# Prisma generation needs a syntactically valid datasource during image build;
-# Railway runtime variables override these placeholders in the running service.
+# Prisma generation only needs a syntactically valid datasource during image
+# build. Railway's production variables override these placeholders at runtime
+# and during the pre-deploy refresh.
 ENV DATABASE_URL=postgresql://user:pass@localhost:5432/postgres
 ENV BACKUP_DATABASE_URL=postgresql://user:pass@localhost:5432/postgres
 ENV STATSGUY_REFRESH_ENABLED=false
@@ -17,13 +18,11 @@ RUN npm ci
 COPY recovered-app ./
 RUN npm run build
 
-FROM node:22-bookworm-slim AS runner
-WORKDIR /app
 ENV NODE_ENV=production
 ENV HOSTNAME=0.0.0.0
-
-COPY --from=builder /app/recovered-app/.next/standalone ./
-COPY --from=builder /app/recovered-app/.next/static ./.next/static
-
 EXPOSE 3000
-CMD ["node", "server.js"]
+
+# Keep the application source and node_modules in the runtime image so Railway's
+# pre-deploy command can execute the full TypeScript refresh/backfill job using
+# the service's real production environment variables.
+CMD ["npm", "start", "--", "-p", "3000"]
