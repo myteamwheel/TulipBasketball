@@ -1,0 +1,45 @@
+name: materialize-patch14
+
+on:
+  push:
+    paths: ['.github/workflows/materialize-patch14.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Restore exact Patch 14 source at repository root
+        run: |
+          node bootstrap.js
+          grep -q '"version": "0.14.0"' package.json
+          grep -q 'Patch 14' 'src/app/(app)/settings/page.tsx'
+          grep -q 'DYNASTY_DEALER' src/lib/config.ts
+          grep -q 'TRADYR' src/lib/config.ts
+          test -f scripts/backfill-patch14-history.ts
+          test -f prisma/migrations/20260816120000_patch14_market_sources/migration.sql
+          echo 'PATCH14_SOURCE_MATERIALIZED'
+      - name: Remove deployment transport only
+        run: |
+          rm -f payload.00.txt payload.01.txt payload.02.txt payload.03.txt
+          rm -f patch14-vercel-trigger.txt vercel-build-mode.txt
+      - name: Commit materialized Patch 14
+        run: |
+          git config user.name 'Patch 14 Deployment'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          if git diff --cached --quiet; then
+            echo 'No materialization changes to commit'
+            exit 0
+          fi
+          git commit -m 'Materialize exact Patch 14 app at repository root'
+          git push origin HEAD:main
