@@ -30,3 +30,21 @@ jobs:
         run: |
           npx tsc --noEmit
           npm run build
+      - name: Smoke-test Railway standalone server
+        env:
+          DATABASE_URL: postgresql://user:pass@localhost:5432/postgres
+          BACKUP_DATABASE_URL: postgresql://user:pass@localhost:5432/postgres
+          PORT: "3401"
+          HOSTNAME: 127.0.0.1
+        run: |
+          node .next/standalone/server.js > /tmp/dynasty-server.log 2>&1 &
+          PID=$!
+          trap 'kill $PID 2>/dev/null || true; cat /tmp/dynasty-server.log' EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3401/healthz | grep -q '"ok":true'; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Standalone server failed health check"
+          exit 1
