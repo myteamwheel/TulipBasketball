@@ -33,11 +33,14 @@ jobs:
           fs.writeFileSync(mp,src.replace(before,after));
           console.log(`reconstructed ${Object.keys(base).length} + ${Object.keys(overlay).length}; applied compiler-only settled-result guard`);
           NODE
-      - name: Install and typecheck
+      - name: Install, typecheck, and build
         working-directory: recovered-app
         run: |
           npm install --ignore-scripts
           npx prisma generate
           npx tsc --noEmit
+          npm run build
         env:
           DATABASE_URL: postgresql://user:pass@localhost:5432/postgres
+          BACKUP_DATABASE_URL: postgresql://user:pass@localhost:5432/postgres
+          STATSGUY_REFRESH_ENABLED: "false"
