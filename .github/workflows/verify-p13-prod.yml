@@ -11,11 +11,20 @@ jobs:
         run: |
           set +e
           BASE='https://dynasty-boys-dashboard.vercel.app'
+          GENERATED='https://dynasty-boys-dashboard-58s9g1pwx-myteamwheel-8058s-projects.vercel.app'
+          echo '===== GENERATED DEPLOYMENT ====='
+          for i in {1..18}; do
+            code=$(curl -L --max-time 30 -sS -o /tmp/generated -w '%{http_code}' "$GENERATED/settings")
+            echo "generated attempt=$i status=$code"
+            if [ "$code" = "200" ] && grep -q 'Build: PATCH 13' /tmp/generated; then echo 'GENERATED_PATCH13_READY'; break; fi
+            sleep 7
+          done
+          echo '===== CANONICAL ====='
           for i in {1..24}; do
             code=$(curl -L --max-time 30 -sS -o /tmp/settings -w '%{http_code}' "$BASE/settings")
-            echo "attempt=$i status=$code"
+            echo "canonical attempt=$i status=$code"
             if [ "$code" = "200" ] && grep -q 'Build: PATCH 13' /tmp/settings; then echo 'PATCH13_READY'; break; fi
-            sleep 10
+            sleep 7
           done
           echo '===== ROOT ====='
           curl -L --max-time 30 -sS -o /tmp/root -w 'status=%{http_code}\n' "$BASE/"
@@ -25,10 +34,10 @@ jobs:
           grep -o 'Dynasty Dealer' /tmp/settings | head || true
           grep -o 'Values by Dynasty Dealer' /tmp/settings | head || true
           echo '===== OLD DB AUDIT ====='
-          curl -L --max-time 45 -sS -o /tmp/old -w 'status=%{http_code}\n' "$BASE/api/recovery-old-db-audit"
+          curl -L --max-time 60 -sS -o /tmp/old -w 'status=%{http_code}\n' "$BASE/api/recovery-old-db-audit"
           cat /tmp/old; echo
           echo '===== BACKUP AUDIT ====='
-          curl -L --max-time 45 -sS -o /tmp/backup -w 'status=%{http_code}\n' "$BASE/api/recovery-backup-audit"
+          curl -L --max-time 60 -sS -o /tmp/backup -w 'status=%{http_code}\n' "$BASE/api/recovery-backup-audit"
           cat /tmp/backup; echo
           echo '===== REFRESH BEFORE ====='
           curl -L --max-time 45 -sS "$BASE/api/refresh"; echo
