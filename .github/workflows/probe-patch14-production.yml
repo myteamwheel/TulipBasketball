@@ -1,0 +1,22 @@
+name: probe-patch14-production
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/probe-patch14-production.yml']
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for deployment
+        run: sleep 45
+      - name: Probe production
+        run: |
+          set -x
+          curl -L --max-time 30 -D /tmp/headers.txt -o /tmp/body.html -sS https://dynasty-boys-dashboard-myteamwheel-8058s-projects.vercel.app/ || true
+          cat /tmp/headers.txt || true
+          head -c 3000 /tmp/body.html || true
+          echo
+          grep -Eo 'Biggest KTC changes|Tradyr|Stats Guy|Decision Board|Orlando Oswalds' /tmp/body.html | sort -u || true
+          echo '--- Shedeur page lookup ---'
+          curl -L --max-time 30 -sS https://dynasty-boys-dashboard-myteamwheel-8058s-projects.vercel.app/players | grep -o 'Shedeur Sanders' | head || true
