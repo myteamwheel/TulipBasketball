@@ -42,9 +42,11 @@ export const CONSENSUS_WEIGHTS = {
 export const KTC_AUTHORIZED_FEED_URL = process.env.KTC_AUTHORIZED_FEED_URL?.trim() || null;
 export const KTC_AUTHORIZED_FEED_TOKEN = process.env.KTC_AUTHORIZED_FEED_TOKEN?.trim() || null;
 
-// Anchored to Eastern-Time midnight (EDT, UTC-4 in June).
-export const ORLANDO_BASELINE_DATE = "2026-06-21T04:00:00.000Z";
-export const PRE_BASELINE_DATE = "2026-06-07T04:00:00.000Z";
+// Permanent Orlando historical baseline. These values were preserved in the
+// database as the June 7 seed checkpoint; future short-term changes compare to
+// the immediately previous checkpoint while long-term delta remains anchored here.
+export const ORLANDO_BASELINE_DATE = "2026-06-07T12:00:00.000Z";
+export const PRE_BASELINE_DATE = ORLANDO_BASELINE_DATE;
 export const DISPLAY_TIMEZONE = "America/New_York";
 
 export const STARTING_REQUIREMENTS = {
