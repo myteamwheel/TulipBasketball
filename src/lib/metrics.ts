@@ -13,8 +13,8 @@ export interface PlayerMarketData {
   currentValue: number | null;
   currentObservedAt: string | null;
   dataAgeMs: number | null;
-  isStale: boolean; // no fresh confirmed value; showing last known-good value
-  pendingReview: boolean; // a newer FLAGGED observation exists past the current valid one
+  isStale: boolean;
+  pendingReview: boolean;
   pendingReviewValue: number | null;
   pendingReviewNote: string | null;
   changeSinceLastRefresh: ChangeStat | null;
@@ -29,7 +29,12 @@ export interface PlayerMarketData {
   sparkline: { value: number; observedAt: string }[];
 }
 
-const STALE_MS = 48 * 60 * 60 * 1000; // 48h with no fresh valid observation
+const STALE_MS = 48 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+// A time-window label is only valid if a real observation exists close to that
+// target date. We never substitute June data for a missing August 7-day point.
+const SEVEN_DAY_TOLERANCE_MS = 48 * 60 * 60 * 1000;
+const THIRTY_DAY_TOLERANCE_MS = 72 * 60 * 60 * 1000;
 
 export interface Obs {
   value: number;
@@ -38,7 +43,6 @@ export interface Obs {
   validationNote: string | null;
 }
 
-/** Raw (sorted ascending) non-rejected observation series per player, for callers that need more than the derived summary (e.g. transaction-time lookups). */
 export async function getObservationSeries(playerIds: string[]): Promise<Map<string, Obs[]>> {
   if (playerIds.length === 0) return new Map();
   const observations = await prisma.ktcObservation.findMany({
@@ -82,12 +86,19 @@ function change(current: number, from: Obs): ChangeStat {
 }
 
 function closestAtOrBefore(valid: Obs[], target: Date): Obs | null {
-  // valid is sorted ascending by observedAt
   let result: Obs | null = null;
   for (const o of valid) {
     if (o.observedAt.getTime() <= target.getTime()) result = o;
     else break;
   }
+  return result;
+}
+
+function closestAtOrBeforeWithin(valid: Obs[], target: Date, toleranceMs: number): Obs | null {
+  const result = closestAtOrBefore(valid, target);
+  if (!result) return null;
+  const gap = target.getTime() - result.observedAt.getTime();
+  if (gap < 0 || gap > toleranceMs) return null;
   return result;
 }
 
@@ -97,8 +108,7 @@ function computeForPlayer(now: Date, observations: Obs[]): PlayerMarketData {
   const latestOverall = sorted[sorted.length - 1] ?? null;
   const latestValid = valid[valid.length - 1] ?? null;
 
-  const pendingReview =
-    !!latestOverall && latestOverall.validationStatus === "FLAGGED" && latestOverall !== latestValid;
+  const pendingReview = !!latestOverall && latestOverall.validationStatus === "FLAGGED" && latestOverall !== latestValid;
 
   const currentValue = latestValid?.value ?? null;
   const currentObservedAt = latestValid?.observedAt.toISOString() ?? null;
@@ -106,13 +116,16 @@ function computeForPlayer(now: Date, observations: Obs[]): PlayerMarketData {
   const isStale = dataAgeMs !== null && dataAgeMs > STALE_MS;
 
   const previousValid = valid.length >= 2 ? valid[valid.length - 2] : null;
-  const changeSinceLastRefresh =
-    latestValid && previousValid ? change(latestValid.value, previousValid) : null;
+  const changeSinceLastRefresh = latestValid && previousValid ? change(latestValid.value, previousValid) : null;
 
-  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-  const from7d = latestValid ? closestAtOrBefore(valid.slice(0, -1), sevenDaysAgo) : null;
-  const from30d = latestValid ? closestAtOrBefore(valid.slice(0, -1), thirtyDaysAgo) : null;
+  // Anchor windows to the latest actual observation, not wall-clock time. This
+  // keeps a temporarily stale market from silently shifting the comparison date.
+  const anchor = latestValid?.observedAt ?? now;
+  const sevenDaysAgo = new Date(anchor.getTime() - 7 * DAY_MS);
+  const thirtyDaysAgo = new Date(anchor.getTime() - 30 * DAY_MS);
+  const priorValid = latestValid ? valid.slice(0, -1) : [];
+  const from7d = latestValid ? closestAtOrBeforeWithin(priorValid, sevenDaysAgo, SEVEN_DAY_TOLERANCE_MS) : null;
+  const from30d = latestValid ? closestAtOrBeforeWithin(priorValid, thirtyDaysAgo, THIRTY_DAY_TOLERANCE_MS) : null;
   const change7d = latestValid && from7d ? change(latestValid.value, from7d) : null;
   const change30d = latestValid && from30d ? change(latestValid.value, from30d) : null;
 
@@ -143,7 +156,7 @@ function computeForPlayer(now: Date, observations: Obs[]): PlayerMarketData {
       : null;
 
   return {
-    playerId: "", // filled by caller
+    playerId: "",
     currentValue,
     currentObservedAt,
     dataAgeMs,
@@ -164,7 +177,6 @@ function computeForPlayer(now: Date, observations: Obs[]): PlayerMarketData {
   };
 }
 
-/** Computes full market data for a set of players in a single query pass. */
 export async function computeMarketDataForPlayers(
   playerIds: string[],
 ): Promise<Map<string, PlayerMarketData>> {
