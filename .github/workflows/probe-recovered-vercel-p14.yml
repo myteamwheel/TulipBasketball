@@ -6,19 +6,21 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Probe Git-source recovered production
+      - name: Probe prior-deployment Neon redeploy
         run: |
           set +e
-          base='https://dynasty-boys-dashboard-gitsource-rec-myteamwheel-8058s-projects.vercel.app'
-          for i in $(seq 1 12); do
-            echo "===== attempt $i ====="
-            for p in '/healthz' '/api/debug-home' '/settings' '/'; do
-              code=$(curl -sS -L --max-time 30 -o /tmp/b -w '%{http_code}' "${base}${p}?probe=$(date +%s%N)" || true)
-              echo "$p status=$code body=$(head -c 700 /tmp/b 2>/dev/null | tr '\n' ' ' || true)"
+          for base in \
+            'https://dynasty-boys-dashboard-myteamwheel-8058s-projects.vercel.app' \
+            'https://dynasty-boys-dashboard.vercel.app'; do
+            echo "######## ${base} ########"
+            for i in $(seq 1 12); do
+              echo "===== attempt $i ====="
+              h=$(curl -sS -L --max-time 30 -o /tmp/health -w '%{http_code}' "${base}/healthz?probe=$(date +%s%N)" || true)
+              d=$(curl -sS -L --max-time 30 -o /tmp/debug -w '%{http_code}' "${base}/api/debug-home?probe=$(date +%s%N)" || true)
+              s=$(curl -sS -L --max-time 30 -o /tmp/settings -w '%{http_code}' "${base}/settings?probe=$(date +%s%N)" || true)
+              echo "health=$h debug=$d settings=$s debug_body=$(head -c 900 /tmp/debug 2>/dev/null | tr '\n' ' ' || true)"
+              if [ "$h" = 200 ] && [ "$d" = 200 ] && grep -q '"ok":true' /tmp/debug; then echo "HEALTHY_BASE=$base"; exit 0; fi
+              sleep 10
             done
-            h=$(curl -sS -L --max-time 30 -o /tmp/health -w '%{http_code}' "${base}/healthz?probe=$(date +%s%N)" || true)
-            d=$(curl -sS -L --max-time 30 -o /tmp/debug -w '%{http_code}' "${base}/api/debug-home?probe=$(date +%s%N)" || true)
-            if [ "$h" = 200 ] && [ "$d" = 200 ] && grep -q '"ok":true' /tmp/debug; then echo 'GITSOURCE RECOVERY HEALTHY'; exit 0; fi
-            sleep 10
           done
           exit 1
