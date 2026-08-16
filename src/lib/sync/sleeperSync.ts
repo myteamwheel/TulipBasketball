@@ -18,7 +18,7 @@ import {
 import { ORLANDO_OSWALDS_SLEEPER_USER_ID, SLEEPER_LEAGUE_ID } from "@/lib/config";
 
 export interface SleeperSyncResult {
-  leagueId: string; // internal League.id
+  leagueId: string;
   rosterChangesCount: number;
   playersRefreshed: number;
   mappingWarnings: { sleeperId: string; name: string; reason: string }[];
@@ -43,24 +43,35 @@ function slotFor(roster: SleeperRoster, playerId: string): RosterSlot {
   return RosterSlot.BENCH;
 }
 
-/** Phase 1: pure network I/O, no DB writes. Safe to run outside a transaction. */
+/**
+ * Current ownership is the critical Sleeper payload. The large /players/nfl
+ * catalog and transaction history are useful enrichment, but they are not
+ * allowed to block a roster reconciliation. If either auxiliary request fails,
+ * current rosters still sync and existing player metadata is preserved.
+ */
 async function fetchSleeperData(): Promise<FetchedSleeperData> {
-  const [sleeperLeague, users, rosters, nflState, catalog] = await Promise.all([
+  const [sleeperLeague, users, rosters] = await Promise.all([
     getLeague(SLEEPER_LEAGUE_ID),
     getUsers(SLEEPER_LEAGUE_ID),
     getRosters(SLEEPER_LEAGUE_ID),
-    getNflState(),
-    getPlayerCatalog(),
   ]);
 
+  const nflState = await getNflState().catch(() => ({
+    week: 1,
+    season: sleeperLeague.season,
+    season_type: "unknown",
+  } as SleeperNflState));
+
   const throughWeek = Math.max(1, Math.min(nflState.week || 1, 18));
-  const transactions = await getAllTransactions(SLEEPER_LEAGUE_ID, throughWeek);
+  const [catalog, transactions] = await Promise.all([
+    getPlayerCatalog().catch(() => ({} as Record<string, SleeperPlayer>)),
+    getAllTransactions(SLEEPER_LEAGUE_ID, throughWeek).catch(() => [] as SleeperTransaction[]),
+  ]);
   const completedTransactions = transactions.filter((t) => t.status === "complete");
 
   return { sleeperLeague, users, rosters, nflState, catalog, completedTransactions };
 }
 
-/** Phase 2: pure DB writes. Called inside a single transaction so a failure rolls back cleanly. */
 async function persistSleeperData(
   db: Tx,
   data: FetchedSleeperData,
@@ -110,10 +121,9 @@ async function persistSleeperData(
     data: { isActive: false, isPrimaryTeam: false },
   });
 
-  // --- Managers ------------------------------------------------------
   const managerByRosterId = new Map<number, { id: string }>();
   for (const roster of rosters) {
-    if (roster.owner_id == null) continue; // orphaned roster, skip
+    if (roster.owner_id == null) continue;
     const user = usersById.get(roster.owner_id);
     const displayName = user?.display_name ?? "Unknown Manager";
     const teamName = user?.metadata?.team_name ?? null;
@@ -138,38 +148,46 @@ async function persistSleeperData(
     managerByRosterId.set(roster.roster_id, manager);
   }
 
-  // --- Players (union of all rostered players) ------------------------
   const rosteredPlayerIds = new Set<string>();
   for (const roster of rosters) {
     for (const pid of roster.players ?? []) rosteredPlayerIds.add(pid);
   }
 
+  // Preserve known metadata when the optional global player catalog is unavailable.
+  const existingPlayers = rosteredPlayerIds.size
+    ? await db.player.findMany({ where: { sleeperId: { in: [...rosteredPlayerIds] } } })
+    : [];
+  const existingBySleeperId = new Map(existingPlayers.map((p) => [p.sleeperId, p]));
+
   const mappingWarnings: SleeperSyncResult["mappingWarnings"] = [];
-  const playerInternalId = new Map<string, string>(); // sleeperId -> Player.id
+  const playerInternalId = new Map<string, string>();
 
   for (const sleeperId of rosteredPlayerIds) {
     const meta = catalog[sleeperId];
+    const existing = existingBySleeperId.get(sleeperId);
     const fullName =
-      meta?.full_name ?? ([meta?.first_name, meta?.last_name].filter(Boolean).join(" ") || sleeperId);
-    const position = meta?.position ?? "UNK";
-    // Note: `update` never touches ktcId/mappingStatus, so the returned
-    // player's ktcId reflects prior state — no need for a separate read.
+      meta?.full_name ??
+      ([meta?.first_name, meta?.last_name].filter(Boolean).join(" ") || existing?.fullName || sleeperId);
+    const position = meta?.position ?? existing?.position ?? "UNK";
+    const nflTeam = meta ? (meta.team ?? null) : (existing?.nflTeam ?? null);
+    const status = meta ? (meta.injury_status ?? meta.status ?? null) : (existing?.status ?? null);
+
     const player = await db.player.upsert({
       where: { sleeperId },
       update: {
         fullName,
         normalizedName: normalizePlayerName(fullName),
         position,
-        nflTeam: meta?.team ?? null,
-        status: meta?.injury_status ?? meta?.status ?? null,
+        nflTeam,
+        status,
       },
       create: {
         sleeperId,
         fullName,
         normalizedName: normalizePlayerName(fullName),
         position,
-        nflTeam: meta?.team ?? null,
-        status: meta?.injury_status ?? meta?.status ?? null,
+        nflTeam,
+        status,
         mappingStatus: "NEEDS_REVIEW",
       },
     });
@@ -179,12 +197,13 @@ async function persistSleeperData(
       mappingWarnings.push({
         sleeperId,
         name: fullName,
-        reason: "No KTC mapping yet — the automatic KTC step will attempt to resolve it in this refresh.",
+        reason: meta
+          ? "No KTC mapping yet — the market refresh will attempt to resolve it."
+          : "No KTC mapping and Sleeper player metadata was unavailable on this run.",
       });
     }
   }
 
-  // --- Roster snapshots (audit trail for this refresh run) ------------
   const snapshotRows: {
     refreshRunId: string;
     managerId: string;
@@ -207,11 +226,8 @@ async function persistSleeperData(
       });
     }
   }
-  if (snapshotRows.length > 0) {
-    await db.rosterSnapshot.createMany({ data: snapshotRows });
-  }
+  if (snapshotRows.length > 0) await db.rosterSnapshot.createMany({ data: snapshotRows });
 
-  // --- Transactions -----------------------------------------------------
   const transactionRows = completedTransactions.map((t) => ({
     leagueId: league.id,
     sleeperTransactionId: t.transaction_id,
@@ -230,7 +246,6 @@ async function persistSleeperData(
     : { count: 0 };
   const transactionsRecorded = transactionCreateResult.count;
 
-  // --- Ownership intervals ----------------------------------------------
   const latestAddTimestamp = new Map<string, number>();
   const latestDropTimestamp = new Map<string, number>();
   for (const t of completedTransactions) {
@@ -250,8 +265,6 @@ async function persistSleeperData(
     for (const pid of roster.players ?? []) currentOwnerBySleeperPid.set(pid, roster.roster_id);
   }
 
-  // Include every open interval in the league, including players who were
-  // dropped and therefore are no longer in the current rostered-player union.
   const openIntervals = await db.ownershipInterval.findMany({
     where: { manager: { leagueId: league.id }, validTo: null },
     include: { player: { select: { sleeperId: true } } },
@@ -263,7 +276,10 @@ async function persistSleeperData(
     const currentManager = currentRosterId != null ? managerByRosterId.get(currentRosterId) : undefined;
     if (currentManager?.id === openInterval.managerId) continue;
 
-    const eventTs = Math.max(latestAddTimestamp.get(sleeperPid) ?? 0, latestDropTimestamp.get(sleeperPid) ?? 0);
+    const eventTs = Math.max(
+      latestAddTimestamp.get(sleeperPid) ?? 0,
+      latestDropTimestamp.get(sleeperPid) ?? 0,
+    );
     await db.ownershipInterval.update({
       where: { id: openInterval.id },
       data: { validTo: eventTs > 0 ? new Date(eventTs) : now },
@@ -300,18 +316,9 @@ async function persistSleeperData(
   };
 }
 
-/**
- * Reconciles live Sleeper league state (metadata, users, rosters, players,
- * transactions) into the database. Network fetches happen first; all writes
- * happen in a single transaction so a mid-sync failure leaves the prior
- * successful state completely untouched instead of partially applied.
- */
 export async function syncSleeperState(refreshRunId: string): Promise<SleeperSyncResult> {
   const data = await fetchSleeperData();
   return prisma.$transaction((tx) => persistSleeperData(tx, data, refreshRunId), {
-    // Remote Postgres round-trip latency makes ~2000 sequential statements
-    // (managers, players, roster snapshots, transactions, ownership
-    // intervals) slower than local SQLite; give it real headroom.
     timeout: 180_000,
   });
 }
