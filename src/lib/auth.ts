@@ -5,33 +5,79 @@ export interface SessionData {
   isAuthenticated: boolean;
 }
 
-const sessionSecret =
-  process.env.DASHBOARD_SESSION_SECRET ??
-  "dev-only-insecure-secret-change-me-before-deploying-xxxxxxxxxxxxxxxxxxxxx";
+type Attempt = { count: number; resetAt: number };
 
-export const sessionOptions = {
-  password: sessionSecret,
-  cookieName: "dynasty_boys_session",
-  cookieOptions: {
-    secure: process.env.NODE_ENV === "production",
-  },
-};
+declare global {
+  // eslint-disable-next-line no-var
+  var __dynastyLoginAttempts: Map<string, Attempt> | undefined;
+}
 
-/**
- * Access is password-gated only when DASHBOARD_PASSWORD is set. This keeps
- * local `npm run dev` on localhost frictionless while making the app ready
- * to lock down before any non-local deployment.
- */
+const attempts = globalThis.__dynastyLoginAttempts ?? new Map<string, Attempt>();
+if (process.env.NODE_ENV !== "production") globalThis.__dynastyLoginAttempts = attempts;
+
+const FALLBACK_SESSION_SECRET = "disabled-production-session-secret-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_MAX_FAILURES = 5;
+
+function configuredSessionSecret(): string | null {
+  const value = process.env.DASHBOARD_SESSION_SECRET?.trim() ?? "";
+  return value.length >= 32 ? value : null;
+}
+
+export function authConfigurationValid(): boolean {
+  const password = process.env.DASHBOARD_PASSWORD?.trim() ?? "";
+  if (process.env.NODE_ENV !== "production") return true;
+  return password.length > 0 && configuredSessionSecret() !== null;
+}
+
+function sessionOptions() {
+  return {
+    password: configuredSessionSecret() ?? FALLBACK_SESSION_SECRET,
+    cookieName: "dynasty_boys_session",
+    cookieOptions: {
+      secure: process.env.NODE_ENV === "production",
+      httpOnly: true,
+      sameSite: "lax" as const,
+      maxAge: 60 * 60 * 24 * 14,
+    },
+  };
+}
+
+/** Production is always private. Missing secrets fail closed instead of making
+ * the dashboard public or accepting sessions encrypted with a known fallback. */
 export function authRequired(): boolean {
-  return !!process.env.DASHBOARD_PASSWORD;
+  return process.env.NODE_ENV === "production" || !!process.env.DASHBOARD_PASSWORD;
 }
 
 export async function getSession(): Promise<IronSession<SessionData>> {
-  return getIronSession<SessionData>(await cookies(), sessionOptions);
+  return getIronSession<SessionData>(await cookies(), sessionOptions());
 }
 
 export async function isAuthenticated(): Promise<boolean> {
   if (!authRequired()) return true;
+  if (!authConfigurationValid()) return false;
   const session = await getSession();
   return !!session.isAuthenticated;
+}
+
+export function loginRateLimitStatus(key: string): { allowed: boolean; retryAfterSeconds: number } {
+  const now = Date.now();
+  const row = attempts.get(key);
+  if (!row || row.resetAt <= now) {
+    if (row) attempts.delete(key);
+    return { allowed: true, retryAfterSeconds: 0 };
+  }
+  if (row.count < LOGIN_MAX_FAILURES) return { allowed: true, retryAfterSeconds: 0 };
+  return { allowed: false, retryAfterSeconds: Math.max(1, Math.ceil((row.resetAt - now) / 1000)) };
+}
+
+export function recordLoginFailure(key: string): void {
+  const now = Date.now();
+  const row = attempts.get(key);
+  if (!row || row.resetAt <= now) attempts.set(key, { count: 1, resetAt: now + LOGIN_WINDOW_MS });
+  else attempts.set(key, { count: row.count + 1, resetAt: row.resetAt });
+}
+
+export function clearLoginFailures(key: string): void {
+  attempts.delete(key);
 }

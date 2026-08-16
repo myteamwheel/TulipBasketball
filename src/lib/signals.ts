@@ -2,20 +2,8 @@ import type { PlayerMarketData } from "@/lib/metrics";
 
 export type SignalType = "SELL_HIGH" | "HOLD" | "BUY_LOW" | "CUT_BAIT" | "WATCH";
 export type Confidence = "LOW" | "MEDIUM" | "HIGH";
-
-export interface ReasonCode {
-  code: string;
-  label: string;
-  detail: string;
-}
-
-export interface SignalResult {
-  signal: SignalType;
-  score: number;
-  confidence: Confidence;
-  reasonCodes: ReasonCode[];
-}
-
+export interface ReasonCode { code: string; label: string; detail: string; }
+export interface SignalResult { signal: SignalType; score: number; confidence: Confidence; reasonCodes: ReasonCode[]; }
 export interface RosterContext {
   slot: "STARTER" | "BENCH" | "TAXI" | "IR";
   position: string;
@@ -24,75 +12,42 @@ export interface RosterContext {
 }
 
 const DEPTH_THRESHOLDS: Record<string, { need: number; surplus: number }> = {
-  QB: { need: 2, surplus: 4 },
-  RB: { need: 4, surplus: 7 },
-  WR: { need: 4, surplus: 7 },
-  TE: { need: 2, surplus: 4 },
+  QB: { need: 2, surplus: 4 }, RB: { need: 4, surplus: 7 }, WR: { need: 4, surplus: 7 }, TE: { need: 2, surplus: 4 },
 };
-
-function clamp(n: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, n));
-}
-
+const INJURY_FLAGS = new Set(["Out", "IR", "PUP", "Suspended", "NA"]);
+const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
 function rosterNeedState(ctx: RosterContext): "SURPLUS" | "NEUTRAL" | "NEED" {
-  const t = DEPTH_THRESHOLDS[ctx.position];
-  if (!t) return "NEUTRAL";
-  if (ctx.teamPositionCount >= t.surplus) return "SURPLUS";
-  if (ctx.teamPositionCount <= t.need) return "NEED";
+  const threshold = DEPTH_THRESHOLDS[ctx.position];
+  if (!threshold) return "NEUTRAL";
+  if (ctx.teamPositionCount >= threshold.surplus) return "SURPLUS";
+  if (ctx.teamPositionCount <= threshold.need) return "NEED";
   return "NEUTRAL";
 }
 
-const INJURY_FLAGS = new Set(["Out", "IR", "PUP", "Suspended", "NA"]);
-
 export function computeSignal(market: PlayerMarketData, ctx: RosterContext): SignalResult {
   const reasonCodes: ReasonCode[] = [];
-
   const pct7d = market.change7d?.percent ?? 0;
   const pct30d = market.change30d?.percent ?? 0;
   const hasReliableMomentumWindow = market.change7d !== null || market.change30d !== null;
-  const avgMomentumPct =
-    market.change7d && market.change30d
-      ? 0.6 * pct7d + 0.4 * pct30d
-      : market.change7d
-        ? pct7d
-        : market.change30d
-          ? pct30d
-          : 0;
+  const avgMomentumPct = market.change7d && market.change30d
+    ? 0.6 * pct7d + 0.4 * pct30d
+    : market.change7d ? pct7d : market.change30d ? pct30d : 0;
   const momentumScore = hasReliableMomentumWindow ? clamp(50 + avgMomentumPct * 2, 0, 100) : 50;
 
-  if (market.change7d) {
-    reasonCodes.push({
-      code: pct7d >= 0 ? "MOMENTUM_UP_7D" : "MOMENTUM_DOWN_7D",
-      label: `7-day momentum ${pct7d >= 0 ? "up" : "down"}`,
-      detail: `${pct7d >= 0 ? "+" : ""}${pct7d.toFixed(1)}% over a valid 7-day window`,
-    });
-  }
-  if (market.change30d) {
-    reasonCodes.push({
-      code: pct30d >= 0 ? "MOMENTUM_UP_30D" : "MOMENTUM_DOWN_30D",
-      label: `30-day momentum ${pct30d >= 0 ? "up" : "down"}`,
-      detail: `${pct30d >= 0 ? "+" : ""}${pct30d.toFixed(1)}% over a valid 30-day window`,
-    });
-  }
-  if (!hasReliableMomentumWindow) {
-    reasonCodes.push({
-      code: "WINDOW_GAP",
-      label: "Recent window unavailable",
-      detail: "No stored observation is close enough to the 7-day or 30-day target, so no directional momentum call is made.",
-    });
-  }
+  if (market.change7d) reasonCodes.push({ code: pct7d >= 0 ? "MOMENTUM_UP_7D" : "MOMENTUM_DOWN_7D", label: `7-day momentum ${pct7d >= 0 ? "up" : "down"}`, detail: `${pct7d >= 0 ? "+" : ""}${pct7d.toFixed(1)}% over a valid 7-day window` });
+  if (market.change30d) reasonCodes.push({ code: pct30d >= 0 ? "MOMENTUM_UP_30D" : "MOMENTUM_DOWN_30D", label: `30-day momentum ${pct30d >= 0 ? "up" : "down"}`, detail: `${pct30d >= 0 ? "+" : ""}${pct30d.toFixed(1)}% over a valid 30-day window` });
+  if (!hasReliableMomentumWindow) reasonCodes.push({ code: "WINDOW_GAP", label: "Recent window unavailable", detail: "No valid 7-day or 30-day comparison exists, so the model does not make a momentum call." });
 
-  const distFromHighPct = market.distanceFromHigh?.percent ?? -50;
-  const proximityScore = clamp(100 + distFromHighPct * 1.5, 0, 100);
-  const nearHigh = distFromHighPct >= -10;
-  const bigDrawdown = distFromHighPct <= -30;
-  if (market.high && market.observationCount >= 3) {
-    reasonCodes.push({
-      code: nearHigh ? "NEAR_TRACKED_HIGH" : bigDrawdown ? "LARGE_DRAWDOWN" : "MID_RANGE",
-      label: nearHigh ? "Near tracked high" : bigDrawdown ? "Large drawdown from peak" : "Mid-range from peak",
-      detail: `${distFromHighPct.toFixed(1)}% from tracked high of ${market.high.value}`,
-    });
-  }
+  const hasDecisionRange = market.high !== null && market.distanceFromHigh !== null;
+  const distFromHighPct = market.distanceFromHigh?.percent ?? 0;
+  const proximityScore = hasDecisionRange ? clamp(100 + distFromHighPct * 1.5, 0, 100) : 50;
+  const nearHigh = hasDecisionRange && distFromHighPct >= -10;
+  const bigDrawdown = hasDecisionRange && distFromHighPct <= -30;
+  if (hasDecisionRange && market.high) reasonCodes.push({
+    code: nearHigh ? "NEAR_TRACKED_HIGH" : bigDrawdown ? "LARGE_DRAWDOWN" : "MID_RANGE",
+    label: nearHigh ? "Near tracked high" : bigDrawdown ? "Large drawdown from peak" : "Mid-range from peak",
+    detail: `${distFromHighPct.toFixed(1)}% from decision-grade tracked high of ${market.high.value}`,
+  });
 
   const needState = rosterNeedState(ctx);
   let rosterScore = 50;
@@ -102,93 +57,38 @@ export function computeSignal(market: PlayerMarketData, ctx: RosterContext): Sig
   if (ctx.slot === "STARTER") rosterScore -= 8;
   if (ctx.slot === "IR") rosterScore -= 15;
   rosterScore = clamp(rosterScore, 0, 100);
-
-  reasonCodes.push({
-    code: `ROSTER_${needState}_${ctx.position}`,
-    label: `${needState === "SURPLUS" ? "Surplus" : needState === "NEED" ? "Need" : "Adequate depth"} at ${ctx.position}`,
-    detail: `${ctx.teamPositionCount} roster-relevant ${ctx.position}s on this roster`,
-  });
+  reasonCodes.push({ code: `ROSTER_${needState}_${ctx.position}`, label: `${needState === "SURPLUS" ? "Surplus" : needState === "NEED" ? "Need" : "Adequate depth"} at ${ctx.position}`, detail: `${ctx.teamPositionCount} roster-relevant ${ctx.position}s on this roster` });
 
   let statusScore = 60;
   const flagged = ctx.status ? INJURY_FLAGS.has(ctx.status) : false;
-  if (flagged) {
-    statusScore = 15;
-    reasonCodes.push({
-      code: "STATUS_FLAG",
-      label: "Availability flag",
-      detail: `Sleeper reports ${ctx.status}`,
-    });
-  }
+  if (flagged) { statusScore = 15; reasonCodes.push({ code: "STATUS_FLAG", label: "Availability flag", detail: `Sleeper reports ${ctx.status}` }); }
 
   const recent = market.sparkline.slice(-8);
   let volatility = 0;
   if (recent.length >= 3) {
-    const pctChanges: number[] = [];
-    for (let i = 1; i < recent.length; i++) {
-      const prev = recent[i - 1].value;
-      if (prev !== 0) pctChanges.push((recent[i].value - prev) / prev);
-    }
-    const mean = pctChanges.reduce((s, x) => s + x, 0) / (pctChanges.length || 1);
-    const variance = pctChanges.reduce((s, x) => s + (x - mean) ** 2, 0) / (pctChanges.length || 1);
-    volatility = Math.sqrt(variance);
+    const changes: number[] = [];
+    for (let i = 1; i < recent.length; i++) if (recent[i - 1].value !== 0) changes.push((recent[i].value - recent[i - 1].value) / recent[i - 1].value);
+    const mean = changes.reduce((sum, value) => sum + value, 0) / (changes.length || 1);
+    volatility = Math.sqrt(changes.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (changes.length || 1));
   }
 
-  const score = Math.round(
-    momentumScore * 0.35 + proximityScore * 0.25 + rosterScore * 0.25 + statusScore * 0.15,
-  );
-
+  const score = Math.round(momentumScore * 0.35 + proximityScore * 0.25 + rosterScore * 0.25 + statusScore * 0.15);
   const anchorMs = market.currentObservedAt ? new Date(market.currentObservedAt).getTime() : Date.now();
-  const recent14Count = market.sparkline.filter((p) => anchorMs - new Date(p.observedAt).getTime() <= 14 * 24 * 60 * 60 * 1000).length;
+  const recent14Count = market.sparkline.filter((point) => anchorMs - new Date(point.observedAt).getTime() <= 14 * 24 * 60 * 60 * 1000).length;
 
   let confidence: Confidence = "MEDIUM";
-  if (market.observationCount < 3 || market.dataAgeMs === null || recent14Count < 2 || !hasReliableMomentumWindow) {
-    confidence = "LOW";
-  } else if (market.observationCount >= 6 && recent14Count >= 3 && !market.isStale && volatility < 0.15) {
-    confidence = "HIGH";
-  }
-  if (market.isStale) {
-    confidence = "LOW";
-    reasonCodes.push({ code: "STALE_DATA", label: "Stale data", detail: "No confirmed KTC value in the last 48 hours" });
-  }
+  if (market.observationCount < 3 || market.dataAgeMs === null || recent14Count < 2 || !hasReliableMomentumWindow) confidence = "LOW";
+  else if (market.observationCount >= 6 && recent14Count >= 3 && !market.isStale && volatility < 0.15) confidence = "HIGH";
+  if (market.isStale) { confidence = "LOW"; reasonCodes.push({ code: "STALE_DATA", label: "Stale KTC anchor", detail: "The latest KTC observation is outside the dashboard freshness window." }); }
 
   let signal: SignalType = "HOLD";
-
-  if (market.observationCount < 3 || !hasReliableMomentumWindow || recent14Count < 2) {
-    signal = "WATCH";
-  } else if (flagged) {
-    signal = ctx.slot === "STARTER" ? "HOLD" : "WATCH";
-  } else if (
-    nearHigh &&
-    (pct7d > 5 || pct30d > 10) &&
-    (needState === "SURPLUS" || ctx.slot === "BENCH" || ctx.slot === "TAXI") &&
-    score >= 70
-  ) {
-    signal = "SELL_HIGH";
-  } else if (
-    bigDrawdown &&
-    ctx.slot !== "IR" &&
-    needState !== "SURPLUS" &&
-    !flagged &&
-    (market.currentValue ?? 0) >= 800
-  ) {
-    signal = "BUY_LOW";
-  } else if (
-    (market.currentValue ?? 9999) < 1000 &&
-    pct30d < -10 &&
-    (ctx.slot === "BENCH" || ctx.slot === "TAXI") &&
-    needState === "SURPLUS"
-  ) {
-    signal = "CUT_BAIT";
-  } else if (volatility > 0.25 && market.observationCount < 6) {
-    signal = "WATCH";
-  } else {
-    signal = "HOLD";
-    reasonCodes.push({
-      code: "STABLE",
-      label: "No compelling edge",
-      detail: "Current value, recent movement, and roster context do not support a directional action.",
-    });
-  }
+  if (market.isStale || market.observationCount < 3 || !hasReliableMomentumWindow || recent14Count < 2) signal = "WATCH";
+  else if (flagged) signal = ctx.slot === "STARTER" ? "HOLD" : "WATCH";
+  else if (nearHigh && (pct7d > 5 || pct30d > 10) && (needState === "SURPLUS" || ctx.slot === "BENCH" || ctx.slot === "TAXI") && score >= 70) signal = "SELL_HIGH";
+  else if (bigDrawdown && ctx.slot !== "IR" && needState !== "SURPLUS" && !flagged && (market.currentValue ?? 0) >= 800) signal = "BUY_LOW";
+  else if ((market.currentValue ?? 9999) < 1000 && market.change30d !== null && pct30d < -10 && (ctx.slot === "BENCH" || ctx.slot === "TAXI") && needState === "SURPLUS") signal = "CUT_BAIT";
+  else if (volatility > 0.25 && market.observationCount < 6) signal = "WATCH";
+  else reasonCodes.push({ code: "STABLE", label: "No compelling edge", detail: "Current value, valid recent movement, and roster context do not support a directional action." });
 
   return { signal, score, confidence, reasonCodes };
 }
