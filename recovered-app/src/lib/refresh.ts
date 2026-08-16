@@ -1,10 +1,11 @@
 import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { syncSleeperState } from "@/lib/sync/sleeperSync";
-import { REFRESH_STALE_MS, SLEEPER_LEAGUE_ID } from "@/lib/config";
+import { MARKET_SOURCE_MAX_AGE_MS, REFRESH_STALE_MS, SLEEPER_LEAGUE_ID } from "@/lib/config";
 import { getLeague } from "@/lib/sleeper";
 import { persistSignalsForRun } from "@/lib/signalsEngine";
 import { refreshLiveMarketSources, type MarketSourceStatus } from "@/lib/marketSources";
+import { refreshTradyrSource } from "@/lib/tradyrSource";
 import { writeSecondaryBackup } from "@/lib/secondaryBackup";
 
 export interface RefreshRunView {
@@ -87,7 +88,7 @@ async function createRefreshRun(trigger?: string): Promise<string> {
     sleeperId: SLEEPER_LEAGUE_ID, name: sleeperLeague?.name ?? "Dynasty Bois", season: sleeperLeague?.season ?? "unknown",
     format: "Superflex, 0.5 PPR, no TE premium", settings: "{}",
   }});
-  const requestedSources = ["sleeper", "ktc", "statsguy", "dynastydealer", "consensus", "nflverse-context"];
+  const requestedSources = ["sleeper", "ktc", "tradyr", "dynastydealer", "statsguy-diagnostic", "consensus", "nflverse-context", "secondary-backup"];
   if (trigger) requestedSources.push(trigger);
   try {
     const run = await prisma.refreshRun.create({ data: { leagueId: league.id, requestedSources: JSON.stringify(requestedSources), status: "RUNNING" } });
@@ -146,18 +147,39 @@ async function executeRefresh(runId: string): Promise<void> {
     errors.push({ source: "market", message: err instanceof Error ? err.message : String(err) });
   }
 
-  // Sleeper's first-pass warnings are generated before the KTC collector gets a
-  // chance to auto-map names. Recompute them so the UI never says hundreds of
-  // players need manual mapping immediately after a successful KTC pull.
+  // Tradyr is run after KTC so it can be translated onto KTC scale and then
+  // rebuild consensus without including Stats Guy distortions.
+  try {
+    const tradyr = await refreshTradyrSource(runId);
+    marketSourceStatuses.push(tradyr.status as unknown as MarketSourceStatus);
+    marketObservationsStored += tradyr.observationsStored;
+    consensusPlayersStored = Math.max(consensusPlayersStored, tradyr.consensusPlayersStored);
+    if (!tradyr.status.ok) errors.push({ source: "tradyr", message: tradyr.status.message });
+  } catch (err) {
+    errors.push({ source: "tradyr", message: err instanceof Error ? err.message : String(err) });
+  }
+
+  // Sleeper identifies every rostered player by ID. A player should only be
+  // listed as unresolved if the refresh cannot find a current usable market
+  // observation from KTC, Tradyr, or Dynasty Dealer. No more "Unmapped player"
+  // placeholders for known Sleeper assets.
   try {
     const remaining = await prisma.player.findMany({
       where: {
         mappingStatus: { not: "MAPPED" },
         ownershipIntervals: { some: { validTo: null, manager: { league: { sleeperId: SLEEPER_LEAGUE_ID } } } },
       },
-      select: { sleeperId: true, fullName: true },
+      select: { id: true, sleeperId: true, fullName: true, position: true },
     });
-    mappingWarnings = remaining.map((p) => ({ sleeperId: p.sleeperId, name: p.fullName, reason: "No live KTC mapping after this refresh." }));
+    const cutoff = new Date(Date.now() - MARKET_SOURCE_MAX_AGE_MS);
+    const valued = remaining.length ? await prisma.marketObservation.findMany({
+      where: { playerId: { in: remaining.map((p) => p.id) }, observedAt: { gte: cutoff }, source: { in: ["KTC", "TRADYR" as any, "DYNASTYDEALER" as any] } } as any,
+      select: { playerId: true, source: true },
+    }) : [];
+    const valuedIds = new Set((valued as { playerId: string }[]).map((v) => v.playerId));
+    mappingWarnings = remaining
+      .filter((p) => !valuedIds.has(p.id))
+      .map((p) => ({ sleeperId: p.sleeperId, name: `${p.fullName} (${p.position})`, reason: `Identified via Sleeper ID ${p.sleeperId}, but no current KTC/Tradyr/Dynasty Dealer market value was found in this refresh.` }));
   } catch (err) {
     errors.push({ source: "mapping", message: err instanceof Error ? err.message : String(err) });
   }
