@@ -7,21 +7,16 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Probe deployment and production alias
+      - name: Probe public production diagnostics
         run: |
           set +e
-          for u in \
-            'https://dynasty-boys-dashboard-et6a7w0q3-myteamwheel-8058s-projects.vercel.app/' \
-            'https://dynasty-boys-dashboard-myteamwheel-8058s-projects.vercel.app/' \
-            'https://dynasty-boys-dashboard.vercel.app/'; do
+          for path in '/api/debug-home' '/api/recovery-backup-audit' '/settings' '/'; do
+            u="https://dynasty-boys-dashboard.vercel.app${path}"
             echo "===== $u ====="
-            curl -L --max-time 30 -sS -D /tmp/h -o /tmp/b "$u"
-            code=$?
-            echo "curl_exit=$code"
-            head -20 /tmp/h || true
-            echo '--- feature markers ---'
-            grep -Eio 'Biggest KTC changes|Tradyr|Dynasty Dealer|Stats Guy|Decision Board|Orlando Oswalds|Persistent performance history|server error|This page couldn.t load' /tmp/b | head -80 || true
-            echo '--- error clues ---'
-            grep -Eio '.{0,120}(digest|error|database|relation|column|prisma|connect|undefined|exception|DATABASE_URL).{0,240}' /tmp/b | head -30 || true
-            echo "body_bytes=$(wc -c < /tmp/b 2>/dev/null || echo 0)"
+            curl --max-time 30 -sS -D /tmp/h -o /tmp/b "$u"
+            echo "curl_exit=$? status=$(awk 'NR==1{print $2}' /tmp/h)"
+            head -12 /tmp/h || true
+            echo '--- BODY ---'
+            head -c 12000 /tmp/b || true
+            echo
           done
