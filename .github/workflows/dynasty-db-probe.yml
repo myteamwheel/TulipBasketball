@@ -1,0 +1,26 @@
+name: dynasty-db-probe
+on:
+  push:
+    branches: [dynasty-db-diagnostic-probe-20260816]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe live and diagnostic deployments
+        shell: bash
+        run: |
+          set +e
+          for url in \
+            'https://dynasty-boys-dashboard.vercel.app' \
+            'https://dynasty-boys-dashboard-qv6bro5vx-myteamwheel-8058s-projects.vercel.app' \
+            'https://dynasty-boys-dashboard-myteamwheel-8058s-projects.vercel.app'; do
+            echo "===== $url ====="
+            curl -L --max-time 30 -sS -D /tmp/h "$url" -o /tmp/b
+            code=$?
+            echo "curl_exit=$code"
+            echo '--- headers ---'
+            cat /tmp/h || true
+            echo '--- body first 12000 bytes ---'
+            head -c 12000 /tmp/b || true
+            echo
+          done
