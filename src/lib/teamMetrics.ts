@@ -8,14 +8,19 @@ export interface TeamValuation {
   teamName: string;
   totalValue: number;
   starterValue: number;
-  benchValue: number; // bench + taxi + IR
+  benchValue: number;
   playerCount: number;
+  valuedPlayerCount: number;
   unmappedCount: number;
   positionalValue: Record<string, number>;
-  changeSinceLastRefresh: number;
-  change7d: number;
-  change30d: number;
+  changeSinceLastRefresh: number | null;
+  changeSinceLastRefreshCoverage: number;
+  change7d: number | null;
+  change7dCoverage: number;
+  change30d: number | null;
+  change30dCoverage: number;
   changeSinceBaseline: number | null;
+  changeSinceBaselineCoverage: number;
 }
 
 export async function getLatestSlotMap(): Promise<Map<string, string>> {
@@ -59,29 +64,43 @@ export async function computeAllTeamValuations(): Promise<TeamValuation[]> {
     let totalValue = 0;
     let starterValue = 0;
     let benchValue = 0;
+    let valuedPlayerCount = 0;
     let unmappedCount = 0;
     let changeSinceLastRefresh = 0;
+    let changeSinceLastRefreshCoverage = 0;
     let change7d = 0;
+    let change7dCoverage = 0;
     let change30d = 0;
+    let change30dCoverage = 0;
     let changeSinceBaseline = 0;
-    let hasBaseline = false;
+    let changeSinceBaselineCoverage = 0;
     const positionalValue: Record<string, number> = {};
 
     for (const { playerId, position, market } of roster) {
       const value = market.currentValue ?? 0;
       if (market.currentValue === null) unmappedCount++;
+      else valuedPlayerCount++;
       totalValue += value;
       positionalValue[position] = (positionalValue[position] ?? 0) + value;
       const slot = slotMap.get(`${manager.id}:${playerId}`);
       if (slot === "STARTER") starterValue += value;
       else benchValue += value;
 
-      changeSinceLastRefresh += market.changeSinceLastRefresh?.points ?? 0;
-      change7d += market.change7d?.points ?? 0;
-      change30d += market.change30d?.points ?? 0;
+      if (market.changeSinceLastRefresh) {
+        changeSinceLastRefresh += market.changeSinceLastRefresh.points;
+        changeSinceLastRefreshCoverage++;
+      }
+      if (market.change7d) {
+        change7d += market.change7d.points;
+        change7dCoverage++;
+      }
+      if (market.change30d) {
+        change30d += market.change30d.points;
+        change30dCoverage++;
+      }
       if (market.changeSinceBaseline) {
         changeSinceBaseline += market.changeSinceBaseline.points;
-        hasBaseline = true;
+        changeSinceBaselineCoverage++;
       }
     }
 
@@ -92,12 +111,17 @@ export async function computeAllTeamValuations(): Promise<TeamValuation[]> {
       starterValue,
       benchValue,
       playerCount: roster.length,
+      valuedPlayerCount,
       unmappedCount,
       positionalValue,
-      changeSinceLastRefresh,
-      change7d,
-      change30d,
-      changeSinceBaseline: hasBaseline ? changeSinceBaseline : null,
+      changeSinceLastRefresh: changeSinceLastRefreshCoverage ? changeSinceLastRefresh : null,
+      changeSinceLastRefreshCoverage,
+      change7d: change7dCoverage ? change7d : null,
+      change7dCoverage,
+      change30d: change30dCoverage ? change30d : null,
+      change30dCoverage,
+      changeSinceBaseline: changeSinceBaselineCoverage ? changeSinceBaseline : null,
+      changeSinceBaselineCoverage,
     };
   });
 }
