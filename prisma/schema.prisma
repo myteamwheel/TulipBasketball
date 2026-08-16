@@ -1,0 +1,317 @@
+// Dynasty Boys - Live KTC Market Dashboard
+// Data model. History tables (KtcObservation, RosterSnapshot, Transaction,
+// RefreshRun) are append-only by convention — application code must never
+// UPDATE or DELETE rows in those tables, only INSERT.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// League / roster source of truth (mirrors Sleeper)
+// ---------------------------------------------------------------------------
+
+model League {
+  id          String   @id @default(cuid())
+  sleeperId   String   @unique
+  name        String
+  season      String
+  format      String // e.g. "Superflex, 0.5 PPR, no TE premium"
+  settings    String // raw JSON blob of Sleeper league settings/scoring/roster_positions
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  managers     Manager[]
+  transactions Transaction[]
+  refreshRuns  RefreshRun[]
+}
+
+model Manager {
+  id               String   @id @default(cuid())
+  league           League   @relation(fields: [leagueId], references: [id])
+  leagueId         String
+  sleeperUserId    String
+  sleeperRosterId  Int
+  displayName      String
+  teamName         String?
+  isPrimaryTeam    Boolean  @default(false) // true for Orlando Oswalds
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  ownershipIntervals OwnershipInterval[]
+  rosterSnapshots    RosterSnapshot[]
+
+  @@unique([leagueId, sleeperRosterId])
+  @@index([leagueId, sleeperUserId])
+}
+
+// ---------------------------------------------------------------------------
+// Players — canonical identity + Sleeper <-> KTC mapping
+// ---------------------------------------------------------------------------
+
+enum MappingStatus {
+  MAPPED
+  NEEDS_REVIEW
+  UNMAPPED
+}
+
+model Player {
+  id              String        @id @default(cuid())
+  sleeperId       String        @unique
+  ktcId           String?       @unique
+  fullName        String
+  normalizedName  String // lowercased, punctuation/suffix-stripped, for fallback matching
+  position        String
+  nflTeam         String?
+  status          String? // Active, Injured Reserve, etc (Sleeper status)
+  mappingStatus   MappingStatus @default(NEEDS_REVIEW)
+  mappingNote     String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  ktcObservations       KtcObservation[]
+  marketObservations    MarketObservation[]
+  consensusObservations ConsensusObservation[]
+  ownershipIntervals    OwnershipInterval[]
+  rosterSnapshots    RosterSnapshot[]
+  signals            Signal[]
+  notes              UserNote[]
+
+  @@index([normalizedName])
+  @@index([position])
+}
+
+// ---------------------------------------------------------------------------
+// Ownership — time-aware, separate from a player's value history
+// ---------------------------------------------------------------------------
+
+model OwnershipInterval {
+  id                    String    @id @default(cuid())
+  player                Player    @relation(fields: [playerId], references: [id])
+  playerId              String
+  manager               Manager   @relation(fields: [managerId], references: [id])
+  managerId             String
+  validFrom             DateTime
+  validTo               DateTime? // null = current owner
+  sourceTransactionId   String? // Sleeper transaction id that caused this, if known
+  createdAt             DateTime  @default(now())
+
+  @@index([playerId, validFrom])
+  @@index([managerId, validFrom])
+}
+
+// Point-in-time full roster capture for each refresh run (audit trail of
+// exactly what Sleeper reported at that moment, independent of our derived
+// ownership intervals).
+enum RosterSlot {
+  STARTER
+  BENCH
+  TAXI
+  IR
+}
+
+model RosterSnapshot {
+  id            String     @id @default(cuid())
+  refreshRun    RefreshRun @relation(fields: [refreshRunId], references: [id])
+  refreshRunId  String
+  manager       Manager    @relation(fields: [managerId], references: [id])
+  managerId     String
+  player        Player     @relation(fields: [playerId], references: [id])
+  playerId      String
+  slot          RosterSlot
+  observedAt    DateTime
+
+  @@index([refreshRunId, managerId])
+  @@index([playerId, observedAt])
+}
+
+// ---------------------------------------------------------------------------
+// KTC market value observations — append-only
+// ---------------------------------------------------------------------------
+
+enum KtcSourceType {
+  SEED_BASELINE
+  MANUAL_CSV
+  MANUAL_JSON
+  AUTO_SCRAPE
+}
+
+enum ValidationStatus {
+  VALID
+  FLAGGED
+  REJECTED
+}
+
+model KtcObservation {
+  id                String            @id @default(cuid())
+  player            Player            @relation(fields: [playerId], references: [id])
+  playerId          String
+  value             Int
+  format            String            @default("SF-0.5PPR-noTEP")
+  observedAt        DateTime
+  sourceType        KtcSourceType
+  sourceUrl         String? // KTC page/profile URL if known, or import filename
+  importBatchId     String? // groups rows imported together
+  refreshRunId      String?
+  validationStatus  ValidationStatus  @default(VALID)
+  validationNote    String?
+  createdAt         DateTime          @default(now())
+
+  @@index([playerId, observedAt])
+  @@index([importBatchId])
+}
+
+
+// ---------------------------------------------------------------------------
+// Multi-source dynasty market observations + weighted consensus
+// ---------------------------------------------------------------------------
+
+enum MarketSource {
+  KTC
+  TRADYR
+  DYNASTY_DEALER
+  FANTASYCALC
+  STATSGUY
+}
+
+model MarketObservation {
+  id               String       @id @default(cuid())
+  player           Player       @relation(fields: [playerId], references: [id])
+  playerId         String
+  source           MarketSource
+  rawValue         Int
+  normalizedValue  Int
+  observedAt       DateTime
+  sourceUpdatedAt  DateTime?
+  sourceUrl        String
+  refreshRunId     String?
+  sourceRank       Int?
+  positionRank     Int?
+  metadata         String?
+  createdAt        DateTime     @default(now())
+
+  @@index([playerId, source, observedAt])
+  @@index([source, observedAt])
+  @@index([refreshRunId])
+}
+
+model ConsensusObservation {
+  id            String   @id @default(cuid())
+  player        Player   @relation(fields: [playerId], references: [id])
+  playerId      String
+  value         Int
+  observedAt    DateTime
+  refreshRunId  String
+  sourcesUsed   String   // JSON array of source names
+  sourceCount   Int
+  weights       String   // JSON object of effective normalized weights
+  createdAt     DateTime @default(now())
+
+  @@unique([playerId, refreshRunId])
+  @@index([playerId, observedAt])
+  @@index([refreshRunId])
+}
+
+// ---------------------------------------------------------------------------
+// Transactions — chronological Sleeper league events
+// ---------------------------------------------------------------------------
+
+model Transaction {
+  id                  String   @id @default(cuid())
+  league              League   @relation(fields: [leagueId], references: [id])
+  leagueId            String
+  sleeperTransactionId String  @unique
+  type                String // trade, waiver, free_agent, commissioner
+  status              String
+  sleeperCreatedAt    DateTime
+  rosterIdsInvolved   String // JSON array of sleeper roster ids
+  adds                String? // JSON { playerId: rosterId }
+  drops               String? // JSON { playerId: rosterId }
+  draftPicks          String? // JSON array
+  waiverBudget        String? // JSON array
+  rawPayload          String // full JSON for audit
+  processedAt         DateTime @default(now())
+
+  @@index([leagueId, sleeperCreatedAt])
+}
+
+// ---------------------------------------------------------------------------
+// Refresh runs — orchestration + integrity
+// ---------------------------------------------------------------------------
+
+enum RefreshStatus {
+  RUNNING
+  SUCCESS
+  PARTIAL_FAILURE
+  FAILED
+}
+
+model RefreshRun {
+  id                  String        @id @default(cuid())
+  league              League        @relation(fields: [leagueId], references: [id])
+  leagueId            String
+  startedAt           DateTime      @default(now())
+  finishedAt          DateTime?
+  status              RefreshStatus @default(RUNNING)
+  requestedSources    String // JSON array e.g. ["sleeper","ktc"]
+  sleeperSyncOk       Boolean?
+  ktcSyncOk           Boolean?
+  rosterChangesCount  Int           @default(0)
+  playersRefreshed    Int           @default(0)
+  mappingWarnings     String? // JSON array
+  errors              String? // JSON array of { source, message }
+  summary             String? // JSON summary blob returned to UI
+
+  rosterSnapshots RosterSnapshot[]
+
+  @@index([leagueId, startedAt])
+}
+
+// ---------------------------------------------------------------------------
+// Market signals
+// ---------------------------------------------------------------------------
+
+enum SignalType {
+  SELL_HIGH
+  HOLD
+  BUY_LOW
+  CUT_BAIT
+  WATCH
+}
+
+model Signal {
+  id            String     @id @default(cuid())
+  player        Player     @relation(fields: [playerId], references: [id])
+  playerId      String
+  refreshRunId  String
+  signal        SignalType
+  score         Int // 0-100 transparent market score
+  confidence    String // LOW | MEDIUM | HIGH
+  reasonCodes   String // JSON array of { code, label, detail }
+  createdAt     DateTime   @default(now())
+
+  @@index([playerId, createdAt])
+  @@index([refreshRunId])
+}
+
+// ---------------------------------------------------------------------------
+// User notes
+// ---------------------------------------------------------------------------
+
+model UserNote {
+  id        String   @id @default(cuid())
+  player    Player   @relation(fields: [playerId], references: [id])
+  playerId  String
+  body      String
+  tags      String? // JSON array
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([playerId])
+}

@@ -1,1 +1,0 @@
-Vercel now builds the validated recovered-app directly. Cron config temporarily removed while isolating deployment; re-enable after successful production build.
