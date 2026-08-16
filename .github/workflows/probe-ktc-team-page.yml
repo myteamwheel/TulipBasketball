@@ -1,0 +1,23 @@
+name: probe-ktc-team-page
+on:
+  push:
+    branches: [dynasty-patch14-market-integrity-20260816]
+    paths: ['.github/workflows/probe-ktc-team-page.yml']
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect Free Agent roster around Joe Mixon
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL --max-time 30 -A 'Mozilla/5.0' 'https://keeptradecut.com/dynasty-rankings/team/free-agent' -o /tmp/fa.html
+          python3 <<'PY'
+          import re
+          raw=open('/tmp/fa.html',errors='ignore').read()
+          low=raw.lower(); i=low.find('joe mixon')
+          print('bytes',len(raw),'joe_index',i)
+          if i<0: raise SystemExit(2)
+          chunk=re.sub(r'\s+',' ',raw[max(0,i-2500):i+3500])
+          print(chunk)
+          PY
