@@ -2,8 +2,16 @@
 
 import { useMemo, useState } from "react";
 import type { TradeCalculatorAsset } from "@/lib/tradeFinder";
-import { STRATEGY_LABELS, type StrategyStatus } from "@/lib/strategy";
+import type { StrategyStatus } from "@/lib/strategy";
 
+const STRATEGY_LABELS: Record<StrategyStatus, string> = {
+  UNTOUCHABLE: "Untouchable",
+  KEEP: "Prefer to keep",
+  AVAILABLE: "Available",
+  SHOP: "Actively shop",
+  TARGET: "Target",
+  AVOID: "Avoid",
+};
 const OWN_STATUSES: StrategyStatus[] = ["UNTOUCHABLE", "KEEP", "AVAILABLE", "SHOP"];
 const TARGET_STATUSES: StrategyStatus[] = ["TARGET", "AVOID"];
 
