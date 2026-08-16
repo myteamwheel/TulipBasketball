@@ -1,0 +1,53 @@
+name: build-merged-patch12
+on:
+  push:
+    branches: [dynasty-patch11-exact-reconstruct-20260816b]
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Reconstruct Patch 11
+        shell: bash
+        run: |
+          rm -rf recovered-app && mkdir recovered-app
+          node <<'NODE'
+          const fs=require('fs'),path=require('path'),zlib=require('zlib');
+          const dir='dynasty-patch11';
+          const chunks=fs.readdirSync(dir).filter(f=>/^payload\.\d+\.txt$/.test(f)).sort((a,b)=>Number(a.split('.')[1])-Number(b.split('.')[1]));
+          const packed=chunks.map(f=>fs.readFileSync(path.join(dir,f),'utf8').trim()).join('');
+          let raw; const buf=Buffer.from(packed,'base64');
+          for(const fn of [zlib.brotliDecompressSync,zlib.gunzipSync,zlib.inflateSync]){try{raw=fn(buf);break}catch{}}
+          if(!raw) throw new Error('Patch 11 payload decompression failed');
+          const payload=JSON.parse(raw.toString('utf8'));
+          for(const [rel,item] of Object.entries(payload)){const d=path.join('recovered-app',rel);fs.mkdirSync(path.dirname(d),{recursive:true});fs.writeFileSync(d,item.encoding==='base64'?Buffer.from(item.data,'base64'):item.data)}
+          NODE
+      - name: Apply Patch 12 recovery merge without UI regression
+        shell: bash
+        run: |
+          base64 -d recovery/patch11-to-patch12-merged.diff.gz.b64 | gzip -d > /tmp/merge.diff
+          cd recovered-app
+          patch -p1 < /tmp/merge.diff
+      - name: Validate merged source
+        working-directory: recovered-app
+        env:
+          DATABASE_URL: postgresql://user:pass@localhost:5432/postgres
+          BACKUP_DATABASE_URL: postgresql://user:pass@localhost:5432/postgres
+          STATSGUY_REFRESH_ENABLED: "true"
+        run: |
+          npm install --ignore-scripts
+          npx prisma generate
+          npx tsc --noEmit
+          npm run build
+      - name: Commit reconstructed merged app
+        shell: bash
+        run: |
+          git config user.name 'ChatGPT Recovery'
+          git config user.email 'actions@users.noreply.github.com'
+          git add recovered-app
+          if git diff --cached --quiet; then echo 'No generated changes'; else git commit -m 'Materialize merged Patch 11 + Patch 12 recovery app'; git push; fi
