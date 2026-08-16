@@ -29,3 +29,4 @@ jobs:
           echo '===== REFRESH STATUS AFTER ====='
           curl -L --max-time 30 -sS "$BASE/api/refresh" || true
           echo
+          # recovery probe 2
