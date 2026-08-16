@@ -64,9 +64,12 @@ export default async function PlayerDetailPage(props: { params: Promise<{ id: st
     ? ((market.currentValue - market.low.value) / (market.high.value - market.low.value)) * 100
     : null;
   const priceZone = rangePct === null ? "Range forming" : rangePct >= 85 ? "Peak zone" : rangePct <= 15 ? "Floor zone" : "Mid-range";
-  const sourceGap = market.currentValue && signalEntry?.statsGuyValue !== null && signalEntry?.statsGuyValue !== undefined
-    ? ((signalEntry.statsGuyValue - market.currentValue) / market.currentValue) * 100
-    : null;
+  const sourceCandidates = [
+    { label:"SG→KTC", value:signalEntry?.statsGuyValue ?? null },
+    { label:"DD→KTC", value:signalEntry?.dynastyDealerValue ?? null },
+  ].filter((x): x is {label:string;value:number} => market.currentValue !== null && market.currentValue > 0 && x.value !== null);
+  const sourceGapEntry = sourceCandidates.map((x)=>({ ...x, gap:((x.value-market.currentValue!)/market.currentValue!)*100 })).sort((a,b)=>Math.abs(b.gap)-Math.abs(a.gap))[0] ?? null;
+  const sourceGap = sourceGapEntry?.gap ?? null;
   const p7 = market.change7d?.percent ?? null;
   const p30 = market.change30d?.percent ?? null;
   const movement = p7 !== null && p7 >= 10 ? "Surging" : p7 !== null && p7 <= -10 ? "Sliding" : p7 !== null && p30 !== null && Math.sign(p7) !== Math.sign(p30) ? "Turning" : p7 !== null && p7 >= 3 ? "Trending up" : p7 !== null && p7 <= -3 ? "Trending down" : "Stable";
@@ -85,7 +88,7 @@ export default async function PlayerDetailPage(props: { params: Promise<{ id: st
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
           <div className="panel p-3"><div className="metric-label">Market direction</div><div className="mt-1 text-lg font-semibold text-neutral-100">{movement}</div><div className="metric-sub">7d {formatPercent(p7)} · 30d {formatPercent(p30)}</div></div>
           <div className="panel p-3"><div className="metric-label">Price zone</div><div className="mt-1 text-lg font-semibold text-neutral-100">{priceZone}</div><div className="metric-sub">{rangePct === null ? "range still forming" : `${Math.round(rangePct)}th percentile of saved range`}</div></div>
-          <div className="panel p-3"><div className="metric-label">Source disagreement</div><div className={`mt-1 text-lg font-semibold ${sourceGap === null ? "text-neutral-400" : sourceGap >= 0 ? "text-sky-300" : "text-amber-300"}`}>{sourceGap === null ? "n/a" : `${sourceGap > 0 ? "+" : ""}${sourceGap.toFixed(1)}%`}</div><div className="metric-sub">SG→KTC versus KTC</div></div>
+          <div className="panel p-3"><div className="metric-label">Source disagreement</div><div className={`mt-1 text-lg font-semibold ${sourceGap === null ? "text-neutral-400" : sourceGap >= 0 ? "text-sky-300" : "text-amber-300"}`}>{sourceGap === null ? "n/a" : `${sourceGap > 0 ? "+" : ""}${sourceGap.toFixed(1)}%`}</div><div className="metric-sub">{sourceGapEntry ? `${sourceGapEntry.label} versus KTC · review flag, not advice` : "no trusted cross-source comparison"}</div></div>
           <div className="panel p-3"><div className="metric-label">Recommended posture</div><div className="mt-1 text-lg font-semibold text-neutral-100">{signalEntry?.result.signal.replaceAll("_", " ") ?? "No signal"}</div><div className="metric-sub">{signalActionCopy(signalEntry?.result.signal)}</div></div>
         </div>
       </section>
@@ -129,7 +132,7 @@ export default async function PlayerDetailPage(props: { params: Promise<{ id: st
         </section>
       )}
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
         <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
           <p className="text-[11px] uppercase tracking-wide text-neutral-500">Current KTC</p>
           <p className="mt-1 text-3xl font-semibold text-neutral-100">{formatPoints(market.currentValue)}</p>
@@ -142,6 +145,11 @@ export default async function PlayerDetailPage(props: { params: Promise<{ id: st
           <p className="text-[11px] uppercase tracking-wide text-neutral-500">Stats Guy → KTC scale</p>
           <p className="mt-1 text-2xl font-semibold text-emerald-300">{formatPoints(signalEntry?.statsGuyValue ?? null)}</p>
           <p className="text-[11px] text-neutral-600">KTC-equivalent after same-refresh scale calibration{signalEntry?.statsGuyRawValue !== null && signalEntry?.statsGuyRawValue !== undefined ? ` · raw secondary ${signalEntry.statsGuyRawValue.toLocaleString()}` : ""}</p>
+        </div>
+        <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
+          <p className="text-[11px] uppercase tracking-wide text-neutral-500">Dynasty Dealer → KTC scale</p>
+          <p className="mt-1 text-2xl font-semibold text-sky-300">{formatPoints(signalEntry?.dynastyDealerValue ?? null)}</p>
+          <p className="text-[11px] text-neutral-600">Real-trade-market cross-check after same-refresh KTC calibration{signalEntry?.dynastyDealerRawValue !== null && signalEntry?.dynastyDealerRawValue !== undefined ? ` · raw DD ${signalEntry.dynastyDealerRawValue.toLocaleString()}` : ""}</p>
         </div>
       </div>
 

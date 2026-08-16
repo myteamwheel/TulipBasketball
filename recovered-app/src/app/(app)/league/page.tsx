@@ -63,11 +63,12 @@ export default async function LeaguePage() {
   });
 
   const disagreement = entries.map((e) => {
-    const mix = marketMix.get(e.playerId);
-    const ktc = marketData.get(e.playerId)?.currentValue ?? null;
-    return { e, ktc, sg: mix?.statsGuyValue ?? null, gap: sourceGapPct(ktc, mix?.statsGuyValue ?? null) };
-  }).filter((x): x is typeof x & { gap: number } => x.gap !== null)
-    .sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap)).slice(0, 8);
+    const mix=marketMix.get(e.playerId); const ktc=marketData.get(e.playerId)?.currentValue??null;
+    const candidates=[{source:"Stats Guy",value:mix?.statsGuyValue??null},{source:"Dynasty Dealer",value:mix?.dynastyDealerValue??null}]
+      .map((x)=>({...x,gap:sourceGapPct(ktc,x.value)})).filter((x):x is typeof x & {gap:number}=>x.gap!==null).sort((a,b)=>Math.abs(b.gap)-Math.abs(a.gap));
+    const largest=candidates[0]??null; return {e,ktc,source:largest?.source??null,secondary:largest?.value??null,gap:largest?.gap??null};
+  }).filter((x): x is typeof x & { gap: number; source:string; secondary:number } => x.gap !== null && x.source !== null && x.secondary !== null)
+    .sort((a,b)=>Math.abs(b.gap)-Math.abs(a.gap)).slice(0,8);
 
   const withValue = valuations.filter((v) => v.totalValue > 0);
   const concentrated = [...withValue].map((v) => {
@@ -82,7 +83,7 @@ export default async function LeaguePage() {
         <div className="relative z-[1]">
           <div className="eyebrow">League-wide market map</div>
           <h1 className="mt-2 text-2xl font-bold tracking-tight text-neutral-50">League Market</h1>
-          <p className="mt-2 max-w-3xl text-sm text-neutral-400">Power rankings, roster construction, meaningful movers, and where the two fresh market sources disagree enough to deserve a second look.</p>
+          <p className="mt-2 max-w-3xl text-sm text-neutral-400">Power rankings, roster construction, meaningful movers, and where independently refreshed market sources disagree enough to deserve a second look.</p>
           <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
             <div className="metric-card"><div className="metric-label">League leader</div><div className="metric-value truncate">{leader?.teamName ?? "—"}</div><div className="metric-sub">{formatPoints(leader?.totalValue)} KTC</div></div>
             <div className="metric-card"><div className="metric-label">Playoff line (#6)</div><div className="metric-value truncate">{sixth?.teamName ?? "—"}</div><div className="metric-sub">{formatPoints(sixth?.totalValue)} KTC</div></div>
@@ -130,9 +131,9 @@ export default async function LeaguePage() {
 
       <section className="grid gap-3 lg:grid-cols-2">
         <div className="space-y-3">
-          <SectionHeader eyebrow="Market disagreement" title="Largest source gaps" description="Stats Guy is translated onto the KTC scale first. Large gaps identify players where the markets disagree, not automatic buys or sells." />
+          <SectionHeader eyebrow="Market disagreement" title="Largest source gaps" description="Stats Guy and Dynasty Dealer are independently translated onto the KTC scale first. Extreme or extrapolated gaps are excluded from consensus; this board is a review queue, not a buy/sell list." />
           <div className="panel divide-y divide-neutral-800/80 px-4">
-            {disagreement.map(({ e, ktc, sg, gap }) => <Link key={e.playerId} href={`/players/${e.playerId}`} className="flex items-center justify-between gap-3 py-3"><div className="min-w-0"><div className="truncate text-sm font-medium text-neutral-100">{e.player.fullName}</div><div className="text-[10px] text-neutral-600">{e.manager.teamName ?? e.manager.displayName} · KTC {formatPoints(ktc)} · SG→KTC {formatPoints(sg)}</div></div><div className={`shrink-0 text-sm font-bold ${gap >= 0 ? "text-sky-300" : "text-amber-300"}`}>{gap > 0 ? "+" : ""}{gap.toFixed(1)}%</div></Link>)}
+            {disagreement.map(({ e, ktc, source, secondary, gap }) => <Link key={e.playerId} href={`/players/${e.playerId}`} className="flex items-center justify-between gap-3 py-3"><div className="min-w-0"><div className="truncate text-sm font-medium text-neutral-100">{e.player.fullName}</div><div className="text-[10px] text-neutral-600">{e.manager.teamName ?? e.manager.displayName} · KTC {formatPoints(ktc)} · {source}→KTC {formatPoints(secondary)}</div></div><div className={`shrink-0 text-sm font-bold ${gap >= 0 ? "text-sky-300" : "text-amber-300"}`}>{gap > 0 ? "+" : ""}{gap.toFixed(1)}%</div></Link>)}
           </div>
         </div>
         <div className="space-y-3">

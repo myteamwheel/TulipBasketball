@@ -50,7 +50,8 @@ export type ValidationStatus = (typeof ValidationStatus)[keyof typeof Validation
 export const MarketSource = {
   KTC: 'KTC',
   FANTASYCALC: 'FANTASYCALC',
-  STATSGUY: 'STATSGUY'
+  STATSGUY: 'STATSGUY',
+  DYNASTYDEALER: 'DYNASTYDEALER'
 } as const
 
 export type MarketSource = (typeof MarketSource)[keyof typeof MarketSource]

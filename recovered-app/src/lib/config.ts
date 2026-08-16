@@ -12,6 +12,7 @@ export const KTC_FORMAT_LABEL = "Superflex / 0.5 PPR / No TE Premium";
 // Product requirement: KTC collection is always attempted on every dashboard refresh.
 export const KTC_DIRECT_REFRESH_ENABLED = true;
 export const STATSGUY_REFRESH_ENABLED = process.env.STATSGUY_REFRESH_ENABLED !== "false";
+export const DYNASTYDEALER_REFRESH_ENABLED = process.env.DYNASTYDEALER_REFRESH_ENABLED !== "false";
 export const KTC_AUTO_REFRESH_ENABLED = KTC_DIRECT_REFRESH_ENABLED;
 export const AUTO_REFRESH_ON_VISIT = true;
 
@@ -21,11 +22,14 @@ export const AUTO_REFRESH_ON_VISIT = true;
 export const MARKET_SOURCE_MAX_AGE_HOURS = Number(process.env.MARKET_SOURCE_MAX_AGE_HOURS || "26");
 export const MARKET_SOURCE_MAX_AGE_MS = MARKET_SOURCE_MAX_AGE_HOURS * 60 * 60 * 1000;
 
-// KTC is the canonical market-value scale. Stats Guy is a fresh secondary signal
-// that is translated onto KTC scale before it can enter the live consensus.
+// KTC is the canonical market-value scale. Independent secondary markets are
+// translated onto KTC scale, but KTC remains the anchor. Per-player reliability
+// gates can reduce or exclude a secondary when calibration extrapolates or the
+// source remains implausibly far from the live KTC observation.
 export const CONSENSUS_WEIGHTS = {
-  KTC: 0.75,
-  STATSGUY: 0.25,
+  KTC: 0.70,
+  STATSGUY: 0.15,
+  DYNASTYDEALER: 0.15,
 } as const;
 
 // Optional authorized feed remains supported as an emergency/manual alternative.

@@ -14,6 +14,8 @@ export interface LiveSignalEntry {
   football: PlayerFootballContext | null;
   statsGuyValue: number | null;
   statsGuyRawValue: number | null;
+  dynastyDealerValue: number | null;
+  dynastyDealerRawValue: number | null;
 }
 
 /**
@@ -54,7 +56,7 @@ export async function computeSignalsForCurrentRoster(): Promise<Map<string, Live
       statsGuyValue: mix.statsGuyValue,
       football,
     };
-    out.set(e.playerId, { result: computeSignal(market, ctx), market, football, statsGuyValue: mix.statsGuyValue, statsGuyRawValue: mix.statsGuyRawValue });
+    out.set(e.playerId, { result: computeSignal(market, ctx), market, football, statsGuyValue: mix.statsGuyValue, statsGuyRawValue: mix.statsGuyRawValue, dynastyDealerValue: mix.dynastyDealerValue, dynastyDealerRawValue: mix.dynastyDealerRawValue });
   }
   return out;
 }

@@ -176,6 +176,7 @@ enum MarketSource {
   KTC
   FANTASYCALC
   STATSGUY
+  DYNASTYDEALER
 }
 
 model MarketObservation {

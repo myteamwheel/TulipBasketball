@@ -5,10 +5,11 @@ import {
   KTC_DIRECT_REFRESH_ENABLED,
   MARKET_SOURCE_MAX_AGE_MS,
   STATSGUY_REFRESH_ENABLED,
+  DYNASTYDEALER_REFRESH_ENABLED,
 } from "@/lib/config";
 import { commitKtcImport, type KtcImportRow } from "@/lib/ktcImport";
 
-export type MarketSourceKey = "KTC" | "STATSGUY";
+export type MarketSourceKey = "KTC" | "STATSGUY" | "DYNASTYDEALER";
 const marketDb = prisma as typeof prisma & {
   marketObservation: any;
   consensusObservation: any;
@@ -34,6 +35,7 @@ export interface MarketRefreshResult {
   marketObservationsStored: number;
   draftPickObservationsStored: number;
   statsGuyCalibrationPairs: number;
+  dynastyDealerCalibrationPairs: number;
 }
 
 interface ProviderRow {
@@ -59,6 +61,7 @@ interface ProviderSnapshot {
 
 const KTC_URL = "https://keeptradecut.com/dynasty-rankings";
 const STATSGUY_URL = "https://api.statsguyfantasy.com/api/v1/players";
+const DYNASTYDEALER_URL = "https://www.dynastydealer.com/api/player-values";
 const MIN_PROVIDER_ROWS = 200;
 
 function sourceAge(sourceUpdatedAt: Date, now = new Date()): number {
@@ -248,6 +251,33 @@ export async function fetchStatsGuySnapshot(): Promise<ProviderSnapshot> {
   return { source: "STATSGUY", sourceUrl: STATSGUY_URL, fetchedAt, sourceUpdatedAt, rows, message: `Stats Guy Fantasy official API; values as of ${sourceUpdatedAt.toISOString()}` };
 }
 
+interface DynastyDealerPlayer {
+  sleeper_id?: string; name?: string; position?: string; team?: string; current_value?: number; base_value?: number; updated_at?: string; votes?: number; age?: number;
+}
+interface DynastyDealerResponse { players?: DynastyDealerPlayer[]; total?: number; timestamp?: string; }
+
+export async function fetchDynastyDealerSnapshot(): Promise<ProviderSnapshot> {
+  const fetchedAt = new Date();
+  const response = await fetch(DYNASTYDEALER_URL, { cache: "no-store", signal: withTimeout(20000), headers: { Accept: "application/json", "Cache-Control": "no-cache" } });
+  if (!response.ok) throw new Error(`Dynasty Dealer API failed (${response.status})`);
+  const data = await response.json() as DynastyDealerResponse;
+  if (!data.timestamp) throw new Error("Dynasty Dealer did not return a dataset timestamp");
+  const sourceUpdatedAt = new Date(data.timestamp);
+  assertFresh("Dynasty Dealer", sourceUpdatedAt, fetchedAt);
+  const counters = new Map<string, number>();
+  const players = Array.isArray(data.players) ? data.players : [];
+  const rows: ProviderRow[] = players.flatMap((player, index) => {
+    const value = Number(player.current_value);
+    const name = player.name?.trim();
+    const position = player.position?.toUpperCase();
+    if (!player.sleeper_id || !name || !position || !["QB","RB","WR","TE"].includes(position) || !Number.isFinite(value) || value < 0) return [];
+    const pr = (counters.get(position) ?? 0) + 1; counters.set(position, pr);
+    return [{ sleeperId:String(player.sleeper_id), name, position, team:player.team, rawValue:Math.round(value), rank:index+1, positionRank:pr, metadata:{ baseValue:player.base_value ?? null, votes:player.votes ?? null, rowUpdatedAt:player.updated_at ?? null, age:player.age ?? null } }];
+  });
+  if (rows.length < MIN_PROVIDER_ROWS) throw new Error(`Dynasty Dealer returned only ${rows.length} valued players; refusing partial snapshot`);
+  return { source:"DYNASTYDEALER", sourceUrl:DYNASTYDEALER_URL, fetchedAt, sourceUpdatedAt, rows, message:`Dynasty Dealer public API; ${rows.length} players; trade-market dataset timestamp ${sourceUpdatedAt.toISOString()}` };
+}
+
 async function currentLeaguePlayers() {
   const entries = await prisma.ownershipInterval.findMany({ where: { validTo: null }, include: { player: true } });
   return [...new Map(entries.map((e) => [e.player.id, e.player])).values()];
@@ -324,7 +354,7 @@ async function persistKtc(snapshot: ProviderSnapshot, refreshRunId: string): Pro
   return stored;
 }
 
-async function persistStatsGuy(snapshot: ProviderSnapshot, refreshRunId: string): Promise<number> {
+async function persistSecondary(snapshot: ProviderSnapshot, refreshRunId: string): Promise<number> {
   const leaguePlayers = await currentLeaguePlayers();
   const bySleeper = new Map(leaguePlayers.map((p) => [p.sleeperId, p]));
   const byNamePos = new Map<string, typeof leaguePlayers>();
@@ -347,16 +377,16 @@ async function persistStatsGuy(snapshot: ProviderSnapshot, refreshRunId: string)
     try {
       await marketDb.marketObservation.create({ data: {
         playerId: player.id,
-        source: "STATSGUY",
+        source: snapshot.source,
         rawValue: row.rawValue,
-        normalizedValue: row.rawValue, // overwritten by same-refresh KTC calibration below.
+        normalizedValue: 0, // becomes usable only after same-refresh KTC calibration below.
         observedAt: snapshot.fetchedAt,
         sourceUpdatedAt: snapshot.sourceUpdatedAt,
         sourceUrl: snapshot.sourceUrl,
         refreshRunId,
         sourceRank: row.rank,
         positionRank: row.positionRank,
-        metadata: JSON.stringify({ ...(row.metadata ?? {}), scale: "STATSGUY_RAW_PENDING_KTC_CALIBRATION" }),
+        metadata: JSON.stringify({ ...(row.metadata ?? {}), scale: `${snapshot.source}_RAW_PENDING_KTC_CALIBRATION` }),
       }});
       stored++;
     } catch (err) {
@@ -394,8 +424,17 @@ function buildQuantileMap(pairs: { sg: number; ktc: number }[]): QuantileMap | n
 }
 function applyQuantileMap(map: QuantileMap, value: number): number {
   const { xs, ys } = map;
-  if (value <= xs[0]) return Math.round(ys[0]);
-  if (value >= xs[xs.length - 1]) return Math.round(ys[ys.length - 1]);
+  if (value <= xs[0]) {
+    const span = Math.max(1e-9, xs[1]-xs[0]);
+    const linear = ys[0] + ((value-xs[0])/span) * (ys[1]-ys[0]);
+    const proportional = xs[0] > 0 ? ys[0] * Math.max(0,value) / xs[0] : linear;
+    return Math.max(0, Math.round(Math.min(linear, proportional)));
+  }
+  if (value >= xs[xs.length - 1]) {
+    const n=xs.length; const span=Math.max(1e-9,xs[n-1]-xs[n-2]);
+    const linear=ys[n-1]+((value-xs[n-1])/span)*(ys[n-1]-ys[n-2]);
+    return Math.min(10000,Math.round(Math.max(ys[n-1],linear)));
+  }
   for (let i = 1; i < xs.length; i++) {
     if (value <= xs[i]) {
       const span = xs[i] - xs[i-1];
@@ -406,10 +445,10 @@ function applyQuantileMap(map: QuantileMap, value: number): number {
   return Math.round(ys[ys.length - 1]);
 }
 
-async function calibrateStatsGuyToKtc(
+async function calibrateSecondaryToKtc(
   refreshRunId: string,
   ktcSnapshot: ProviderSnapshot,
-  statsGuySnapshot: ProviderSnapshot,
+  secondarySnapshot: ProviderSnapshot,
 ): Promise<number> {
   // Calibrate on the full overlapping provider universe, not only this league's
   // rostered players. That makes the translation much less sensitive to the
@@ -422,7 +461,7 @@ async function calibrateStatsGuyToKtc(
     ktcByNamePos.set(`${normalizePlayerName(row.name)}|${pos}`, row);
   }
   const fullPairs:{sg:number;ktc:number;position:string}[]=[];
-  for(const row of statsGuySnapshot.rows){
+  for(const row of secondarySnapshot.rows){
     const pos=(row.position ?? '').toUpperCase();
     const ktc=ktcByNamePos.get(`${normalizePlayerName(row.name)}|${pos}`);
     if(ktc) fullPairs.push({sg:row.rawValue,ktc:ktc.rawValue,position:pos});
@@ -435,13 +474,14 @@ async function calibrateStatsGuyToKtc(
     if(map) positionMaps.set(pos,map);
   }
 
-  const sgRows=await marketDb.marketObservation.findMany({
-    where:{refreshRunId,source:'STATSGUY'},
+  const secondaryRows=await marketDb.marketObservation.findMany({
+    where:{refreshRunId,source:secondarySnapshot.source},
     include:{player:{select:{position:true}}},
   });
-  for(const sg of sgRows as any[]){
+  for(const sg of secondaryRows as any[]){
     const pos=String(sg.player?.position ?? '').toUpperCase();
     const map=positionMaps.get(pos) ?? overall;
+    const extrapolated=sg.rawValue<map.xs[0]||sg.rawValue>map.xs[map.xs.length-1];
     const equivalent=Math.max(0,Math.min(10000,applyQuantileMap(map,sg.rawValue)));
     let oldMeta:Record<string,unknown>={};
     try{oldMeta=JSON.parse(sg.metadata||'{}')}catch{}
@@ -453,8 +493,10 @@ async function calibrateStatsGuyToKtc(
         scaleMethod:positionMaps.has(pos)?'POSITION_QUANTILE_MAP_FULL_UNIVERSE':'OVERALL_QUANTILE_MAP_FULL_UNIVERSE',
         calibrationPairs:map.pairCount,
         calibrationUniversePairs:fullPairs.length,
-        rawStatsGuyValue:sg.rawValue,
+        rawSourceValue:sg.rawValue,
+        sourceName:secondarySnapshot.source,
         ktcEquivalentValue:equivalent,
+        calibrationExtrapolated:extrapolated,
       }),
     }});
   }
@@ -464,32 +506,32 @@ async function calibrateStatsGuyToKtc(
 async function buildConsensus(refreshRunId: string, observedAt = new Date()): Promise<number> {
   const observations = await marketDb.marketObservation.findMany({ where: { refreshRunId } });
   const byPlayer = new Map<string, any[]>();
-  for (const obs of observations) {
-    const list = byPlayer.get(obs.playerId) ?? [];
-    list.push(obs);
-    byPlayer.set(obs.playerId, list);
-  }
-  let stored = 0;
-  for (const [playerId, list] of byPlayer) {
-    const eligible = list.filter((o: any) => {
-      if (o.source !== "KTC" && o.source !== "STATSGUY") return false;
-      const anchor = o.sourceUpdatedAt ?? o.observedAt;
-      return observedAt.getTime() - anchor.getTime() <= MARKET_SOURCE_MAX_AGE_MS;
+  for (const obs of observations) { const list=byPlayer.get(obs.playerId)??[]; list.push(obs); byPlayer.set(obs.playerId,list); }
+  let stored=0;
+  for (const [playerId,list] of byPlayer) {
+    const fresh=list.filter((o:any)=>{
+      if(!["KTC","STATSGUY","DYNASTYDEALER"].includes(o.source)) return false;
+      const anchor=o.sourceUpdatedAt??o.observedAt;
+      return observedAt.getTime()-anchor.getTime()<=MARKET_SOURCE_MAX_AGE_MS;
     });
-    if (!eligible.some((o: any) => o.source === "KTC") || !eligible.some((o: any) => o.source === "STATSGUY")) continue;
-    const totalConfigured = eligible.reduce((sum: number, o: any) => sum + CONSENSUS_WEIGHTS[o.source as MarketSourceKey], 0);
-    const effectiveWeights: Record<string, number> = {};
-    let weighted = 0;
-    for (const obs of eligible) {
-      const w = CONSENSUS_WEIGHTS[obs.source as MarketSourceKey] / totalConfigured;
-      effectiveWeights[obs.source] = w;
-      weighted += obs.normalizedValue * w;
+    const ktc=fresh.find((o:any)=>o.source==="KTC");
+    if(!ktc) continue;
+    const weighted:{obs:any;base:number;reliability:number}[]=[{obs:ktc,base:CONSENSUS_WEIGHTS.KTC,reliability:1}];
+    for(const obs of fresh.filter((o:any)=>o.source!=="KTC")){
+      let meta:Record<string,unknown>={}; try{meta=JSON.parse(obs.metadata||'{}')}catch{}
+      if(meta.scale!=="KTC_EQUIVALENT"||meta.calibrationExtrapolated===true) continue;
+      const gap=Math.abs(obs.normalizedValue-ktc.normalizedValue)/Math.max(1,Math.abs(ktc.normalizedValue));
+      if(gap>1) continue; // an >100% disagreement is diagnostic, not consensus evidence.
+      const reliability=gap>0.60?0.25:gap>0.35?0.55:1;
+      const base=CONSENSUS_WEIGHTS[obs.source as keyof typeof CONSENSUS_WEIGHTS]??0;
+      if(base>0) weighted.push({obs,base,reliability});
     }
-    await marketDb.consensusObservation.upsert({
-      where: { playerId_refreshRunId: { playerId, refreshRunId } },
-      update: {},
-      create: { playerId, value: Math.round(weighted), observedAt, refreshRunId, sourcesUsed: JSON.stringify(eligible.map((o: any) => o.source)), sourceCount: eligible.length, weights: JSON.stringify(effectiveWeights) },
-    });
+    if(weighted.length<2) continue;
+    const denom=weighted.reduce((sum,x)=>sum+x.base*x.reliability,0); if(denom<=0) continue;
+    const effectiveWeights:Record<string,number>={}; let value=0;
+    for(const x of weighted){const w=x.base*x.reliability/denom;effectiveWeights[x.obs.source]=w;value+=x.obs.normalizedValue*w;}
+    const sources=weighted.map((x)=>x.obs.source);
+    await marketDb.consensusObservation.upsert({ where:{playerId_refreshRunId:{playerId,refreshRunId}}, update:{}, create:{playerId,value:Math.round(value),observedAt,refreshRunId,sourcesUsed:JSON.stringify(sources),sourceCount:sources.length,weights:JSON.stringify(effectiveWeights)} });
     stored++;
   }
   return stored;
@@ -500,97 +542,46 @@ function disabledStatus(source: MarketSourceKey): MarketSourceStatus {
 }
 
 export async function refreshLiveMarketSources(refreshRunId: string): Promise<MarketRefreshResult> {
-  const [ktcResult, sgResult] = await Promise.allSettled([
-    KTC_DIRECT_REFRESH_ENABLED ? fetchKtcSnapshot() : Promise.reject(new Error("KTC disabled")),
-    STATSGUY_REFRESH_ENABLED ? fetchStatsGuySnapshot() : Promise.reject(new Error("Stats Guy disabled")),
+  const [ktcResult,sgResult,ddResult]=await Promise.allSettled([
+    KTC_DIRECT_REFRESH_ENABLED?fetchKtcSnapshot():Promise.reject(new Error("KTC disabled")),
+    STATSGUY_REFRESH_ENABLED?fetchStatsGuySnapshot():Promise.reject(new Error("Stats Guy disabled")),
+    DYNASTYDEALER_REFRESH_ENABLED?fetchDynastyDealerSnapshot():Promise.reject(new Error("Dynasty Dealer disabled")),
   ]);
-  const statuses: MarketSourceStatus[] = [];
-  let pickStored = 0;
-
-  if (ktcResult.status === "fulfilled") {
-    const snap = ktcResult.value;
-    try {
-      assertFresh("KTC", snap.sourceUpdatedAt, snap.fetchedAt);
-      pickStored = await persistDraftPickObservations(snap, refreshRunId);
-      const stored = await persistKtc(snap, refreshRunId);
-      statuses.push({ source:"KTC", enabled:true, ok:true, eligibleForConsensus:true, fetchedAt:snap.fetchedAt.toISOString(), sourceUpdatedAt:snap.sourceUpdatedAt.toISOString(), sourceAgeMs:sourceAge(snap.sourceUpdatedAt,snap.fetchedAt), rowsReceived:snap.rows.length, rowsStored:stored, message:`${snap.message}; ${pickStored} KTC draft-pick buckets stored` });
-    } catch (err) {
-      statuses.push({ source:"KTC", enabled:true, ok:false, eligibleForConsensus:false, fetchedAt:new Date().toISOString(), sourceUpdatedAt:null, sourceAgeMs:null, rowsReceived:0, rowsStored:0, message:err instanceof Error?err.message:String(err) });
-    }
-  } else statuses.push({ source:"KTC", enabled:KTC_DIRECT_REFRESH_ENABLED, ok:false, eligibleForConsensus:false, fetchedAt:new Date().toISOString(), sourceUpdatedAt:null, sourceAgeMs:null, rowsReceived:0, rowsStored:0, message:ktcResult.reason instanceof Error?ktcResult.reason.message:String(ktcResult.reason) });
-
-  if (sgResult.status === "fulfilled") {
-    const snap = sgResult.value;
-    try {
-      assertFresh("Stats Guy", snap.sourceUpdatedAt, snap.fetchedAt);
-      const stored = await persistStatsGuy(snap, refreshRunId);
-      statuses.push({ source:"STATSGUY", enabled:true, ok:true, eligibleForConsensus:true, fetchedAt:snap.fetchedAt.toISOString(), sourceUpdatedAt:snap.sourceUpdatedAt.toISOString(), sourceAgeMs:sourceAge(snap.sourceUpdatedAt,snap.fetchedAt), rowsReceived:snap.rows.length, rowsStored:stored, message:snap.message });
-    } catch (err) {
-      statuses.push({ source:"STATSGUY", enabled:true, ok:false, eligibleForConsensus:false, fetchedAt:new Date().toISOString(), sourceUpdatedAt:null, sourceAgeMs:null, rowsReceived:0, rowsStored:0, message:err instanceof Error?err.message:String(err) });
-    }
-  } else statuses.push({ source:"STATSGUY", enabled:STATSGUY_REFRESH_ENABLED, ok:false, eligibleForConsensus:false, fetchedAt:new Date().toISOString(), sourceUpdatedAt:null, sourceAgeMs:null, rowsReceived:0, rowsStored:0, message:sgResult.reason instanceof Error?sgResult.reason.message:String(sgResult.reason) });
-
-  let calibrationPairs = 0;
-  if (ktcResult.status === "fulfilled" && sgResult.status === "fulfilled" && statuses.find((s)=>s.source==="KTC")?.ok && statuses.find((s)=>s.source==="STATSGUY")?.ok) {
-    calibrationPairs = await calibrateStatsGuyToKtc(refreshRunId, ktcResult.value, sgResult.value);
-    const sgStatus = statuses.find((s)=>s.source==="STATSGUY");
-    if (sgStatus) sgStatus.message += `; ${calibrationPairs} same-refresh player pairs used to translate onto KTC scale`;
+  const statuses:MarketSourceStatus[]=[]; let pickStored=0;
+  if(ktcResult.status==="fulfilled"){const snap=ktcResult.value;try{assertFresh("KTC",snap.sourceUpdatedAt,snap.fetchedAt);pickStored=await persistDraftPickObservations(snap,refreshRunId);const stored=await persistKtc(snap,refreshRunId);statuses.push({source:"KTC",enabled:true,ok:true,eligibleForConsensus:true,fetchedAt:snap.fetchedAt.toISOString(),sourceUpdatedAt:snap.sourceUpdatedAt.toISOString(),sourceAgeMs:sourceAge(snap.sourceUpdatedAt,snap.fetchedAt),rowsReceived:snap.rows.length,rowsStored:stored,message:`${snap.message}; ${pickStored} KTC draft-pick buckets stored`});}catch(err){statuses.push({source:"KTC",enabled:true,ok:false,eligibleForConsensus:false,fetchedAt:new Date().toISOString(),sourceUpdatedAt:null,sourceAgeMs:null,rowsReceived:0,rowsStored:0,message:err instanceof Error?err.message:String(err)});}}
+  else statuses.push({source:"KTC",enabled:KTC_DIRECT_REFRESH_ENABLED,ok:false,eligibleForConsensus:false,fetchedAt:new Date().toISOString(),sourceUpdatedAt:null,sourceAgeMs:null,rowsReceived:0,rowsStored:0,message:ktcResult.reason instanceof Error?ktcResult.reason.message:String(ktcResult.reason)});
+  async function finishSecondary(result:PromiseSettledResult<ProviderSnapshot>,source:"STATSGUY"|"DYNASTYDEALER",enabled:boolean,label:string){
+    if(result.status==="fulfilled"){const snap=result.value;try{assertFresh(label,snap.sourceUpdatedAt,snap.fetchedAt);const stored=await persistSecondary(snap,refreshRunId);statuses.push({source,enabled:true,ok:true,eligibleForConsensus:true,fetchedAt:snap.fetchedAt.toISOString(),sourceUpdatedAt:snap.sourceUpdatedAt.toISOString(),sourceAgeMs:sourceAge(snap.sourceUpdatedAt,snap.fetchedAt),rowsReceived:snap.rows.length,rowsStored:stored,message:snap.message});}catch(err){statuses.push({source,enabled:true,ok:false,eligibleForConsensus:false,fetchedAt:new Date().toISOString(),sourceUpdatedAt:null,sourceAgeMs:null,rowsReceived:0,rowsStored:0,message:err instanceof Error?err.message:String(err)});}}
+    else statuses.push({source,enabled,ok:false,eligibleForConsensus:false,fetchedAt:new Date().toISOString(),sourceUpdatedAt:null,sourceAgeMs:null,rowsReceived:0,rowsStored:0,message:result.reason instanceof Error?result.reason.message:String(result.reason)});
   }
-  const consensusPlayersStored = calibrationPairs > 0 ? await buildConsensus(refreshRunId) : 0;
-  return {
-    statuses,
-    consensusPlayersStored,
-    marketObservationsStored: statuses.reduce((sum,s)=>sum+s.rowsStored,0),
-    draftPickObservationsStored: pickStored,
-    statsGuyCalibrationPairs: calibrationPairs,
-  };
+  await finishSecondary(sgResult,"STATSGUY",STATSGUY_REFRESH_ENABLED,"Stats Guy");
+  await finishSecondary(ddResult,"DYNASTYDEALER",DYNASTYDEALER_REFRESH_ENABLED,"Dynasty Dealer");
+  let sgPairs=0,ddPairs=0;
+  if(ktcResult.status==="fulfilled"&&statuses.find((x)=>x.source==="KTC")?.ok){
+    if(sgResult.status==="fulfilled"&&statuses.find((x)=>x.source==="STATSGUY")?.ok){sgPairs=await calibrateSecondaryToKtc(refreshRunId,ktcResult.value,sgResult.value);const st=statuses.find((x)=>x.source==="STATSGUY");if(st)st.message+=`; ${sgPairs} same-refresh pairs calibrated to KTC scale`; }
+    if(ddResult.status==="fulfilled"&&statuses.find((x)=>x.source==="DYNASTYDEALER")?.ok){ddPairs=await calibrateSecondaryToKtc(refreshRunId,ktcResult.value,ddResult.value);const st=statuses.find((x)=>x.source==="DYNASTYDEALER");if(st)st.message+=`; ${ddPairs} same-refresh pairs calibrated to KTC scale`; }
+  }
+  const consensusPlayersStored=(sgPairs+ddPairs)>0?await buildConsensus(refreshRunId):0;
+  return {statuses,consensusPlayersStored,marketObservationsStored:statuses.reduce((sum,x)=>sum+x.rowsStored,0),draftPickObservationsStored:pickStored,statsGuyCalibrationPairs:sgPairs,dynastyDealerCalibrationPairs:ddPairs};
 }
 
 export interface CurrentMarketMix {
-  playerId: string;
-  consensusValue: number | null;
-  consensusObservedAt: string | null;
-  consensusSourceCount: number;
-  consensusSources: string[];
-  ktcValue: number | null;
-  statsGuyValue: number | null; // KTC-equivalent translated value
-  statsGuyRawValue: number | null;
+  playerId:string; consensusValue:number|null; consensusObservedAt:string|null; consensusSourceCount:number; consensusSources:string[]; ktcValue:number|null;
+  statsGuyValue:number|null; statsGuyRawValue:number|null; dynastyDealerValue:number|null; dynastyDealerRawValue:number|null;
 }
-
-export async function getCurrentMarketMix(playerIds: string[]): Promise<Map<string, CurrentMarketMix>> {
-  const result = new Map<string, CurrentMarketMix>();
-  for (const playerId of playerIds) result.set(playerId, { playerId, consensusValue:null, consensusObservedAt:null, consensusSourceCount:0, consensusSources:[], ktcValue:null, statsGuyValue:null, statsGuyRawValue:null });
-  if (!playerIds.length) return result;
-  const [consensus, market] = await Promise.all([
-    marketDb.consensusObservation.findMany({ where: { playerId: { in: playerIds } }, orderBy: { observedAt: "desc" } }),
-    marketDb.marketObservation.findMany({ where: { playerId: { in: playerIds } }, orderBy: { observedAt: "desc" } }),
-  ]);
-  const seenConsensus = new Set<string>();
-  for (const c of consensus as any[]) {
-    if (seenConsensus.has(c.playerId) || Date.now()-c.observedAt.getTime()>MARKET_SOURCE_MAX_AGE_MS) continue;
-    let sources: string[]=[]; try { sources=JSON.parse(c.sourcesUsed); } catch {}
-    if (!sources.includes("KTC") || !sources.includes("STATSGUY")) continue;
-    seenConsensus.add(c.playerId);
-    const row=result.get(c.playerId)!; row.consensusValue=c.value; row.consensusObservedAt=c.observedAt.toISOString(); row.consensusSourceCount=c.sourceCount; row.consensusSources=sources;
-  }
+export async function getCurrentMarketMix(playerIds:string[]):Promise<Map<string,CurrentMarketMix>>{
+  const result=new Map<string,CurrentMarketMix>();
+  for(const playerId of playerIds)result.set(playerId,{playerId,consensusValue:null,consensusObservedAt:null,consensusSourceCount:0,consensusSources:[],ktcValue:null,statsGuyValue:null,statsGuyRawValue:null,dynastyDealerValue:null,dynastyDealerRawValue:null});
+  if(!playerIds.length)return result;
+  const [consensus,market]=await Promise.all([marketDb.consensusObservation.findMany({where:{playerId:{in:playerIds}},orderBy:{observedAt:"desc"}}),marketDb.marketObservation.findMany({where:{playerId:{in:playerIds}},orderBy:{observedAt:"desc"}})]);
+  const seenConsensus=new Set<string>();
+  for(const c of consensus as any[]){if(seenConsensus.has(c.playerId)||Date.now()-c.observedAt.getTime()>MARKET_SOURCE_MAX_AGE_MS)continue;let sources:string[]=[];try{sources=JSON.parse(c.sourcesUsed)}catch{}if(!sources.includes("KTC")||sources.length<2)continue;seenConsensus.add(c.playerId);const row=result.get(c.playerId)!;row.consensusValue=c.value;row.consensusObservedAt=c.observedAt.toISOString();row.consensusSourceCount=c.sourceCount;row.consensusSources=sources;}
   const seenSource=new Set<string>();
-  for (const m of market as any[]) {
-    if (m.source!=="KTC"&&m.source!=="STATSGUY") continue;
-    const key=`${m.playerId}:${m.source}`; if(seenSource.has(key)) continue;
-    const anchor=m.sourceUpdatedAt??m.observedAt; if(Date.now()-anchor.getTime()>MARKET_SOURCE_MAX_AGE_MS) continue;
-    seenSource.add(key); const row=result.get(m.playerId)!;
-    if(m.source==="KTC") row.ktcValue=m.rawValue;
-    if(m.source==="STATSGUY") { row.statsGuyRawValue=m.rawValue; row.statsGuyValue=m.normalizedValue; }
-  }
+  for(const m of market as any[]){if(!["KTC","STATSGUY","DYNASTYDEALER"].includes(m.source))continue;const key=`${m.playerId}:${m.source}`;if(seenSource.has(key))continue;const anchor=m.sourceUpdatedAt??m.observedAt;if(Date.now()-anchor.getTime()>MARKET_SOURCE_MAX_AGE_MS)continue;seenSource.add(key);const row=result.get(m.playerId)!;if(m.source==="KTC"){row.ktcValue=m.rawValue;continue;}let meta:Record<string,unknown>={};try{meta=JSON.parse(m.metadata||'{}')}catch{};if(m.source==="STATSGUY"){row.statsGuyRawValue=m.rawValue;if(meta.scale==="KTC_EQUIVALENT")row.statsGuyValue=m.normalizedValue;}if(m.source==="DYNASTYDEALER"){row.dynastyDealerRawValue=m.rawValue;if(meta.scale==="KTC_EQUIVALENT")row.dynastyDealerValue=m.normalizedValue;}}
   return result;
 }
-
-export async function getLatestMarketSourceStatuses(): Promise<Record<MarketSourceKey, { observedAt:string|null; sourceUpdatedAt:string|null; ageMs:number|null; stale:boolean }>> {
+export async function getLatestMarketSourceStatuses():Promise<Record<MarketSourceKey,{observedAt:string|null;sourceUpdatedAt:string|null;ageMs:number|null;stale:boolean}>>{
   const out={} as Record<MarketSourceKey,{observedAt:string|null;sourceUpdatedAt:string|null;ageMs:number|null;stale:boolean}>;
-  for(const source of ["KTC","STATSGUY"] as MarketSourceKey[]){
-    const obs=await marketDb.marketObservation.findFirst({where:{source},orderBy:{observedAt:"desc"}});
-    const anchor=obs?.sourceUpdatedAt??obs?.observedAt??null; const ageMs=anchor?Date.now()-anchor.getTime():null;
-    out[source]={observedAt:obs?.observedAt.toISOString()??null,sourceUpdatedAt:obs?.sourceUpdatedAt?.toISOString()??null,ageMs,stale:ageMs===null||ageMs>MARKET_SOURCE_MAX_AGE_MS};
-  }
+  for(const source of ["KTC","STATSGUY","DYNASTYDEALER"] as MarketSourceKey[]){const obs=await marketDb.marketObservation.findFirst({where:{source},orderBy:{observedAt:"desc"}});const anchor=obs?.sourceUpdatedAt??obs?.observedAt??null;const ageMs=anchor?Date.now()-anchor.getTime():null;out[source]={observedAt:obs?.observedAt.toISOString()??null,sourceUpdatedAt:obs?.sourceUpdatedAt?.toISOString()??null,ageMs,stale:ageMs===null||ageMs>MARKET_SOURCE_MAX_AGE_MS};}
   return out;
 }

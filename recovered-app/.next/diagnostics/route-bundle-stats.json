@@ -1,11 +1,11 @@
 [
   {
     "route": "/players/[id]",
-    "firstLoadUncompressedJsBytes": 827573,
+    "firstLoadUncompressedJsBytes": 827617,
     "firstLoadChunkPaths": [
       ".next/static/chunks/3fntmmi971322.js",
       ".next/static/chunks/1zr7yg7uk11rd.js",
-      ".next/static/chunks/1k-xh65q6b_j9.js",
+      ".next/static/chunks/11_3lt2hl9ca7.js",
       ".next/static/chunks/2rqta6g96rwf7.js",
       ".next/static/chunks/3mc6dra1m0098.js",
       ".next/static/chunks/2i51e627rllld.js",
@@ -16,11 +16,11 @@
   },
   {
     "route": "/",
-    "firstLoadUncompressedJsBytes": 485137,
+    "firstLoadUncompressedJsBytes": 485181,
     "firstLoadChunkPaths": [
       ".next/static/chunks/3fntmmi971322.js",
       ".next/static/chunks/1zr7yg7uk11rd.js",
-      ".next/static/chunks/1ceera677xbu_.js",
+      ".next/static/chunks/1cs5y6ao6-_cn.js",
       ".next/static/chunks/3mc6dra1m0098.js",
       ".next/static/chunks/2i51e627rllld.js",
       ".next/static/chunks/3e4keds9ktjdu.js",
@@ -30,11 +30,11 @@
   },
   {
     "route": "/players",
-    "firstLoadUncompressedJsBytes": 485137,
+    "firstLoadUncompressedJsBytes": 485181,
     "firstLoadChunkPaths": [
       ".next/static/chunks/3fntmmi971322.js",
       ".next/static/chunks/1zr7yg7uk11rd.js",
-      ".next/static/chunks/1ceera677xbu_.js",
+      ".next/static/chunks/1cs5y6ao6-_cn.js",
       ".next/static/chunks/3mc6dra1m0098.js",
       ".next/static/chunks/2i51e627rllld.js",
       ".next/static/chunks/3e4keds9ktjdu.js",
@@ -44,11 +44,11 @@
   },
   {
     "route": "/league",
-    "firstLoadUncompressedJsBytes": 472119,
+    "firstLoadUncompressedJsBytes": 472163,
     "firstLoadChunkPaths": [
       ".next/static/chunks/3fntmmi971322.js",
       ".next/static/chunks/1zr7yg7uk11rd.js",
-      ".next/static/chunks/2t11l4xqmvdw_.js",
+      ".next/static/chunks/3nci8089kd-dh.js",
       ".next/static/chunks/3mc6dra1m0098.js",
       ".next/static/chunks/2i51e627rllld.js",
       ".next/static/chunks/3e4keds9ktjdu.js",

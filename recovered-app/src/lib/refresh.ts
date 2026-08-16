@@ -87,7 +87,7 @@ async function createRefreshRun(trigger?: string): Promise<string> {
     sleeperId: SLEEPER_LEAGUE_ID, name: sleeperLeague?.name ?? "Dynasty Bois", season: sleeperLeague?.season ?? "unknown",
     format: "Superflex, 0.5 PPR, no TE premium", settings: "{}",
   }});
-  const requestedSources = ["sleeper", "ktc", "statsguy", "consensus", "nflverse-context"];
+  const requestedSources = ["sleeper", "ktc", "statsguy", "dynastydealer", "consensus", "nflverse-context"];
   if (trigger) requestedSources.push(trigger);
   try {
     const run = await prisma.refreshRun.create({ data: { leagueId: league.id, requestedSources: JSON.stringify(requestedSources), status: "RUNNING" } });
