@@ -6,31 +6,38 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Probe live Patch 12 and trigger first refresh
+      - name: Verify exact Patch 12 restore and backup
         shell: bash
         run: |
           set +e
           BASE='https://dynasty-boys-dashboard.vercel.app'
+          echo 'Waiting for production promotion...'
+          for i in {1..12}; do
+            curl -L --max-time 30 -sS "$BASE/settings" -o /tmp/settings
+            if grep -q 'Independent automatic backup' /tmp/settings; then break; fi
+            sleep 10
+          done
           echo '===== ROOT ====='
           curl -L --max-time 30 -sS -D /tmp/h "$BASE/" -o /tmp/root
           cat /tmp/h
-          grep -o 'SOURCE TRUST + WAIVER CALIBRATION PATCH 12' /tmp/root || true
-          grep -o 'Dynasty Boys' /tmp/root | head || true
+          echo 'patch12-trust-markers:'
+          grep -o '≥2 fresh sources required' /tmp/root | head || true
+          grep -o 'KTC anchor; secondary source optional' /tmp/root | head || true
           echo '===== SETTINGS ====='
-          curl -L --max-time 30 -sS "$BASE/settings" -o /tmp/settings
-          grep -o 'SOURCE TRUST + WAIVER CALIBRATION PATCH 12' /tmp/settings || true
-          echo '===== REFRESH STATUS BEFORE ====='
+          grep -o 'SOURCE TRUST + WAIVER CALIBRATION PATCH 12' /tmp/settings | head || true
+          grep -o 'Independent automatic backup' /tmp/settings | head || true
+          grep -o '8:00 AM Eastern' /tmp/settings | head || true
+          echo '===== REFRESH BEFORE ====='
           curl -L --max-time 30 -sS "$BASE/api/refresh" || true
           echo
           echo '===== START REFRESH ====='
           curl -L --max-time 30 -sS -X POST -H 'content-type: application/json' "$BASE/api/refresh" || true
           echo
-          sleep 12
-          echo '===== REFRESH STATUS AFTER ====='
+          sleep 18
+          echo '===== REFRESH AFTER ====='
           curl -L --max-time 30 -sS "$BASE/api/refresh" || true
           echo
-          echo '===== ROOT AFTER ====='
-          curl -L --max-time 30 -sS "$BASE/" -o /tmp/root2
-          grep -o 'KTC anchor; secondary source optional' /tmp/root2 || true
-          grep -o 'SOURCE TRUST + WAIVER CALIBRATION PATCH 12' /tmp/root2 || true
-          # recovery probe 3
+          echo '===== SETTINGS AFTER ====='
+          curl -L --max-time 30 -sS "$BASE/settings" -o /tmp/settings2
+          grep -o 'Independent automatic backup' /tmp/settings2 | head || true
+          grep -o 'Healthy' /tmp/settings2 | head || true
