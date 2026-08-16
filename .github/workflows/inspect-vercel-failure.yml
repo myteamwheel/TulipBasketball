@@ -1,0 +1,21 @@
+name: inspect-vercel-failure
+
+on:
+  push:
+    paths: ['.github/workflows/inspect-vercel-failure.yml']
+  workflow_dispatch:
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Inspect failed Vercel deployment without stored credentials
+        run: |
+          set +e
+          npx --yes vercel@59.0.0 inspect dpl_Hzf1DrKcKeazpAYXB2d2Tw5LXBf2 --logs 2>&1 | tee /tmp/vercel-inspect.log
+          rc=${PIPESTATUS[0]}
+          echo "VERCEL_INSPECT_EXIT=${rc}"
+          exit 0
