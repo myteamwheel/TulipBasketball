@@ -177,6 +177,7 @@ enum MarketSource {
   FANTASYCALC
   STATSGUY
   DYNASTYDEALER
+  TRADYR
 }
 
 model MarketObservation {
@@ -260,77 +261,53 @@ model Transaction {
 }
 
 // ---------------------------------------------------------------------------
-// Refresh runs — orchestration + integrity
+// Refresh runs, signals, notes
 // ---------------------------------------------------------------------------
 
-enum RefreshStatus {
-  RUNNING
-  SUCCESS
-  PARTIAL_FAILURE
-  FAILED
-}
-
 model RefreshRun {
-  id                  String        @id @default(cuid())
-  league              League        @relation(fields: [leagueId], references: [id])
-  leagueId            String
-  startedAt           DateTime      @default(now())
-  finishedAt          DateTime?
-  status              RefreshStatus @default(RUNNING)
-  requestedSources    String // JSON array e.g. ["sleeper","ktc"]
-  sleeperSyncOk       Boolean?
-  ktcSyncOk           Boolean?
-  rosterChangesCount  Int           @default(0)
-  playersRefreshed    Int           @default(0)
-  mappingWarnings     String? // JSON array
-  errors              String? // JSON array of { source, message }
-  summary             String? // JSON summary blob returned to UI
+  id                    String   @id @default(cuid())
+  league                League   @relation(fields: [leagueId], references: [id])
+  leagueId              String
+  startedAt             DateTime @default(now())
+  finishedAt            DateTime?
+  status                String // RUNNING | SUCCESS | PARTIAL_FAILURE | FAILED
+  requestedSources      String // JSON array
+  sleeperSyncOk          Boolean?
+  ktcSyncOk              Boolean?
+  rosterChangesCount     Int      @default(0)
+  playersRefreshed       Int      @default(0)
+  mappingWarnings        String?  // JSON array of unresolved mapping issues
+  errors                 String?  // JSON array of {source,message}
+  summary                String?  // JSON summary for UI/history cards
 
   rosterSnapshots RosterSnapshot[]
 
   @@index([leagueId, startedAt])
-}
-
-// ---------------------------------------------------------------------------
-// Market signals
-// ---------------------------------------------------------------------------
-
-enum SignalType {
-  SELL_HIGH
-  HOLD
-  BUY_LOW
-  CUT_LOSSES
-  CUT_BAIT
-  WATCH
+  @@index([status, startedAt])
 }
 
 model Signal {
-  id            String     @id @default(cuid())
-  player        Player     @relation(fields: [playerId], references: [id])
-  playerId      String
-  refreshRunId  String
-  signal        SignalType
-  score         Int // 0-100 transparent market score
-  confidence    String // LOW | MEDIUM | HIGH
-  reasonCodes   String // JSON array of { code, label, detail }
-  createdAt     DateTime   @default(now())
+  id           String   @id @default(cuid())
+  player       Player   @relation(fields: [playerId], references: [id])
+  playerId     String
+  signalType   String
+  strength     Int
+  reason       String
+  observedAt   DateTime
+  refreshRunId String?
+  createdAt    DateTime @default(now())
 
-  @@index([playerId, createdAt])
-  @@index([refreshRunId])
+  @@index([playerId, observedAt])
+  @@index([signalType, observedAt])
 }
-
-// ---------------------------------------------------------------------------
-// User notes
-// ---------------------------------------------------------------------------
 
 model UserNote {
   id        String   @id @default(cuid())
   player    Player   @relation(fields: [playerId], references: [id])
   playerId  String
-  body      String
-  tags      String? // JSON array
+  note      String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([playerId])
+  @@index([playerId, createdAt])
 }
