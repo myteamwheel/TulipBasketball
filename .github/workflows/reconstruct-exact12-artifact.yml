@@ -1,0 +1,25 @@
+name: reconstruct-exact12-artifact
+on:
+  push:
+    branches: [inspect-patch12-overlay-20260816]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reconstruct
+        run: |
+          mkdir -p recovered-app
+          node <<'NODE'
+          const fs=require('fs'),path=require('path'),zlib=require('zlib');
+          function apply(p){for(const [rel,item] of Object.entries(p)){const d=path.join('recovered-app',rel);if(item.op==='delete'){fs.rmSync(d,{force:true,recursive:true});continue;}fs.mkdirSync(path.dirname(d),{recursive:true});fs.writeFileSync(d,item.encoding==='base64'?Buffer.from(item.data,'base64'):item.data)}}
+          const bp=['payload.0.txt','payload.1.txt','payload.2a.txt','payload.2b.txt','payload.3.txt','payload.4.txt','payload.5.txt','payload.6.txt','payload.7.txt'];
+          apply(JSON.parse(zlib.brotliDecompressSync(Buffer.from(bp.map(f=>fs.readFileSync(path.join('dynasty-patch10',f),'utf8').trim()).join(''),'base64')).toString('utf8')));
+          const pp=['part.00','part.01','part.02','part.03','part.04'];
+          apply(JSON.parse(zlib.brotliDecompressSync(Buffer.from(pp.map(f=>fs.readFileSync(path.join('deploy/exact12-overlay',f),'utf8').trim()).join(''),'base64')).toString('utf8')));
+          NODE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: exact12-source
+          path: recovered-app
+          include-hidden-files: true
