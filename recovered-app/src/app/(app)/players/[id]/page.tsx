@@ -8,6 +8,7 @@ import PlayerNotes from "@/components/PlayerNotes";
 import SectionHeader from "@/components/SectionHeader";
 import PlayerPerformancePanel from "@/components/PlayerPerformancePanel";
 import { signalActionCopy } from "@/lib/dashboardInsights";
+import { getTrustedMarketContext } from "@/lib/trustedMarketContext";
 import {
   formatDateEastern,
   formatDateTimeEastern,
@@ -49,6 +50,7 @@ export default async function PlayerDetailPage(props: { params: Promise<{ id: st
     computeSignalsForCurrentRoster(),
   ]);
   const signalEntry = signals.get(id);
+  const trustedMarket = (await getTrustedMarketContext([id])).get(id);
 
   const allTransactions = await prisma.transaction.findMany({ orderBy: { sleeperCreatedAt: "desc" }, take: 300 });
   const relatedTransactions = allTransactions.filter((t) => {
@@ -67,8 +69,8 @@ export default async function PlayerDetailPage(props: { params: Promise<{ id: st
   const priceZone = rangePct === null ? "Range forming" : rangePct >= 85 ? "Peak zone" : rangePct <= 15 ? "Floor zone" : "Mid-range";
   const freshKtc = signalEntry?.ktcValue ?? null;
   const sourceCandidates = [
-    { label:"SG→KTC", value:signalEntry?.statsGuyValue ?? null },
-    { label:"DD→KTC", value:signalEntry?.dynastyDealerValue ?? null },
+    { label:"Tradyr→KTC", value:trustedMarket?.tradyr.value ?? null },
+    { label:"Dynasty Dealer→KTC", value:trustedMarket?.dynastyDealer.value ?? null },
   ].filter((x): x is {label:string;value:number} => freshKtc !== null && freshKtc > 0 && x.value !== null);
   const sourceGapEntry = sourceCandidates.map((x)=>({ ...x, gap:((x.value-freshKtc!)/freshKtc!)*100 })).sort((a,b)=>Math.abs(b.gap)-Math.abs(a.gap))[0] ?? null;
   const sourceGap = sourceGapEntry?.gap ?? null;
@@ -130,11 +132,11 @@ export default async function PlayerDetailPage(props: { params: Promise<{ id: st
 
           <h3 className="mt-5 text-xs font-semibold uppercase tracking-wide text-neutral-400">What would change the signal</h3>
           <ul className="mt-2 space-y-1 text-xs text-neutral-400">{signalEntry.result.whatWouldChange.map((x, i) => <li key={i}>• {x}</li>)}</ul>
-          <p className="mt-3 text-[10px] leading-relaxed text-neutral-600">This is a live rules-based dynasty signal, recalculated from saved KTC history, current roster/depth context, fresh Stats Guy → KTC scale market data, and nflverse production data when the current NFL season has games. It is not a static player label.</p>
+          <p className="mt-3 text-[10px] leading-relaxed text-neutral-600">This is a live rules-based dynasty signal, recalculated from saved KTC history, current roster/depth context, fresh Tradyr → KTC scale market data, and nflverse production data when the current NFL season has games. It is not a static player label.</p>
         </section>
       )}
 
-      {market.currentValue !== null && freshKtc === null && (signalEntry?.statsGuyValue !== null || signalEntry?.dynastyDealerValue !== null) ? (
+      {market.currentValue !== null && freshKtc === null && (trustedMarket?.tradyr.value !== null || trustedMarket?.dynastyDealer.value !== null) ? (
         <div className="rounded-lg border border-amber-700/40 bg-amber-950/20 p-3 text-xs leading-relaxed text-amber-200">
           <span className="font-semibold">Current KTC anchor unavailable.</span> The KTC number in saved history is historical, not a freshness-qualified live observation. Secondary markets are shown as context only; they are not blended into consensus and cannot trigger a directional recommendation until a fresh KTC anchor is available.
         </div>
@@ -150,14 +152,14 @@ export default async function PlayerDetailPage(props: { params: Promise<{ id: st
         <ChangeCard label="30-Day" stat={market.change30d} />
         <ChangeCard label="Since Baseline" stat={market.changeSinceBaseline} />
         <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
-          <p className="text-[11px] uppercase tracking-wide text-neutral-500">Stats Guy → KTC scale</p>
-          <p className="mt-1 text-2xl font-semibold text-emerald-300">{formatPoints(signalEntry?.statsGuyValue ?? null)}</p>
-          <p className="text-[11px] text-neutral-600">KTC-equivalent after same-refresh scale calibration{signalEntry?.statsGuyRawValue !== null && signalEntry?.statsGuyRawValue !== undefined ? ` · raw secondary ${signalEntry.statsGuyRawValue.toLocaleString()}` : ""}</p>
+          <p className="text-[11px] uppercase tracking-wide text-neutral-500">Tradyr → KTC scale</p>
+          <p className="mt-1 text-2xl font-semibold text-emerald-300">{formatPoints(trustedMarket?.tradyr.value ?? null)}</p>
+          <p className="text-[11px] text-neutral-600">Trusted secondary market after same-refresh KTC calibration{trustedMarket?.tradyr.rawValue !== null && trustedMarket?.tradyr.rawValue !== undefined ? ` · raw Tradyr ${trustedMarket.tradyr.rawValue.toLocaleString()}` : ""}</p>
         </div>
         <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
           <p className="text-[11px] uppercase tracking-wide text-neutral-500">Dynasty Dealer → KTC scale</p>
-          <p className="mt-1 text-2xl font-semibold text-sky-300">{formatPoints(signalEntry?.dynastyDealerValue ?? null)}</p>
-          <p className="text-[11px] text-neutral-600">Real-trade-market cross-check after same-refresh KTC calibration{signalEntry?.dynastyDealerRawValue !== null && signalEntry?.dynastyDealerRawValue !== undefined ? ` · raw DD ${signalEntry.dynastyDealerRawValue.toLocaleString()}` : ""}</p>
+          <p className="mt-1 text-2xl font-semibold text-sky-300">{formatPoints(trustedMarket?.dynastyDealer.value ?? null)}</p>
+          <p className="text-[11px] text-neutral-600">Real-trade-market cross-check after same-refresh KTC calibration{trustedMarket?.dynastyDealer.rawValue !== null && trustedMarket?.dynastyDealer.rawValue !== undefined ? ` · raw DD ${trustedMarket.dynastyDealer.rawValue.toLocaleString()}` : ""}</p>
         </div>
       </div>
 
