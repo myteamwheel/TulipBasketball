@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getAllCurrentRosterEntries } from "@/lib/queries";
 import { computeMarketDataForPlayers } from "@/lib/metrics";
-import { getCurrentMarketMix } from "@/lib/marketSources";
+import { getFreshCurrentMarketMix } from "@/lib/currentMarket";
 import { getLatestSlotMap } from "@/lib/teamMetrics";
 import { computeSignalsForCurrentRoster } from "@/lib/signalsEngine";
 import PlayerTable, { type PlayerRow } from "@/components/PlayerTable";
@@ -19,7 +19,7 @@ export default async function PlayersPage() {
   const allIds = [...entries.map((e) => e.playerId), ...trackedFreeAgents.map((p) => p.id)];
   const [marketData, marketMix, signals] = await Promise.all([
     computeMarketDataForPlayers(allIds),
-    getCurrentMarketMix(allIds),
+    getFreshCurrentMarketMix(allIds),
     computeSignalsForCurrentRoster(),
   ]);
 
@@ -106,7 +106,7 @@ export default async function PlayersPage() {
     <div className="min-w-0 space-y-8">
       <div>
         <h1 className="text-xl font-semibold text-neutral-100">Players</h1>
-        <p className="mt-1 text-sm text-neutral-500">Current league rosters from the last successful Sleeper sync.</p>
+        <p className="mt-1 text-sm text-neutral-500">Current league rosters from the last successful Sleeper sync. Secondary/consensus values appear only while their source is fresh.</p>
       </div>
       <PlayerTable rows={rosteredRows} showOwner />
 
