@@ -34,8 +34,8 @@ export async function GET() {
           )
         ORDER BY table_name
       `,
-      prisma.$queryRaw<Array<{ count: bigint }>>`
-        SELECT COUNT(*)::bigint AS count FROM "MarketObservation"
+      prisma.$queryRaw<Array<{ count: string }>>`
+        SELECT COUNT(*)::text AS count FROM "MarketObservation"
       `,
     ]);
 
@@ -47,7 +47,7 @@ export async function GET() {
       expectedTablesPresent: tableRows.map((row) => row.table_name),
       marketObservationCheck: {
         ok: true,
-        count: Number(marketRows[0]?.count ?? 0n),
+        count: Number(marketRows[0]?.count ?? "0"),
       },
     });
   } catch (error) {
