@@ -1,0 +1,44 @@
+name: verify-patch14-live-sources
+on:
+  push:
+    branches: [dynasty-patch14-market-integrity-20260816]
+    paths: ['.github/workflows/verify-patch14-live-sources.yml']
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install runtime dependencies
+        working-directory: recovered-app
+        run: npm install --ignore-scripts
+      - name: Generate Prisma client
+        working-directory: recovered-app
+        env:
+          DATABASE_URL: postgresql://user:pass@localhost:5432/postgres
+        run: npx prisma generate
+      - name: Exercise exact provider collectors
+        working-directory: recovered-app
+        env:
+          DATABASE_URL: postgresql://user:pass@localhost:5432/postgres
+          FANTASYCALC_REFRESH_ENABLED: "true"
+          STATSGUY_REFRESH_ENABLED: "false"
+        run: |
+          cat > /tmp/provider-check.ts <<'TS'
+          import { fetchKtcSnapshot, fetchFantasyCalcSnapshot } from process.cwd() + '/src/lib/marketSources.ts';
+          const ktc = await fetchKtcSnapshot();
+          const joeKtc = ktc.rows.find((r:any) => r.name === 'Joe Mixon');
+          if (!joeKtc) throw new Error(`Joe Mixon still missing from KTC merged collector (${ktc.rows.length} rows)`);
+          const fc = await fetchFantasyCalcSnapshot();
+          const joeFc = fc.rows.find((r:any) => r.sleeperId === '4018');
+          if (!joeFc) throw new Error(`Joe Mixon missing from FantasyCalc collector (${fc.rows.length} rows)`);
+          console.log(JSON.stringify({
+            ktcRows: ktc.rows.length,
+            ktcJoe: { value: joeKtc.rawValue, rank: joeKtc.rank, positionRank: joeKtc.positionRank, ktcId: joeKtc.ktcId },
+            fantasyCalcRows: fc.rows.length,
+            fantasyCalcJoe: { value: joeFc.rawValue, rank: joeFc.rank, positionRank: joeFc.positionRank, sleeperId: joeFc.sleeperId },
+          }, null, 2));
+          TS
+          npx tsx /tmp/provider-check.ts
