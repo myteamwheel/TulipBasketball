@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { SLEEPER_LEAGUE_ID } from "@/lib/config";
 import { getAllCurrentRosterEntries, getAllManagers } from "@/lib/queries";
 import { getLatestSlotMap } from "@/lib/teamMetrics";
-import { getPredictivePlayerModels } from "@/lib/predictive";
+import { getDecisionGradePredictiveModels as getPredictivePlayerModels } from "@/lib/predictiveSafety";
 import { getMatchups, getNflState } from "@/lib/sleeper";
 import { publicTeamName } from "@/lib/publicIdentity";
 import { projectOptimalWeeklyPoints } from "@/lib/lineupProjection";
