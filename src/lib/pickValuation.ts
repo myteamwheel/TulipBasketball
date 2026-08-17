@@ -6,10 +6,22 @@ function bucketSlot(projectedSlot: number): number {
   return 10;                          // late bucket midpoint
 }
 
+function bucketName(projectedSlot: number): "early" | "mid" | "late" {
+  if (projectedSlot <= 4) return "early";
+  if (projectedSlot <= 8) return "mid";
+  return "late";
+}
+
+function averageValue(rows: DraftPickMarketValue[]): number | null {
+  if (!rows.length) return null;
+  return Math.round(rows.reduce((sum, pick) => sum + pick.value, 0) / rows.length);
+}
+
 /**
  * Value a currently tradeable pick without pretending a far-future asset has
  * a knowable exact rookie slot. The next draft uses an early/mid/late bucket;
- * later drafts use the provider's generic round value (or round average).
+ * later drafts use the provider's generic round value, or the average of its
+ * generic early/mid/late rows when the provider exposes multiple bucket rows.
  */
 export function currentPickMarketValue(market: DraftPickMarketValue[], season: number | string, round: number, projectedSlot: number | null): number | null {
   const numericSeason = Number(season);
@@ -22,13 +34,26 @@ export function currentPickMarketValue(market: DraftPickMarketValue[], season: n
     const bucket = bucketSlot(projectedSlot);
     const exact = matching.find((pick) => pick.slot === bucket);
     if (exact) return exact.value;
+
+    // Future boards commonly expose Early/Mid/Late as separate generic rows
+    // with slot=null. Match the provider's bucket label before considering a
+    // numbered-slot average. Using the first generic row here systematically
+    // valued every projected mid/late pick as Early.
+    const namedBucket = bucketName(projectedSlot);
+    const genericBucket = matching.find(
+      (pick) => pick.slot === null && new RegExp(`\\b${namedBucket}\\b`, "i").test(pick.label),
+    );
+    if (genericBucket) return genericBucket.value;
+
     const bucketRows = matching.filter((pick) => pick.slot !== null && (bucket === 2 ? pick.slot! <= 4 : bucket === 6 ? pick.slot! >= 5 && pick.slot! <= 8 : pick.slot! >= 9));
-    if (bucketRows.length) return Math.round(bucketRows.reduce((sum, pick) => sum + pick.value, 0) / bucketRows.length);
+    const bucketAverage = averageValue(bucketRows);
+    if (bucketAverage !== null) return bucketAverage;
   }
 
-  const generic = matching.find((pick) => pick.slot === null);
-  if (generic) return generic.value;
-  return Math.round(matching.reduce((sum, pick) => sum + pick.value, 0) / matching.length);
+  const genericRows = matching.filter((pick) => pick.slot === null);
+  if (genericRows.length === 1) return genericRows[0].value;
+  if (genericRows.length > 1) return averageValue(genericRows);
+  return averageValue(matching);
 }
 
 export function projectedPickBucket(projectedSlot: number | null): "early" | "mid" | "late" | "unknown" {
