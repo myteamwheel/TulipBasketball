@@ -14,43 +14,30 @@ export default async function SettingsPage() {
   ]);
 
   const sources = [
-    {
-      key: "KTC",
-      label: "KeepTradeCut",
-      role: "Anchor",
-      detail: "Primary Superflex / .5 PPR / no TEP valuation source.",
-      status: statuses.KTC,
-    },
-    {
-      key: "TRADYR",
-      label: "Tradyr",
-      role: "Trusted secondary",
-      detail: "Calibrated onto the KTC scale from same-refresh league overlap.",
-      status: statuses.TRADYR,
-    },
-    {
-      key: "DYNASTY_DEALER",
-      label: "Dynasty Dealer",
-      role: "Trusted secondary",
-      detail: "Player and draft-pick market calibrated onto the KTC scale.",
-      status: statuses.DYNASTY_DEALER,
-    },
+    { key: "KTC", label: "KeepTradeCut", role: "Anchor", detail: "Primary Superflex / .5 PPR / no TEP valuation source.", status: statuses.KTC },
+    { key: "TRADYR", label: "Tradyr", role: "Trusted secondary", detail: "Calibrated onto the KTC scale from same-refresh league overlap.", status: statuses.TRADYR },
+    { key: "DYNASTY_DEALER", label: "Dynasty Dealer", role: "Trusted secondary", detail: "Player and draft-pick market calibrated onto the KTC scale.", status: statuses.DYNASTY_DEALER },
   ] as const;
 
   return (
     <div className="min-w-0 space-y-6">
       <div>
         <h1 className="text-xl font-semibold text-neutral-100">Settings & Data Health</h1>
-        <p className="mt-1 text-sm text-neutral-500">Current trusted sources, mappings, backups and access configuration.</p>
+        <p className="mt-1 text-sm text-neutral-500">Current trusted sources, mappings, refresh schedule, backups and access configuration.</p>
       </div>
 
       <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h2 className="text-sm font-semibold text-neutral-100">Decision baseline</h2>
-            <p className="mt-1 text-xs text-neutral-500">First complete verified Orlando checkpoint.</p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-md bg-neutral-950 p-3">
+            <div className="text-[10px] font-medium uppercase tracking-wide text-neutral-600">Decision baseline</div>
+            <div className="mt-1 text-sm font-semibold text-neutral-100">{formatDateEastern(ORLANDO_BASELINE_DATE)}</div>
+            <p className="mt-1 text-[10px] text-neutral-600">First complete verified Orlando checkpoint.</p>
           </div>
-          <div className="rounded-md bg-neutral-950 px-3 py-2 text-sm font-semibold text-neutral-100">{formatDateEastern(ORLANDO_BASELINE_DATE)}</div>
+          <div className="rounded-md bg-neutral-950 p-3">
+            <div className="text-[10px] font-medium uppercase tracking-wide text-neutral-600">Automatic refresh</div>
+            <div className="mt-1 text-sm font-semibold text-emerald-300">Daily · around 8 a.m. ET</div>
+            <p className="mt-1 text-[10px] text-neutral-600">Sleeper + KTC + trusted secondary markets; independent of page visits.</p>
+          </div>
         </div>
       </section>
 
@@ -62,15 +49,10 @@ export default async function SettingsPage() {
             <div key={source.key} className="rounded-lg border border-neutral-800 bg-neutral-950/60 p-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-semibold text-neutral-200">{source.label}</span>
-                    <span className="rounded bg-neutral-800 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-neutral-500">{source.role}</span>
-                  </div>
+                  <div className="flex flex-wrap items-center gap-2"><span className="text-xs font-semibold text-neutral-200">{source.label}</span><span className="rounded bg-neutral-800 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-neutral-500">{source.role}</span></div>
                   <p className="mt-1 text-[11px] leading-4 text-neutral-500">{source.detail}</p>
                 </div>
-                <span className={`text-[10px] font-medium ${source.status.stale ? "text-amber-300" : "text-emerald-300"}`}>
-                  {source.status.stale ? "Unavailable" : "Fresh"}
-                </span>
+                <span className={`text-[10px] font-medium ${source.status.stale ? "text-amber-300" : "text-emerald-300"}`}>{source.status.stale ? "Unavailable" : "Fresh"}</span>
               </div>
               <p className="mt-2 text-[10px] text-neutral-600">Last verified {timeAgo(source.status.observedAt)}</p>
             </div>
@@ -81,27 +63,14 @@ export default async function SettingsPage() {
 
       <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
         <h2 className="text-sm font-semibold text-neutral-100">Mapping review ({needsReview.length})</h2>
-        {needsReview.length === 0 ? (
-          <p className="mt-3 text-xs text-emerald-300">All current roster players are mapped.</p>
-        ) : (
-          <ul className="mt-3 grid grid-cols-1 gap-1.5 text-xs text-neutral-300 sm:grid-cols-2 lg:grid-cols-3">
-            {needsReview.map((player) => (
-              <li key={player.id} className="rounded bg-neutral-950 px-2.5 py-2">
-                {player.fullName} <span className="text-neutral-600">({player.position})</span>
-              </li>
-            ))}
-          </ul>
-        )}
+        {needsReview.length === 0 ? <p className="mt-3 text-xs text-emerald-300">All current roster players are mapped.</p> : <ul className="mt-3 grid grid-cols-1 gap-1.5 text-xs text-neutral-300 sm:grid-cols-2 lg:grid-cols-3">{needsReview.map((player) => <li key={player.id} className="rounded bg-neutral-950 px-2.5 py-2">{player.fullName} <span className="text-neutral-600">({player.position})</span></li>)}</ul>}
       </section>
 
       <KtcImportForm />
 
       <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
         <h2 className="text-sm font-semibold text-neutral-100">Manual data backup</h2>
-        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-          <a href="/api/export/full-history" className="rounded-md bg-emerald-700 px-3 py-2 text-center text-xs font-medium text-white">Complete backup (.json)</a>
-          <a href="/api/export/ktc-history" className="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-center text-xs font-medium text-neutral-200">KTC history (.csv)</a>
-        </div>
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row"><a href="/api/export/full-history" className="rounded-md bg-emerald-700 px-3 py-2 text-center text-xs font-medium text-white">Complete backup (.json)</a><a href="/api/export/ktc-history" className="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-center text-xs font-medium text-neutral-200">KTC history (.csv)</a></div>
       </section>
 
       <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-4 text-xs text-neutral-400">
@@ -111,6 +80,7 @@ export default async function SettingsPage() {
           <div className="grid grid-cols-[1fr_auto] gap-3"><dt>Primary Sleeper user</dt><dd className="break-all text-right text-neutral-300">{ORLANDO_OSWALDS_SLEEPER_USER_ID}</dd></div>
           <div className="grid grid-cols-[1fr_auto] gap-3"><dt>KTC format</dt><dd className="text-right text-neutral-300">{KTC_FORMAT_LABEL}</dd></div>
           <div className="grid grid-cols-[1fr_auto] gap-3"><dt>Freshness cutoff</dt><dd className="text-right text-neutral-300">{MARKET_SOURCE_MAX_AGE_HOURS}h</dd></div>
+          <div className="grid grid-cols-[1fr_auto] gap-3"><dt>Automatic ingestion</dt><dd className="text-right text-emerald-300">Daily · 8 a.m. ET window</dd></div>
           <div className="grid grid-cols-[1fr_auto] gap-3"><dt>Password protection</dt><dd className={authRequired() && authConfigurationValid() ? "text-emerald-300" : "text-red-300"}>{authRequired() && authConfigurationValid() ? "Enabled" : "Configuration required"}</dd></div>
         </dl>
       </section>

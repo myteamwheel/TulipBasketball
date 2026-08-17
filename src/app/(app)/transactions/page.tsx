@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getObservationSeries, closestObservation } from "@/lib/metrics";
 import { fetchFreshDraftPickMarketValues } from "@/lib/pickMarket";
@@ -7,18 +8,29 @@ import { SLEEPER_LEAGUE_ID } from "@/lib/config";
 import { formatDateTimeEastern, formatPoints, formatSigned, trendColorClass } from "@/lib/format";
 
 const TYPE_LABEL: Record<string, string> = { trade: "Trade", waiver: "Waiver claim", free_agent: "Free agent", commissioner: "Commissioner move" };
+const PAGE_SIZE = 50;
 type TradedPick = { season: string; round: number; roster_id: number; previous_owner_id: number; owner_id: number; };
 type TxFilter = "all" | "trade" | "moves";
 function parseRecord(value: string | null): Record<string, number> { if (!value) return {}; try { const parsed = JSON.parse(value); return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, number> : {}; } catch { return {}; } }
 function parseArray<T>(value: string | null): T[] { if (!value) return []; try { const parsed = JSON.parse(value); return Array.isArray(parsed) ? parsed as T[] : []; } catch { return []; } }
 function moveOutcome(net: number | null) { if (net === null) return null; if (net >= 1200) return "Large value gain"; if (net >= 400) return "Positive value gain"; if (net >= -300) return "Roughly neutral"; if (net >= -1000) return "Negative value move"; return "Large value loss"; }
+function pageHref(filter: TxFilter, page: number) { const params = new URLSearchParams(); if (filter !== "all") params.set("type", filter); if (page > 1) params.set("page", String(page)); const query = params.toString(); return query ? `/transactions?${query}` : "/transactions"; }
 export const dynamic = "force-dynamic";
 
-export default async function TransactionsPage({ searchParams }: { searchParams: Promise<{ type?: string }> }) {
+export default async function TransactionsPage({ searchParams }: { searchParams: Promise<{ type?: string; page?: string }> }) {
   const params = await searchParams;
   const filter: TxFilter = params.type === "trade" ? "trade" : params.type === "moves" ? "moves" : "all";
+  const requestedPage = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
+  const txWhere: Prisma.TransactionWhereInput = {
+    league: { sleeperId: SLEEPER_LEAGUE_ID },
+    ...(filter === "trade" ? { type: "trade" } : filter === "moves" ? { type: { not: "trade" } } : {}),
+  };
+  const totalMatching = await prisma.transaction.count({ where: txWhere });
+  const totalPages = Math.max(1, Math.ceil(totalMatching / PAGE_SIZE));
+  const page = Math.min(requestedPage, totalPages);
+
   const [transactions, managers, players, pickMarket] = await Promise.all([
-    prisma.transaction.findMany({ where: { league: { sleeperId: SLEEPER_LEAGUE_ID } }, orderBy: { sleeperCreatedAt: "desc" }, take: 75 }),
+    prisma.transaction.findMany({ where: txWhere, orderBy: { sleeperCreatedAt: "desc" }, skip: (page - 1) * PAGE_SIZE, take: PAGE_SIZE }),
     prisma.manager.findMany({ where: { league: { sleeperId: SLEEPER_LEAGUE_ID } } }),
     prisma.player.findMany({ select: { id: true, sleeperId: true, fullName: true, position: true } }),
     fetchFreshDraftPickMarketValues().catch(() => []),
@@ -63,17 +75,17 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
     const rosterMoveNet = transaction.type !== "trade" && moveCoverageComplete ? addAtTx - dropAtTx : null;
     return { ...transaction, assets, tradeSides, tradeCoverageComplete, currentWinner, runnerUp, rosterMoveNet, rosterMoveOutcome: moveOutcome(rosterMoveNet) };
   });
-  const visibleRows = rows.filter((row) => filter === "all" || (filter === "trade" ? row.type === "trade" : row.type !== "trade"));
 
   return <div className="min-w-0 space-y-4">
-    <div><h1 className="text-xl font-semibold text-neutral-100">Transactions</h1><p className="mt-1 max-w-3xl text-sm leading-5 text-neutral-500">Latest 75 synced league transactions. Historical player values must fall within seven days of the move; current trade comparisons require complete asset coverage.</p></div>
-    <div className="flex flex-wrap gap-1">{[["all", "All"], ["trade", "Trades"], ["moves", "Adds / waivers"]].map(([key, label]) => <Link key={key} href={key === "all" ? "/transactions" : `/transactions?type=${key}`} className={`rounded-md px-3 py-1.5 text-[11px] ${filter === key ? "bg-neutral-700 text-neutral-100" : "border border-neutral-800 bg-neutral-900 text-neutral-500"}`}>{label}</Link>)}</div>
+    <div><h1 className="text-xl font-semibold text-neutral-100">Transactions</h1><p className="mt-1 max-w-3xl text-sm leading-5 text-neutral-500">Browse the full synced transaction history in pages of {PAGE_SIZE}. Historical player values must fall within seven days of the move; current trade comparisons require complete asset coverage.</p></div>
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><div className="flex flex-wrap gap-1">{[["all", "All"], ["trade", "Trades"], ["moves", "Adds / waivers"]].map(([key, label]) => <Link key={key} href={pageHref(key as TxFilter, 1)} className={`rounded-md px-3 py-1.5 text-[11px] ${filter === key ? "bg-neutral-700 text-neutral-100" : "border border-neutral-800 bg-neutral-900 text-neutral-500"}`}>{label}</Link>)}</div><div className="text-[10px] text-neutral-600">{totalMatching.toLocaleString("en-US")} matching · page {page}/{totalPages}</div></div>
     {!pickMarketAvailable ? <div className="rounded-lg border border-amber-900/70 bg-amber-950/20 p-3 text-[10px] leading-4 text-amber-300">Current trades containing draft picks are withheld from comparison until a fresh pick market is available.</div> : null}
-    <div className="space-y-3">{visibleRows.map((transaction) => <article key={transaction.id} className="min-w-0 rounded-lg border border-neutral-800 bg-neutral-900 p-3 sm:p-4">
+    <div className="space-y-3">{rows.map((transaction) => <article key={transaction.id} className="min-w-0 rounded-lg border border-neutral-800 bg-neutral-900 p-3 sm:p-4">
       <div className="mb-3 flex min-w-0 items-center justify-between gap-3 text-[10px] text-neutral-600"><span className="rounded bg-neutral-800 px-2 py-1 font-medium text-neutral-300">{TYPE_LABEL[transaction.type] ?? transaction.type}</span><span className="shrink-0 text-right">{formatDateTimeEastern(transaction.sleeperCreatedAt.toISOString())}</span></div>
       {transaction.type === "trade" && transaction.tradeSides.length >= 2 ? <div className="mb-3 rounded-lg border border-neutral-800 bg-neutral-950 p-3"><div className="flex flex-wrap items-center justify-between gap-2"><span className="text-[10px] font-medium uppercase tracking-wide text-neutral-500">Current trade value</span>{transaction.tradeCoverageComplete && transaction.currentWinner && transaction.runnerUp ? <span className="text-[10px] text-emerald-300">Complete coverage · adjusted edge {formatSigned((transaction.currentWinner.adjustedTotal ?? 0) - (transaction.runnerUp.adjustedTotal ?? 0))}</span> : <span className="text-[10px] text-amber-300">Incomplete coverage · no leader</span>}</div><div className="mt-2 grid gap-2 sm:grid-cols-2">{transaction.tradeSides.map((side) => <div key={side.rosterId} className="grid min-w-0 grid-cols-[1fr_auto] items-center gap-3 rounded-md bg-neutral-900 px-3 py-2"><span className="min-w-0 truncate text-xs text-neutral-300">{side.name}</span><div className="shrink-0 text-right"><div className="text-sm font-semibold tabular-nums text-neutral-100">{side.adjustedTotal !== null ? formatPoints(side.adjustedTotal) : "—"}</div><div className="text-[9px] text-neutral-600">adjusted · raw {formatPoints(side.rawTotal)}</div><div className={`text-[9px] ${side.complete ? "text-neutral-700" : "text-amber-500"}`}>{side.covered}/{side.totalAssets} assets valued{side.packageAdjustment ? ` · −${formatPoints(side.packageAdjustment)} package adj.` : ""}</div></div></div>)}</div>{transaction.tradeCoverageComplete && transaction.currentWinner ? <p className="mt-2 text-[10px] leading-4 text-neutral-500">Current adjusted-value leader: <span className="font-medium text-emerald-300">{transaction.currentWinner.name}</span>. This describes today’s market value only.</p> : null}</div> : null}
       {transaction.type !== "trade" ? transaction.rosterMoveNet !== null ? <div className="mb-3 flex min-w-0 items-center justify-between gap-3 rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2 text-xs"><span className="min-w-0 text-neutral-500">Value change at the move</span><span className={`shrink-0 text-right ${trendColorClass(transaction.rosterMoveNet)}`}><strong>{transaction.rosterMoveOutcome}</strong><br/><span className="font-normal">{formatSigned(transaction.rosterMoveNet)}</span></span></div> : transaction.assets.length ? <div className="mb-3 rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2 text-[10px] leading-4 text-neutral-500">Historical value unavailable within the seven-day tolerance, so no outcome label is shown.</div> : null : null}
       <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">{transaction.assets.map((asset, index) => <div key={index} className="grid min-w-0 grid-cols-[1fr_auto] items-center gap-3 rounded-md bg-neutral-950 px-3 py-2"><div className="min-w-0"><div className="min-w-0 truncate text-xs"><span className={asset.kind === "add" ? "text-emerald-400" : "text-red-400"}>{asset.kind === "add" ? "+ " : "− "}</span>{asset.playerId ? <Link href={`/players/${asset.playerId}`} className="text-neutral-100 hover:text-emerald-300">{asset.label}</Link> : <span className="text-neutral-100">{asset.label}</span>}</div><div className="mt-0.5 truncate text-[9px] text-neutral-600">{asset.managerName}{asset.assetType === "pick" && "previousManagerName" in asset ? ` · from ${asset.previousManagerName}` : ""}</div></div><div className="shrink-0 text-right text-[10px]">{asset.assetType === "player" ? <><div className="text-neutral-500">at move {formatPoints(asset.valueAtTx)}{asset.valueAtTxApprox ? <span className="text-neutral-700"> · nearest</span> : null}</div>{asset.currentValue !== null && asset.valueAtTx !== null ? <div className={trendColorClass(asset.currentValue - asset.valueAtTx)}>now {formatPoints(asset.currentValue)} · {formatSigned(asset.currentValue - asset.valueAtTx)}</div> : <div className="text-neutral-700">current {formatPoints(asset.currentValue)}</div>}</> : <div className="text-neutral-400">current {formatPoints(asset.currentValue)}</div>}</div></div>)}{transaction.assets.length === 0 ? <p className="text-xs text-neutral-500">No player or pick assets recorded.</p> : null}</div>
-    </article>)}{visibleRows.length === 0 ? <p className="text-sm text-neutral-500">No matching transactions in the latest 75 synced moves.</p> : null}</div>
+    </article>)}{rows.length === 0 ? <p className="text-sm text-neutral-500">No matching synced transactions.</p> : null}</div>
+    {totalPages > 1 ? <nav aria-label="Transaction pages" className="flex items-center justify-between gap-3 rounded-lg border border-neutral-800 bg-neutral-900 p-3"><Link href={pageHref(filter, Math.max(1, page - 1))} aria-disabled={page <= 1} className={`rounded-md border px-3 py-1.5 text-xs ${page <= 1 ? "pointer-events-none border-neutral-900 text-neutral-700" : "border-neutral-700 text-neutral-300 hover:bg-neutral-800"}`}>← Newer</Link><span className="text-[10px] text-neutral-600">{((page - 1) * PAGE_SIZE + 1).toLocaleString("en-US")}–{Math.min(page * PAGE_SIZE, totalMatching).toLocaleString("en-US")} of {totalMatching.toLocaleString("en-US")}</span><Link href={pageHref(filter, Math.min(totalPages, page + 1))} aria-disabled={page >= totalPages} className={`rounded-md border px-3 py-1.5 text-xs ${page >= totalPages ? "pointer-events-none border-neutral-900 text-neutral-700" : "border-neutral-700 text-neutral-300 hover:bg-neutral-800"}`}>Older →</Link></nav> : null}
   </div>;
 }

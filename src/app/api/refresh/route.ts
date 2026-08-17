@@ -25,6 +25,7 @@ export async function GET() {
     run,
     capabilities: {
       autoRefreshOnVisit: false,
+      scheduledRefresh: "daily around 8 a.m. ET",
       sources: { KTC: KTC_DIRECT_REFRESH_ENABLED, TRADYR: TRADYR_REFRESH_ENABLED, DYNASTY_DEALER: DYNASTY_DEALER_REFRESH_ENABLED },
       freshnessHours: MARKET_SOURCE_MAX_AGE_HOURS,
     },
