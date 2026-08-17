@@ -33,6 +33,7 @@ export interface LeagueSimulationResult {
   scheduleSource: "SLEEPER" | "FALLBACK";
   completedWeeks: number;
   productionCoverage: number;
+  evidenceWeight: number;
 }
 
 function fallbackWeeks(ids: string[], count: number): SimulationWeek[] {
@@ -208,14 +209,35 @@ export async function simulateDynastyBoys(iterations = 2500): Promise<LeagueSimu
   const outcomes = runLeagueSimulation(context, iterations);
   const outcomeById = new Map(outcomes.map((outcome) => [outcome.teamId, outcome]));
   const rankedStrength = [...teamInputs].sort((a, b) => b.mean - a.mean);
+  const productionCoverage = predictions.size
+    ? [...predictions.values()].filter((prediction) => prediction.games >= 3).length / predictions.size
+    : 0;
+
+  // When football evidence is sparse, weekly projections are mostly market-implied role estimates.
+  // Shrink season-outcome probabilities toward league-neutral priors so low coverage cannot create
+  // false precision. Once roughly a full league's starter pool has real production (~35% of all
+  // rostered assets in this deep league), the simulation receives full weight.
+  const evidenceWeight = Math.max(0, Math.min(1, productionCoverage / 0.35));
+  const neutralPlayoffProbability = managers.length ? playoffTeams / managers.length : 0;
+  const neutralTitleProbability = managers.length ? 1 / managers.length : 0;
+  const neutralSeed = managers.length ? (managers.length + 1) / 2 : 1;
+  const neutralRemainingWins = schedule.length * 0.5;
 
   const rows: LeagueSimulationRow[] = teamInputs
     .map((team) => {
       const outcome = outcomeById.get(team.manager.id)!;
+      const baseWinTotal = baseWins.get(team.manager.id) ?? 0;
+      const playoffProbability = neutralPlayoffProbability +
+        (outcome.playoffProbability - neutralPlayoffProbability) * evidenceWeight;
+      const championshipProbability = neutralTitleProbability +
+        (outcome.championshipProbability - neutralTitleProbability) * evidenceWeight;
+      const expectedWins = baseWinTotal + neutralRemainingWins +
+        (outcome.expectedWins - baseWinTotal - neutralRemainingWins) * evidenceWeight;
+      const expectedSeed = neutralSeed + (outcome.expectedSeed - neutralSeed) * evidenceWeight;
       const window: LeagueSimulationRow["window"] =
-        outcome.playoffProbability >= 0.62
+        playoffProbability >= 0.62
           ? "CONTENDER"
-          : outcome.playoffProbability <= 0.28
+          : playoffProbability <= 0.28
             ? "REBUILDER"
             : "MIDDLE";
       return {
@@ -223,10 +245,10 @@ export async function simulateDynastyBoys(iterations = 2500): Promise<LeagueSimu
         teamName: publicTeamName(team.manager),
         projectedWeeklyPoints: team.mean,
         powerRank: rankedStrength.findIndex((row) => row.manager.id === team.manager.id) + 1,
-        expectedWins: outcome.expectedWins,
-        expectedSeed: outcome.expectedSeed,
-        playoffProbability: outcome.playoffProbability,
-        championshipProbability: outcome.championshipProbability,
+        expectedWins,
+        expectedSeed,
+        playoffProbability,
+        championshipProbability,
         modelCapital: Math.round(team.modelCapital),
         marketCapital: Math.round(team.marketCapital),
         window,
@@ -238,10 +260,6 @@ export async function simulateDynastyBoys(iterations = 2500): Promise<LeagueSimu
         b.projectedWeeklyPoints - a.projectedWeeklyPoints,
     );
 
-  const productionCoverage = predictions.size
-    ? [...predictions.values()].filter((prediction) => prediction.games >= 3).length / predictions.size
-    : 0;
-
   return {
     rows,
     context,
@@ -249,5 +267,6 @@ export async function simulateDynastyBoys(iterations = 2500): Promise<LeagueSimu
     scheduleSource: hasSleeperSchedule ? "SLEEPER" : "FALLBACK",
     completedWeeks,
     productionCoverage,
+    evidenceWeight,
   };
 }
