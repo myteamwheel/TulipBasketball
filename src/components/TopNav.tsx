@@ -20,25 +20,11 @@ function isActive(pathname: string, href: string) {
 
 export default function TopNav() {
   const pathname = usePathname();
-
   return (
-    <nav className="no-scrollbar flex min-w-0 gap-1 overflow-x-auto py-1.5">
+    <nav aria-label="Dashboard" className="flex min-w-0 flex-wrap gap-1 py-1.5">
       {NAV.map((item) => {
         const active = isActive(pathname, item.href);
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            aria-current={active ? "page" : undefined}
-            className={`shrink-0 rounded-md px-2.5 py-1.5 text-xs font-medium transition sm:px-3 ${
-              active
-                ? "bg-neutral-800 text-neutral-50"
-                : "text-neutral-500 hover:bg-neutral-900 hover:text-neutral-200"
-            }`}
-          >
-            {item.label}
-          </Link>
-        );
+        return <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={`rounded-md px-2.5 py-1.5 text-[11px] font-medium transition sm:px-3 sm:text-xs ${active ? "bg-neutral-800 text-neutral-50" : "text-neutral-500 hover:bg-neutral-900 hover:text-neutral-200"}`}>{item.label}</Link>;
       })}
     </nav>
   );
