@@ -2,7 +2,6 @@ import KtcImportForm from "@/components/KtcImportForm";
 import { getPlayersNeedingMappingReview } from "@/lib/queries";
 import { KTC_FORMAT_LABEL, MARKET_SOURCE_MAX_AGE_HOURS, ORLANDO_BASELINE_DATE, ORLANDO_OSWALDS_SLEEPER_USER_ID, SLEEPER_LEAGUE_ID } from "@/lib/config";
 import { getLatestMarketSourceStatuses } from "@/lib/marketSources";
-import { authConfigurationValid, authRequired } from "@/lib/auth";
 import { formatDateEastern, timeAgo } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -81,7 +80,7 @@ export default async function SettingsPage() {
           <div className="grid grid-cols-[1fr_auto] gap-3"><dt>KTC format</dt><dd className="text-right text-neutral-300">{KTC_FORMAT_LABEL}</dd></div>
           <div className="grid grid-cols-[1fr_auto] gap-3"><dt>Freshness cutoff</dt><dd className="text-right text-neutral-300">{MARKET_SOURCE_MAX_AGE_HOURS}h</dd></div>
           <div className="grid grid-cols-[1fr_auto] gap-3"><dt>Automatic ingestion</dt><dd className="text-right text-emerald-300">Daily · 8 a.m. ET window</dd></div>
-          <div className="grid grid-cols-[1fr_auto] gap-3"><dt>Password protection</dt><dd className={authRequired() && authConfigurationValid() ? "text-emerald-300" : "text-red-300"}>{authRequired() && authConfigurationValid() ? "Enabled" : "Configuration required"}</dd></div>
+          <div className="grid grid-cols-[1fr_auto] gap-3"><dt>Password protection</dt><dd className="text-right text-neutral-300">Disabled</dd></div>
         </dl>
       </section>
     </div>

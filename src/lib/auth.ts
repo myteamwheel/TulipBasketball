@@ -13,9 +13,6 @@ declare global {
   var __dynastyLoginAttempts: Map<string, Attempt> | undefined;
 }
 
-// Warm server/process instances retain failed-attempt state in every environment.
-// This is defense-in-depth; the application still fails closed if auth secrets
-// are missing and does not rely on this map as its only access control.
 const attempts = globalThis.__dynastyLoginAttempts ?? new Map<string, Attempt>();
 globalThis.__dynastyLoginAttempts = attempts;
 
@@ -47,10 +44,9 @@ function sessionOptions() {
   };
 }
 
-/** Production is always private. Missing secrets fail closed instead of making
- * the dashboard public or accepting sessions encrypted with a known fallback. */
+/** Dashboard access is intentionally open; no application password is required. */
 export function authRequired(): boolean {
-  return process.env.NODE_ENV === "production" || !!process.env.DASHBOARD_PASSWORD;
+  return false;
 }
 
 export async function getSession(): Promise<IronSession<SessionData>> {
