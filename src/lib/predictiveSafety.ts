@@ -15,6 +15,83 @@ function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
 
+function quantile(values: number[], q: number) {
+  const xs = [...values].filter(Number.isFinite).sort((a, b) => a - b);
+  if (!xs.length) return 0;
+  if (xs.length === 1) return xs[0];
+  const p = clamp(q, 0, 1) * (xs.length - 1);
+  const lo = Math.floor(p);
+  const hi = Math.ceil(p);
+  const fraction = p - lo;
+  return xs[lo] + (xs[hi] - xs[lo]) * fraction;
+}
+
+function percentile(value: number | null, values: number[]) {
+  if (value === null || !Number.isFinite(value)) return 0.5;
+  const clean = values.filter(Number.isFinite);
+  if (!clean.length) return 0.5;
+  const below = clean.filter((peer) => peer < value).length;
+  const equal = clean.filter((peer) => peer === value).length;
+  return clamp((below + equal * 0.5) / clean.length, 0.02, 0.98);
+}
+
+function ageScore(position: string, age: number | null) {
+  if (age === null) return 0.5;
+  if (position === "QB") {
+    if (age <= 24) return 0.9;
+    if (age <= 30) return 1;
+    if (age <= 33) return 0.86;
+    if (age <= 36) return 0.62;
+    return 0.34;
+  }
+  if (position === "RB") {
+    if (age <= 22) return 1;
+    if (age <= 23) return 0.95;
+    if (age <= 24) return 0.85;
+    if (age <= 25) return 0.7;
+    if (age <= 26) return 0.55;
+    if (age <= 27) return 0.38;
+    if (age <= 28) return 0.22;
+    return 0.1;
+  }
+  if (position === "WR") {
+    if (age <= 22) return 0.95;
+    if (age <= 25) return 1;
+    if (age <= 27) return 0.9;
+    if (age <= 28) return 0.75;
+    if (age <= 29) return 0.58;
+    if (age <= 30) return 0.4;
+    return 0.2;
+  }
+  if (position === "TE") {
+    if (age <= 23) return 0.8;
+    if (age <= 27) return 1;
+    if (age <= 29) return 0.9;
+    if (age <= 30) return 0.7;
+    if (age <= 31) return 0.55;
+    return 0.3;
+  }
+  return 0.5;
+}
+
+function draftScore(roundValue: number | null, yearsSinceDraft: number | null) {
+  let base = 0.18;
+  if (roundValue === 1) base = 1;
+  else if (roundValue === 2) base = 0.84;
+  else if (roundValue === 3) base = 0.68;
+  else if (roundValue === 4) base = 0.54;
+  else if (roundValue === 5) base = 0.42;
+  else if (roundValue === 6) base = 0.33;
+  else if (roundValue === 7) base = 0.26;
+  if (yearsSinceDraft === null) return base;
+  let weight = 0.2;
+  if (yearsSinceDraft <= 1) weight = 1;
+  else if (yearsSinceDraft === 2) weight = 0.8;
+  else if (yearsSinceDraft === 3) weight = 0.6;
+  else if (yearsSinceDraft <= 5) weight = 0.4;
+  return 0.5 + (base - 0.5) * weight;
+}
+
 function marketImpliedPpg(position: string, value: number) {
   const x = Math.pow(clamp(value / 10000, 0, 1), 0.76);
   if (position === "QB") return 10.5 + 13 * x;
@@ -55,6 +132,13 @@ export function isDecisionGradeProductionSeason(
   );
 }
 
+type RecentPeerPool = {
+  ppg: number[];
+  opportunity: number[];
+  efficiency: number[];
+  market: number[];
+};
+
 /**
  * Applies evidence gates to the raw predictive model.
  *
@@ -64,6 +148,11 @@ export function isDecisionGradeProductionSeason(
  * independent-value claims when the evidence cannot support a positional peer
  * valuation and blocks football-leading labels until there are enough recent
  * same-position production peers for a meaningful percentile comparison.
+ *
+ * Importantly, decision-grade players are re-percentiled here against only
+ * decision-grade recent peers. A stale season is therefore excluded from the
+ * benchmark population itself, rather than merely neutralizing that stale
+ * player's final recommendation after it has already influenced everyone else.
  */
 export async function getDecisionGradePredictiveModels(
   requestedIds?: string[],
@@ -71,10 +160,29 @@ export async function getDecisionGradePredictiveModels(
   const models = await getPredictivePlayerModels(requestedIds);
   const currentYear = new Date().getUTCFullYear();
   const peerCounts = new Map<string, number>();
+  const recentPeers = new Map<string, RecentPeerPool>();
 
   for (const row of models.values()) {
     if (!isDecisionGradeProductionSeason(row.latestSeason, row.games, currentYear)) continue;
     peerCounts.set(row.position, (peerCounts.get(row.position) ?? 0) + 1);
+    const pool = recentPeers.get(row.position) ?? {
+      ppg: [],
+      opportunity: [],
+      efficiency: [],
+      market: [],
+    };
+    if (row.fantasyPpg !== null && Number.isFinite(row.fantasyPpg)) pool.ppg.push(row.fantasyPpg);
+    if (row.opportunityPerGame !== null && Number.isFinite(row.opportunityPerGame)) {
+      pool.opportunity.push(row.opportunityPerGame);
+    }
+    if (Number.isFinite(row.efficiencyScore)) {
+      // Raw efficiencyScore is already a percentile and cannot be inverted to
+      // the underlying efficiency rate. Do not re-percentile that percentile;
+      // retain it below while rebuilding production/usage against clean peers.
+      pool.efficiency.push(row.efficiencyScore);
+    }
+    pool.market.push(row.currentValue);
+    recentPeers.set(row.position, pool);
   }
 
   const guarded = new Map<string, PredictivePlayerModel>();
@@ -91,6 +199,53 @@ export async function getDecisionGradePredictiveModels(
     const peerSampleAdequate = positionalPeerCount >= MIN_POSITIONAL_FOOTBALL_PEERS;
 
     let next = row;
+
+    // Rebuild the football peer valuation against recent peers only. This
+    // prevents a 2024-only player, for example, from shifting the percentile of
+    // a current 2025/2026 producer before the stale player's own row is gated.
+    if (hasRecentProduction && peerSampleAdequate) {
+      const pool = recentPeers.get(row.position);
+      if (pool) {
+        const productionScore = percentile(row.fantasyPpg, pool.ppg);
+        const usageScore = percentile(row.opportunityPerGame, pool.opportunity);
+        const efficiencyScore = row.efficiencyScore;
+        const yearsSinceDraft = row.draftYear === null ? null : Math.max(0, currentYear - row.draftYear);
+        const fundamentalScore = clamp(
+          productionScore * 0.3 +
+            usageScore * 0.25 +
+            efficiencyScore * 0.1 +
+            ageScore(row.position, row.age) * 0.2 +
+            draftScore(row.draftRound, yearsSinceDraft) * 0.15,
+          0.03,
+          0.97,
+        );
+        const fundamentalValue = round(clamp(quantile(pool.market, fundamentalScore), 50, 10000));
+        const consensus = row.consensusValue ?? row.currentValue;
+        const modelValue = round(
+          clamp(row.currentValue * 0.45 + consensus * 0.15 + fundamentalValue * 0.4, 50, 10000),
+        );
+        const modelEdge = modelValue - row.currentValue;
+        const modelEdgePercent = row.currentValue > 0 ? (modelEdge / row.currentValue) * 100 : 0;
+        next = {
+          ...row,
+          productionScore,
+          usageScore,
+          fundamentalScore,
+          fundamentalValue,
+          modelValue,
+          modelEdge,
+          modelEdgePercent,
+          forecast30d: recenterForecast(row.forecast30d, modelValue),
+          forecastRos: recenterForecast(row.forecastRos, modelValue),
+          forecast1y: recenterForecast(row.forecast1y, modelValue),
+          forecast3y: recenterForecast(row.forecast3y, modelValue),
+          reasons: [
+            `Football peer value is benchmarked against ${positionalPeerCount} recent decision-grade ${row.position} peers; stale seasons are excluded from the comparison population.`,
+            ...row.reasons.filter((reason) => !reason.startsWith("Football-only peer value")),
+          ].slice(0, 4),
+        };
+      }
+    }
 
     // Unknown profile != bad draft capital. If both profile and production are
     // absent, the independent component is unobserved and should be neutral.
