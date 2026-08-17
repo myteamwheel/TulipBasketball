@@ -10,7 +10,11 @@ import { formatDateEastern, timeAgo } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
-const pct = (value: number) => `${Math.round(value * 100)}%`;
+const pct = (value: number) => {
+  const bounded = Math.max(0, Math.min(1, value)) * 100;
+  if (bounded === 0 || bounded === 100) return `${Math.round(bounded)}%`;
+  return `${bounded.toFixed(1)}%`;
+};
 
 export default async function SettingsPage() {
   const [needsReview, statuses, entries, pickMarket, pickOwnership, football] = await Promise.all([
