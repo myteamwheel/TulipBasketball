@@ -186,8 +186,9 @@ export async function simulateDynastyBoys(iterations = 2500): Promise<LeagueSimu
     { length: Math.max(0, regularWeeks - completedWeeks) },
     (_, offset) => {
       const week = completedWeeks + offset;
-      const pairs = hasSleeperSchedule && sleeperPairs[week]?.length ? sleeperPairs[week] : fallback[week];
-      return { pairs: pairs ?? [] };
+      const fallbackPairs = fallback[week]?.pairs ?? [];
+      const pairs = hasSleeperSchedule && sleeperPairs[week]?.length ? sleeperPairs[week] : fallbackPairs;
+      return { pairs };
     },
   );
 
