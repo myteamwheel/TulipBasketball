@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { getIronSession, type IronSession } from "iron-session";
 
@@ -12,8 +13,11 @@ declare global {
   var __dynastyLoginAttempts: Map<string, Attempt> | undefined;
 }
 
+// Warm server/process instances retain failed-attempt state in every environment.
+// This is defense-in-depth; the application still fails closed if auth secrets
+// are missing and does not rely on this map as its only access control.
 const attempts = globalThis.__dynastyLoginAttempts ?? new Map<string, Attempt>();
-if (process.env.NODE_ENV !== "production") globalThis.__dynastyLoginAttempts = attempts;
+globalThis.__dynastyLoginAttempts = attempts;
 
 const FALLBACK_SESSION_SECRET = "disabled-production-session-secret-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
@@ -58,6 +62,15 @@ export async function isAuthenticated(): Promise<boolean> {
   if (!authConfigurationValid()) return false;
   const session = await getSession();
   return !!session.isAuthenticated;
+}
+
+/** Constant-length digest comparison avoids leaking useful prefix timing. */
+export function passwordMatches(candidate: string): boolean {
+  const configured = process.env.DASHBOARD_PASSWORD ?? "";
+  if (!configured || !candidate) return false;
+  const expected = createHash("sha256").update(configured, "utf8").digest();
+  const supplied = createHash("sha256").update(candidate, "utf8").digest();
+  return timingSafeEqual(expected, supplied);
 }
 
 export function loginRateLimitStatus(key: string): { allowed: boolean; retryAfterSeconds: number } {

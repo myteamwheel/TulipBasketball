@@ -4,7 +4,8 @@ import { syncSleeperState } from "@/lib/sync/sleeperSync";
 import { REFRESH_STALE_MS, SLEEPER_LEAGUE_ID } from "@/lib/config";
 import { getLeague } from "@/lib/sleeper";
 import { persistSignalsForRun } from "@/lib/signalsEngine";
-import { refreshLiveMarketSources, type MarketSourceStatus } from "@/lib/marketSources";
+import { refreshLiveMarketSources, type MarketSourceStatus, type DraftPickMarketValue } from "@/lib/marketSources";
+import { fetchDraftPickMarketState } from "@/lib/pickMarket";
 
 const CURRENT_SOURCES = new Set(["KTC", "TRADYR", "DYNASTY_DEALER"]);
 
@@ -132,7 +133,7 @@ export async function startRefresh(): Promise<{ runId: string }> {
       settings: "{}",
     },
   });
-  const requestedSources = ["sleeper", "ktc", "tradyr", "dynasty_dealer", "consensus"];
+  const requestedSources = ["sleeper", "ktc", "tradyr", "dynasty_dealer", "consensus", "draft_pick_market"];
   let run;
   try {
     run = await prisma.refreshRun.create({ data: { leagueId: league.id, requestedSources: JSON.stringify(requestedSources), status: "RUNNING" } });
@@ -156,6 +157,7 @@ async function executeRefresh(runId: string): Promise<void> {
   let marketSourceStatuses: MarketSourceStatus[] = [];
   let marketObservationsStored = 0;
   let consensusPlayersStored = 0;
+  let draftPickMarket: { rows: DraftPickMarketValue[]; sourceUpdatedAt: string; stale: boolean } | null = null;
 
   try {
     const result = await syncSleeperState(runId);
@@ -182,6 +184,16 @@ async function executeRefresh(runId: string): Promise<void> {
   } catch (error) {
     ktcSyncOk = false;
     errors.push({ source: "market", message: error instanceof Error ? error.message : String(error) });
+  }
+
+  // Store the independently timestamped pick board inside the refresh audit row.
+  // It is a fallback for portfolio continuity only; stale snapshots are never
+  // accepted by current trade calculators or current trade-winner grading.
+  try {
+    const picks = await fetchDraftPickMarketState();
+    draftPickMarket = { rows: picks.rows, sourceUpdatedAt: picks.sourceUpdatedAt, stale: picks.stale };
+  } catch (error) {
+    errors.push({ source: "draft_pick_market", message: error instanceof Error ? error.message : String(error) });
   }
 
   try {
@@ -216,6 +228,7 @@ async function executeRefresh(runId: string): Promise<void> {
     marketObservationsStored,
     consensusPlayersStored,
     marketSourceStatuses,
+    draftPickMarket,
   };
 
   await prisma.refreshRun.update({

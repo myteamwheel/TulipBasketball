@@ -1,20 +1,29 @@
-# TulipBasketball
+# Dynasty Boys Dashboard
 
-Prebuilt deployment for the TulipBasketball NBA draft game plus the historical G League mode at `/gleague`.
+Private dynasty-fantasy market terminal for the Dynasty Boys Sleeper league, centered on the Orlando Oswalds.
 
-## G League mode implemented
+## Production
 
-- Uniform team selection among every franchise with five legal cards for the current roster slot; the team is selected directly before the wheel animation, so no landed result can be discarded or remapped.
-- A selectable six-use franchise override that can explicitly choose Long Island or any other eligible team.
-- 31 active affiliate/independent franchises plus the defunct G League Ignite program.
-- Current Coachella Valley Lakers identity with South Bay Lakers and Los Angeles D-Fenders history retained in the same lineage.
-- One record per player-team-season. Players can appear in multiple seasons and for multiple franchises.
-- Official season statistics, official G League headshot URL, biographical fields, NBA career games, draft pedigree, awards and season leaders.
-- Overall model combines season production/efficiency, G League experience, NBA games, draft position and accolades. MVP Mac McClung cards for 2023-24 and 2025-26 have a 95 OVR floor.
-- Automated data integrity audit checks all 32 wheel teams, every roster-position family, Long Island reachability, Ignite inclusion, unique card IDs, required fields and rating bounds.
+- Primary deployment: Vercel project `dynasty-boys-dashboard`
+- Production branch: `main`
+- Framework: Next.js + Prisma/Postgres
+- Current market anchor: KeepTradeCut
+- Trusted secondary markets: Tradyr and Dynasty Dealer
+- Automatic ingestion: daily around 8 a.m. America/New_York, plus explicit manual refreshes
 
-## Deployment
+## Data rules
 
-Railway only needs `npm start`. `bootstrap.mjs` reconstructs and extracts the prebuilt site archive and serves the prebuilt site without third-party runtime dependencies.
+- KTC is the primary player-value anchor.
+- Current-decision surfaces require fresh data and never substitute an expired observation as if it were current.
+- Portfolio capital may retain the latest verified player or draft-pick value during a provider outage, but stale values are visibly marked and excluded from current trade grading.
+- June 21, 2026 is the first complete verified Orlando baseline. Earlier partial history is preserved only where it actually exists.
+- Historical trade/add-drop grading uses stored observations within a bounded event-date tolerance; missing historical values are left unknown rather than invented.
+- Current trade grading requires complete fresh asset coverage, including a fresh draft-pick market for trades containing picks.
 
-The `Sync G League history` GitHub Action rebuilds the historical player-season database from official NBA G League statistics and commits the refreshed split site archive, which triggers the connected Railway deployment.
+## Privacy
+
+Production is password protected and fails closed when the required authentication configuration is missing. Data-bearing API routes independently verify the authenticated session; scheduled ingestion uses the cron route under `/api/cron/daily-refresh/...`.
+
+## Repository layout
+
+The authoritative application lives at the repository root (`src`, `prisma`, `scripts`). Old recovery copies are intentionally not part of the production build. Historical G League static data remains isolated under `gleague-static` and its dedicated sync workflow.

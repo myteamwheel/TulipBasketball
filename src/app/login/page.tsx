@@ -6,6 +6,7 @@ import {
   clearLoginFailures,
   getSession,
   loginRateLimitStatus,
+  passwordMatches,
   recordLoginFailure,
 } from "@/lib/auth";
 
@@ -21,7 +22,7 @@ async function login(formData: FormData) {
   if (!limit.allowed) redirect(`/login?error=rate&retry=${limit.retryAfterSeconds}`);
 
   const password = String(formData.get("password") ?? "");
-  if (password && password === process.env.DASHBOARD_PASSWORD) {
+  if (passwordMatches(password)) {
     clearLoginFailures(key);
     const session = await getSession();
     session.isAuthenticated = true;
@@ -61,6 +62,7 @@ export default async function LoginPage({
             placeholder="Password"
             autoComplete="current-password"
             autoFocus
+            required
             className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100 outline-none focus:border-emerald-500"
           />
           {errorText ? <p className="text-sm leading-5 text-red-400">{errorText}</p> : null}

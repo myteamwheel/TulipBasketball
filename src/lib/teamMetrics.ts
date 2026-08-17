@@ -2,7 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { computeMarketDataForPlayers, type PlayerMarketData } from "@/lib/metrics";
 import { getAllCurrentRosterEntries, getAllManagers } from "@/lib/queries";
 import { SLEEPER_LEAGUE_ID, STARTING_REQUIREMENTS } from "@/lib/config";
-import { fetchFreshDraftPickMarketValues } from "@/lib/pickMarket";
+import { fetchDraftPickMarketForCapital } from "@/lib/pickMarket";
+import type { DraftPickMarketValue } from "@/lib/marketSources";
 import { getTradedPicks } from "@/lib/sleeper";
 
 export interface TeamValuation {
@@ -13,6 +14,10 @@ export interface TeamValuation {
   draftCapital: number;
   totalDynastyValue: number;
   draftPickCount: number;
+  draftMarketAvailable: boolean;
+  draftMarketStale: boolean;
+  draftMarketObservedAt: string | null;
+  draftMarketOrigin: "LIVE_PROVIDER" | "REFRESH_SNAPSHOT" | null;
   starterValue: number;
   optimalLineupValue: number;
   benchValue: number;
@@ -54,7 +59,7 @@ function optimalLineupValue(roster: ValuedPlayer[], rosterPositions: string[]): 
   for (const slot of normalized.filter((slot) => slot === "SUPER_FLEX")) total += bestFrom(["QB", "RB", "WR", "TE"]);
   return total;
 }
-function neutralPickValue(market: Awaited<ReturnType<typeof fetchFreshDraftPickMarketValues>>, season: number, round: number): number | null {
+function neutralPickValue(market: DraftPickMarketValue[], season: number, round: number): number | null {
   const matching = market.filter((pick) => Number(pick.season) === season && pick.round === round);
   if (!matching.length) return null;
   const generic = matching.find((pick) => pick.slot === null);
@@ -62,8 +67,16 @@ function neutralPickValue(market: Awaited<ReturnType<typeof fetchFreshDraftPickM
 }
 
 export async function computeAllTeamValuations(): Promise<TeamValuation[]> {
-  const [managers, entries, slotMap, league, pickMarket, tradedPicks] = await Promise.all([getAllManagers(), getAllCurrentRosterEntries(), getLatestSlotMap(), prisma.league.findFirst({ where: { sleeperId: SLEEPER_LEAGUE_ID }, select: { settings: true, season: true } }), fetchFreshDraftPickMarketValues().catch(() => []), getTradedPicks(SLEEPER_LEAGUE_ID).catch(() => [])]);
+  const [managers, entries, slotMap, league, pickState, tradedPicks] = await Promise.all([
+    getAllManagers(),
+    getAllCurrentRosterEntries(),
+    getLatestSlotMap(),
+    prisma.league.findFirst({ where: { sleeperId: SLEEPER_LEAGUE_ID }, select: { settings: true, season: true } }),
+    fetchDraftPickMarketForCapital().catch(() => null),
+    getTradedPicks(SLEEPER_LEAGUE_ID).catch(() => []),
+  ]);
   void slotMap;
+  const pickMarket = pickState?.rows ?? [];
   const playerIds = entries.map((entry) => entry.playerId);
   const marketData = await computeMarketDataForPlayers(playerIds);
   const byManager = new Map<string, ValuedPlayer[]>();
@@ -103,6 +116,17 @@ export async function computeAllTeamValuations(): Promise<TeamValuation[]> {
       if (!player.market.isStale && player.market.changeSinceBaseline) { changeSinceBaseline += player.market.changeSinceBaseline.points; changeSinceBaselineCoverage++; }
     }
     const optimal = optimalLineupValue(roster, rosterPositions); const picks = pickCapital.get(manager.id) ?? { total: 0, count: 0 };
-    return { managerId: manager.id, teamName: manager.teamName ?? manager.displayName, totalValue: playerCapital, playerCapital, draftCapital: picks.total, totalDynastyValue: playerCapital + picks.total, draftPickCount: picks.count, starterValue: optimal, optimalLineupValue: optimal, benchValue: Math.max(0, playerCapital - optimal), depthValue: Math.max(0, playerCapital - optimal), playerCount: roster.length, valuedPlayerCount, lastKnownPlayerCount, stalePlayerCount, unmappedCount, positionalValue, changeSinceLastRefresh: changeSinceLastRefreshCoverage ? changeSinceLastRefresh : null, changeSinceLastRefreshCoverage, change7d: change7dCoverage ? change7d : null, change7dCoverage, change30d: change30dCoverage ? change30d : null, change30dCoverage, changeSinceBaseline: changeSinceBaselineCoverage ? changeSinceBaseline : null, changeSinceBaselineCoverage };
+    return {
+      managerId: manager.id, teamName: manager.teamName ?? manager.displayName,
+      totalValue: playerCapital, playerCapital, draftCapital: picks.total, totalDynastyValue: playerCapital + picks.total,
+      draftPickCount: picks.count, draftMarketAvailable: !!pickState, draftMarketStale: pickState?.stale ?? true,
+      draftMarketObservedAt: pickState?.sourceUpdatedAt ?? null, draftMarketOrigin: pickState?.origin ?? null,
+      starterValue: optimal, optimalLineupValue: optimal, benchValue: Math.max(0, playerCapital - optimal), depthValue: Math.max(0, playerCapital - optimal),
+      playerCount: roster.length, valuedPlayerCount, lastKnownPlayerCount, stalePlayerCount, unmappedCount, positionalValue,
+      changeSinceLastRefresh: changeSinceLastRefreshCoverage ? changeSinceLastRefresh : null, changeSinceLastRefreshCoverage,
+      change7d: change7dCoverage ? change7d : null, change7dCoverage,
+      change30d: change30dCoverage ? change30d : null, change30dCoverage,
+      changeSinceBaseline: changeSinceBaselineCoverage ? changeSinceBaseline : null, changeSinceBaselineCoverage,
+    };
   });
 }
