@@ -24,6 +24,8 @@ function localHour(date: Date): number {
 export async function GET(request: NextRequest, { params }: { params: Promise<{ slot: string }> }) {
   if (!authorized(request)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { slot } = await params;
+  if (slot !== "12" && slot !== "13") return NextResponse.json({ error: "Unknown cron slot" }, { status: 404 });
+
   const now = new Date();
   const hour = localHour(now);
 

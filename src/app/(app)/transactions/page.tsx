@@ -54,7 +54,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
     const adds = parseRecord(transaction.adds), drops = parseRecord(transaction.drops), draftPicks = parseArray<TradedPick>(transaction.draftPicks), rosterIds = parseArray<number>(transaction.rosterIdsInvolved);
     const playerAdds = Object.entries(adds).map(([pid, rosterId]) => playerAsset(pid, rosterId, transaction.sleeperCreatedAt, "add"));
     const playerDrops = Object.entries(drops).map(([pid, rosterId]) => playerAsset(pid, rosterId, transaction.sleeperCreatedAt, "drop"));
-    const pickAssets = draftPicks.map((pick) => ({ assetType: "pick" as const, label: `${pick.season} Round ${pick.round} pick`, managerName: managerName(pick.owner_id), rosterId: pick.owner_id, previousManagerName: managerName(pick.previous_owner_id), valueAtTx: null, valueAtTxApprox: false, currentValue: currentPickValue(pick.season, pick.round), playerId: null, kind: "add" as const }));
+    const pickAssets = draftPicks.map((pick) => ({ assetType: "pick" as const, label: `${pick.season} Round ${pick.round} · ${managerName(pick.roster_id)} original`, managerName: managerName(pick.owner_id), rosterId: pick.owner_id, previousManagerName: managerName(pick.previous_owner_id), valueAtTx: null, valueAtTxApprox: false, currentValue: currentPickValue(pick.season, pick.round), playerId: null, kind: "add" as const }));
     const assets = [...playerAdds, ...playerDrops, ...pickAssets];
     const tradeSides = [...new Set(rosterIds)].map((rosterId) => {
       const acquired = [...playerAdds.filter((asset) => asset.rosterId === rosterId), ...pickAssets.filter((asset) => asset.rosterId === rosterId)];

@@ -19,6 +19,8 @@ export interface TeamValuation {
   depthValue: number;
   playerCount: number;
   valuedPlayerCount: number;
+  lastKnownPlayerCount: number;
+  stalePlayerCount: number;
   unmappedCount: number;
   positionalValue: Record<string, number>;
   changeSinceLastRefresh: number | null;
@@ -68,7 +70,10 @@ export async function computeAllTeamValuations(): Promise<TeamValuation[]> {
   for (const entry of entries) {
     const market = marketData.get(entry.playerId)!;
     const list = byManager.get(entry.managerId) ?? [];
-    list.push({ playerId: entry.playerId, position: entry.player.position, value: market.isStale ? 0 : market.currentValue ?? 0, market });
+    // Preserve the latest validated KTC value for capital/ranking continuity if
+    // a refresh source temporarily ages out. Stale values remain excluded from
+    // movement, signals and player-level decision surfaces.
+    list.push({ playerId: entry.playerId, position: entry.player.position, value: market.currentValue ?? 0, market });
     byManager.set(entry.managerId, list);
   }
   let rosterPositions: string[] = []; let draftRounds = 4;
@@ -82,10 +87,15 @@ export async function computeAllTeamValuations(): Promise<TeamValuation[]> {
   }
   return managers.map((manager) => {
     const roster = byManager.get(manager.id) ?? [];
-    let playerCapital = 0, valuedPlayerCount = 0, unmappedCount = 0, changeSinceLastRefresh = 0, changeSinceLastRefreshCoverage = 0, change7d = 0, change7dCoverage = 0, change30d = 0, change30dCoverage = 0, changeSinceBaseline = 0, changeSinceBaselineCoverage = 0;
+    let playerCapital = 0, valuedPlayerCount = 0, lastKnownPlayerCount = 0, stalePlayerCount = 0, unmappedCount = 0, changeSinceLastRefresh = 0, changeSinceLastRefreshCoverage = 0, change7d = 0, change7dCoverage = 0, change30d = 0, change30dCoverage = 0, changeSinceBaseline = 0, changeSinceBaselineCoverage = 0;
     const positionalValue: Record<string, number> = {};
     for (const player of roster) {
-      if (player.market.currentValue === null || player.market.isStale) unmappedCount++; else valuedPlayerCount++;
+      if (player.market.currentValue === null) unmappedCount++;
+      else {
+        lastKnownPlayerCount++;
+        if (player.market.isStale) stalePlayerCount++;
+        else valuedPlayerCount++;
+      }
       playerCapital += player.value; positionalValue[player.position] = (positionalValue[player.position] ?? 0) + player.value;
       if (!player.market.isStale && player.market.changeSinceLastRefresh) { changeSinceLastRefresh += player.market.changeSinceLastRefresh.points; changeSinceLastRefreshCoverage++; }
       if (!player.market.isStale && player.market.change7d) { change7d += player.market.change7d.points; change7dCoverage++; }
@@ -93,6 +103,6 @@ export async function computeAllTeamValuations(): Promise<TeamValuation[]> {
       if (!player.market.isStale && player.market.changeSinceBaseline) { changeSinceBaseline += player.market.changeSinceBaseline.points; changeSinceBaselineCoverage++; }
     }
     const optimal = optimalLineupValue(roster, rosterPositions); const picks = pickCapital.get(manager.id) ?? { total: 0, count: 0 };
-    return { managerId: manager.id, teamName: manager.teamName ?? manager.displayName, totalValue: playerCapital, playerCapital, draftCapital: picks.total, totalDynastyValue: playerCapital + picks.total, draftPickCount: picks.count, starterValue: optimal, optimalLineupValue: optimal, benchValue: Math.max(0, playerCapital - optimal), depthValue: Math.max(0, playerCapital - optimal), playerCount: roster.length, valuedPlayerCount, unmappedCount, positionalValue, changeSinceLastRefresh: changeSinceLastRefreshCoverage ? changeSinceLastRefresh : null, changeSinceLastRefreshCoverage, change7d: change7dCoverage ? change7d : null, change7dCoverage, change30d: change30dCoverage ? change30d : null, change30dCoverage, changeSinceBaseline: changeSinceBaselineCoverage ? changeSinceBaseline : null, changeSinceBaselineCoverage };
+    return { managerId: manager.id, teamName: manager.teamName ?? manager.displayName, totalValue: playerCapital, playerCapital, draftCapital: picks.total, totalDynastyValue: playerCapital + picks.total, draftPickCount: picks.count, starterValue: optimal, optimalLineupValue: optimal, benchValue: Math.max(0, playerCapital - optimal), depthValue: Math.max(0, playerCapital - optimal), playerCount: roster.length, valuedPlayerCount, lastKnownPlayerCount, stalePlayerCount, unmappedCount, positionalValue, changeSinceLastRefresh: changeSinceLastRefreshCoverage ? changeSinceLastRefresh : null, changeSinceLastRefreshCoverage, change7d: change7dCoverage ? change7d : null, change7dCoverage, change30d: change30dCoverage ? change30d : null, change30dCoverage, changeSinceBaseline: changeSinceBaselineCoverage ? changeSinceBaseline : null, changeSinceBaselineCoverage };
   });
 }
