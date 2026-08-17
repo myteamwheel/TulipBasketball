@@ -2,6 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
   "buildCommand": "npm run vercel-build",
+  "ignoreCommand": "git diff --quiet HEAD^ HEAD -- . ':(exclude)gleague-static/**' ':(exclude)scripts/mirror-live-site.mjs' ':(exclude)scripts/sync-gleague-data.mjs' ':(exclude)scripts/audit-gleague-data.mjs' ':(exclude)scripts/gleague-data-summary.json' ':(exclude)site.tar.gz'",
   "crons": [
     {
       "path": "/api/cron/daily-refresh/12",
