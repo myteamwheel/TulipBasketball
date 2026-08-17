@@ -11,6 +11,25 @@ for (const path of pages) {
   } else console.log(`PASS page ${path}: ${response.status}`);
 }
 
+try {
+  const response = await fetch(`${base}/api/release`, {
+    redirect: "follow",
+    headers: { "user-agent": "dynasty-production-smoke/1.0" },
+  });
+  const payload = await response.json();
+  const validSha = typeof payload?.sha === "string" && /^[0-9a-f]{7,40}$/i.test(payload.sha);
+  const validRef = typeof payload?.ref === "string" && payload.ref.length > 0 && payload.ref !== "unknown";
+  if (!response.ok || !validSha || !validRef) {
+    console.error(`FAIL release provenance: status=${response.status} sha=${payload?.sha ?? "missing"} ref=${payload?.ref ?? "missing"}`);
+    failed = true;
+  } else {
+    console.log(`PASS release provenance: ${payload.sha.slice(0, 12)} on ${payload.ref}`);
+  }
+} catch (error) {
+  console.error(`FAIL release provenance: ${error instanceof Error ? error.message : String(error)}`);
+  failed = true;
+}
+
 const protectedChecks = [
   ["POST", "/api/refresh"],
   ["GET", "/api/strategy"],
