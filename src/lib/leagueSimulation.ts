@@ -2,7 +2,10 @@ import { prisma } from "@/lib/prisma";
 import { SLEEPER_LEAGUE_ID } from "@/lib/config";
 import { getAllCurrentRosterEntries, getAllManagers } from "@/lib/queries";
 import { getLatestSlotMap } from "@/lib/teamMetrics";
-import { getDecisionGradePredictiveModels as getPredictivePlayerModels } from "@/lib/predictiveSafety";
+import {
+  getDecisionGradePredictiveModels as getPredictivePlayerModels,
+  isDecisionGradeProductionSeason,
+} from "@/lib/predictiveSafety";
 import { getMatchups, getNflState } from "@/lib/sleeper";
 import { publicTeamName } from "@/lib/publicIdentity";
 import { projectOptimalWeeklyPoints } from "@/lib/lineupProjection";
@@ -279,12 +282,18 @@ export async function simulateDynastyBoys(iterations = 2500): Promise<LeagueSimu
   const outcomeById = new Map(outcomes.map((outcome) => [outcome.teamId, outcome]));
   const rankedStrength = [...teamInputs].sort((a, b) => b.mean - a.mean);
   const productionCoverage = predictions.size
-    ? [...predictions.values()].filter((prediction) => prediction.games >= 3).length / predictions.size
+    ? [...predictions.values()].filter((prediction) =>
+        isDecisionGradeProductionSeason(
+          prediction.latestSeason,
+          prediction.games,
+          currentSeason,
+        ),
+      ).length / predictions.size
     : 0;
 
   // When football evidence is sparse, weekly projections are mostly market-implied role estimates.
   // Shrink season-outcome probabilities toward league-neutral priors so low coverage cannot create
-  // false precision. Once roughly a full league's starter pool has real production (~35% of all
+  // false precision. Once roughly a full league's starter pool has recent production (~35% of all
   // rostered assets in this deep league), the simulation receives full weight.
   const evidenceWeight = Math.max(0, Math.min(1, productionCoverage / 0.35));
   const neutralPlayoffProbability = managers.length ? playoffTeams / managers.length : 0;

@@ -11,6 +11,19 @@ function round(value: number) {
   return Math.round(value);
 }
 
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function marketImpliedPpg(position: string, value: number) {
+  const x = Math.pow(clamp(value / 10000, 0, 1), 0.76);
+  if (position === "QB") return 10.5 + 13 * x;
+  if (position === "RB") return 3 + 14 * x;
+  if (position === "WR") return 3 + 14.5 * x;
+  if (position === "TE") return 2.5 + 12.5 * x;
+  return 3 + 10 * x;
+}
+
 function recenterForecast(forecast: ValueForecast, mean: number): ValueForecast {
   const oldMean = Math.max(1, forecast.mean);
   const lowRatio = Math.max(0.05, forecast.low / oldMean);
@@ -108,12 +121,13 @@ export async function getDecisionGradePredictiveModels(
     }
 
     // A player who missed an entire regular season cannot have an older sample
-    // treated as current evidence. The historical production remains visible on
-    // the player page, but it cannot drive a present-tense fair-value edge,
-    // football-leading label or high-confidence forecast.
+    // treated as current evidence. Historical production remains visible, but it
+    // cannot drive current fair value, lineup projection, football-leading labels,
+    // or high-confidence forecasts.
     if (productionIsStale) {
       const { modelValue, modelEdge, modelEdgePercent } = neutralMarketModel(row);
       const seasonAge = row.latestSeason === null ? null : currentYear - row.latestSeason;
+      const projectedWeeklyPoints = Number(marketImpliedPpg(row.position, row.currentValue).toFixed(1));
       next = {
         ...next,
         fundamentalValue: row.currentValue,
@@ -124,6 +138,7 @@ export async function getDecisionGradePredictiveModels(
         modelValue,
         modelEdge,
         modelEdgePercent,
+        projectedWeeklyPoints,
         forecast30d: recenterForecast(next.forecast30d, modelValue),
         forecastRos: recenterForecast(next.forecastRos, modelValue),
         forecast1y: recenterForecast(next.forecast1y, modelValue),
@@ -132,7 +147,7 @@ export async function getDecisionGradePredictiveModels(
         mispricingQuadrant: "MARKET_ONLY",
         reasons: [
           `Independent football valuation is withheld: the latest regular-season production is from ${row.latestSeason}${seasonAge !== null ? ` (${seasonAge} seasons behind the current ${currentYear} season)` : ""}.`,
-          "Older production remains descriptive history, but it is not treated as current evidence after a player misses a full regular season.",
+          "Older production remains descriptive history, but current lineup projection reverts to a market-implied role estimate rather than carrying stale PPG into the season simulation.",
           ...next.reasons.filter(
             (reason) =>
               !reason.startsWith("Football-only peer value") &&
