@@ -1,0 +1,4 @@
+import { createHash,timingSafeEqual } from "node:crypto";
+function safeEqual(left:string,right:string){const a=createHash("sha256").update(left,"utf8").digest();const b=createHash("sha256").update(right,"utf8").digest();return timingSafeEqual(a,b)}
+export function isAdminRequest(request:Request):boolean{const expected=process.env.DASHBOARD_ADMIN_KEY?.trim()??"";if(expected.length<24)return false;const auth=request.headers.get("authorization")??"";const bearer=auth.match(/^Bearer\s+(.+)$/i)?.[1]?.trim()??"";const header=request.headers.get("x-dashboard-admin-key")?.trim()??"";const candidate=bearer||header;return candidate.length>0&&safeEqual(candidate,expected)}
+export function adminDeniedResponse():Response{return Response.json({error:"Administrative access required"},{status:403,headers:{"Cache-Control":"no-store"}})}

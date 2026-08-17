@@ -1,10 +1,11 @@
 import { prisma } from "@/lib/prisma";
 import { computeMarketDataForPlayers, type PlayerMarketData } from "@/lib/metrics";
 import { getAllCurrentRosterEntries, getAllManagers } from "@/lib/queries";
-import { SLEEPER_LEAGUE_ID, STARTING_REQUIREMENTS } from "@/lib/config";
+import { POSITION_STARTER_COUNTS, SLEEPER_LEAGUE_ID, STARTING_REQUIREMENTS } from "@/lib/config";
 import { fetchDraftPickMarketForCapital } from "@/lib/pickMarket";
 import type { DraftPickMarketValue } from "@/lib/marketSources";
-import { getTradedPicks } from "@/lib/sleeper";
+import { fetchTradedPickOwnershipState } from "@/lib/pickOwnership";
+import { publicTeamName } from "@/lib/publicIdentity";
 
 export interface TeamValuation {
   managerId: string;
@@ -18,6 +19,7 @@ export interface TeamValuation {
   draftMarketStale: boolean;
   draftMarketObservedAt: string | null;
   draftMarketOrigin: "LIVE_PROVIDER" | "REFRESH_SNAPSHOT" | null;
+  draftOwnershipAvailable: boolean;
   starterValue: number;
   optimalLineupValue: number;
   benchValue: number;
@@ -28,6 +30,8 @@ export interface TeamValuation {
   stalePlayerCount: number;
   unmappedCount: number;
   positionalValue: Record<string, number>;
+  positionalStarterValue: Record<string, number>;
+  positionalDepthValue: Record<string, number>;
   changeSinceLastRefresh: number | null;
   changeSinceLastRefreshCoverage: number;
   change7d: number | null;
@@ -59,23 +63,25 @@ function optimalLineupValue(roster: ValuedPlayer[], rosterPositions: string[]): 
   for (const slot of normalized.filter((slot) => slot === "SUPER_FLEX")) total += bestFrom(["QB", "RB", "WR", "TE"]);
   return total;
 }
-function neutralPickValue(market: DraftPickMarketValue[], season: number, round: number): number | null {
+
+function projectedPickValue(market: DraftPickMarketValue[], season: number, round: number, projectedSlot: number): number | null {
   const matching = market.filter((pick) => Number(pick.season) === season && pick.round === round);
   if (!matching.length) return null;
+  const exact = matching.find((pick) => pick.slot === projectedSlot);
+  if (exact) return exact.value;
   const generic = matching.find((pick) => pick.slot === null);
-  return generic?.value ?? Math.round(matching.reduce((sum, pick) => sum + pick.value, 0) / matching.length);
+  if (generic) return generic.value;
+  return Math.round(matching.reduce((sum, pick) => sum + pick.value, 0) / matching.length);
 }
 
 export async function computeAllTeamValuations(): Promise<TeamValuation[]> {
-  const [managers, entries, slotMap, league, pickState, tradedPicks] = await Promise.all([
+  const [managers, entries, league, pickState, pickOwnershipState] = await Promise.all([
     getAllManagers(),
     getAllCurrentRosterEntries(),
-    getLatestSlotMap(),
     prisma.league.findFirst({ where: { sleeperId: SLEEPER_LEAGUE_ID }, select: { settings: true, season: true } }),
     fetchDraftPickMarketForCapital().catch(() => null),
-    getTradedPicks(SLEEPER_LEAGUE_ID).catch(() => []),
+    fetchTradedPickOwnershipState().catch(() => null),
   ]);
-  void slotMap;
   const pickMarket = pickState?.rows ?? [];
   const playerIds = entries.map((entry) => entry.playerId);
   const marketData = await computeMarketDataForPlayers(playerIds);
@@ -83,46 +89,72 @@ export async function computeAllTeamValuations(): Promise<TeamValuation[]> {
   for (const entry of entries) {
     const market = marketData.get(entry.playerId)!;
     const list = byManager.get(entry.managerId) ?? [];
-    // Preserve the latest validated KTC value for capital/ranking continuity if
-    // a refresh source temporarily ages out. Stale values remain excluded from
-    // movement, signals and player-level decision surfaces.
     list.push({ playerId: entry.playerId, position: entry.player.position, value: market.currentValue ?? 0, market });
     byManager.set(entry.managerId, list);
   }
+
   let rosterPositions: string[] = []; let draftRounds = 4;
   try { const settings = league?.settings ? JSON.parse(league.settings) : {}; rosterPositions = Array.isArray(settings?.roster_positions) ? settings.roster_positions.map(String) : []; const parsedRounds = Number(settings?.settings?.draft_rounds); if (Number.isFinite(parsedRounds) && parsedRounds >= 1 && parsedRounds <= 10) draftRounds = parsedRounds; } catch {}
+
+  const rawPlayerCapital = new Map(managers.map((manager) => [manager.id, (byManager.get(manager.id) ?? []).reduce((sum, player) => sum + player.value, 0)]));
+  const strengthOrder = [...managers].sort((a, b) => (rawPlayerCapital.get(b.id) ?? 0) - (rawPlayerCapital.get(a.id) ?? 0));
+  const strengthRank = new Map(strengthOrder.map((manager, index) => [manager.id, index + 1]));
+  const projectedSlot = new Map(managers.map((manager) => [manager.sleeperRosterId, Math.max(1, managers.length + 1 - (strengthRank.get(manager.id) ?? managers.length))]));
+
   const managerByRoster = new Map(managers.map((manager) => [manager.sleeperRosterId, manager]));
   const pickCapital = new Map<string, { total: number; count: number }>();
-  const availableSeasons = [...new Set(pickMarket.map((pick) => Number(pick.season)).filter(Number.isFinite))].sort((a, b) => a - b).slice(0, 4);
-  for (const season of availableSeasons) for (let round = 1; round <= draftRounds; round++) {
-    const value = neutralPickValue(pickMarket, season, round); if (!value) continue;
-    for (const origin of managers) { const moved = tradedPicks.find((pick) => Number(pick.season) === season && pick.round === round && pick.roster_id === origin.sleeperRosterId); const owner = managerByRoster.get(moved?.owner_id ?? origin.sleeperRosterId); if (!owner) continue; const current = pickCapital.get(owner.id) ?? { total: 0, count: 0 }; current.total += value; current.count += 1; pickCapital.set(owner.id, current); }
+  const draftDataComplete = !!pickState && !!pickOwnershipState;
+  if (draftDataComplete) {
+    const availableSeasons = [...new Set(pickMarket.map((pick) => Number(pick.season)).filter(Number.isFinite))].sort((a, b) => a - b).slice(0, 4);
+    for (const season of availableSeasons) for (let round = 1; round <= draftRounds; round++) {
+      for (const origin of managers) {
+        const moved = pickOwnershipState.rows.find((pick) => Number(pick.season) === season && pick.round === round && pick.roster_id === origin.sleeperRosterId);
+        const owner = managerByRoster.get(moved?.owner_id ?? origin.sleeperRosterId);
+        if (!owner) continue;
+        const value = projectedPickValue(pickMarket, season, round, projectedSlot.get(origin.sleeperRosterId) ?? 6);
+        if (!value) continue;
+        const current = pickCapital.get(owner.id) ?? { total: 0, count: 0 };
+        current.total += value; current.count += 1; pickCapital.set(owner.id, current);
+      }
+    }
   }
+
   return managers.map((manager) => {
     const roster = byManager.get(manager.id) ?? [];
     let playerCapital = 0, valuedPlayerCount = 0, lastKnownPlayerCount = 0, stalePlayerCount = 0, unmappedCount = 0, changeSinceLastRefresh = 0, changeSinceLastRefreshCoverage = 0, change7d = 0, change7dCoverage = 0, change30d = 0, change30dCoverage = 0, changeSinceBaseline = 0, changeSinceBaselineCoverage = 0;
     const positionalValue: Record<string, number> = {};
+    const valuesByPosition = new Map<string, number[]>();
     for (const player of roster) {
       if (player.market.currentValue === null) unmappedCount++;
-      else {
-        lastKnownPlayerCount++;
-        if (player.market.isStale) stalePlayerCount++;
-        else valuedPlayerCount++;
-      }
-      playerCapital += player.value; positionalValue[player.position] = (positionalValue[player.position] ?? 0) + player.value;
+      else { lastKnownPlayerCount++; if (player.market.isStale) stalePlayerCount++; else valuedPlayerCount++; }
+      playerCapital += player.value;
+      positionalValue[player.position] = (positionalValue[player.position] ?? 0) + player.value;
+      const positionValues = valuesByPosition.get(player.position) ?? []; positionValues.push(player.value); valuesByPosition.set(player.position, positionValues);
       if (!player.market.isStale && player.market.changeSinceLastRefresh) { changeSinceLastRefresh += player.market.changeSinceLastRefresh.points; changeSinceLastRefreshCoverage++; }
       if (!player.market.isStale && player.market.change7d) { change7d += player.market.change7d.points; change7dCoverage++; }
       if (!player.market.isStale && player.market.change30d) { change30d += player.market.change30d.points; change30dCoverage++; }
       if (!player.market.isStale && player.market.changeSinceBaseline) { changeSinceBaseline += player.market.changeSinceBaseline.points; changeSinceBaselineCoverage++; }
     }
-    const optimal = optimalLineupValue(roster, rosterPositions); const picks = pickCapital.get(manager.id) ?? { total: 0, count: 0 };
+    const positionalStarterValue: Record<string, number> = {};
+    const positionalDepthValue: Record<string, number> = {};
+    for (const position of ["QB", "RB", "WR", "TE"] as const) {
+      const sorted = [...(valuesByPosition.get(position) ?? [])].sort((a, b) => b - a);
+      const count = POSITION_STARTER_COUNTS[position];
+      positionalStarterValue[position] = sorted.slice(0, count).reduce((sum, value) => sum + value, 0);
+      positionalDepthValue[position] = sorted.slice(count).reduce((sum, value) => sum + value, 0);
+    }
+    const optimal = optimalLineupValue(roster, rosterPositions);
+    const picks = pickCapital.get(manager.id) ?? { total: 0, count: 0 };
     return {
-      managerId: manager.id, teamName: manager.teamName ?? manager.displayName,
-      totalValue: playerCapital, playerCapital, draftCapital: picks.total, totalDynastyValue: playerCapital + picks.total,
-      draftPickCount: picks.count, draftMarketAvailable: !!pickState, draftMarketStale: pickState?.stale ?? true,
+      managerId: manager.id, teamName: publicTeamName(manager), totalValue: playerCapital, playerCapital,
+      draftCapital: draftDataComplete ? picks.total : 0, totalDynastyValue: playerCapital + (draftDataComplete ? picks.total : 0),
+      draftPickCount: draftDataComplete ? picks.count : 0, draftMarketAvailable: draftDataComplete,
+      draftMarketStale: draftDataComplete ? (pickState?.stale ?? true) : true,
       draftMarketObservedAt: pickState?.sourceUpdatedAt ?? null, draftMarketOrigin: pickState?.origin ?? null,
+      draftOwnershipAvailable: !!pickOwnershipState,
       starterValue: optimal, optimalLineupValue: optimal, benchValue: Math.max(0, playerCapital - optimal), depthValue: Math.max(0, playerCapital - optimal),
-      playerCount: roster.length, valuedPlayerCount, lastKnownPlayerCount, stalePlayerCount, unmappedCount, positionalValue,
+      playerCount: roster.length, valuedPlayerCount, lastKnownPlayerCount, stalePlayerCount, unmappedCount,
+      positionalValue, positionalStarterValue, positionalDepthValue,
       changeSinceLastRefresh: changeSinceLastRefreshCoverage ? changeSinceLastRefresh : null, changeSinceLastRefreshCoverage,
       change7d: change7dCoverage ? change7d : null, change7dCoverage,
       change30d: change30dCoverage ? change30d : null, change30dCoverage,

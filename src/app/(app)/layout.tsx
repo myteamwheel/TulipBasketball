@@ -1,14 +1,9 @@
 import type { ReactNode } from "react";
-import { redirect } from "next/navigation";
-import { isAuthenticated, authRequired } from "@/lib/auth";
-import RefreshButton from "@/components/RefreshButton";
 import TopNav from "@/components/TopNav";
 
 export const dynamic = "force-dynamic";
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
-  if (!(await isAuthenticated())) redirect("/login");
-
   return (
     <div className="min-h-screen min-w-0 overflow-x-hidden bg-neutral-950 text-neutral-100">
       <header className="sticky top-0 z-30 w-full border-b border-neutral-800/90 bg-neutral-950/95 backdrop-blur-xl">
@@ -18,21 +13,12 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
               <span>Dynasty Boys</span>
               <span className="hidden sm:inline"> <span className="text-emerald-500">·</span> Market Terminal</span>
             </div>
-            <div className="flex shrink-0 items-center gap-1 sm:gap-2">
-              <RefreshButton />
-              {authRequired() ? (
-                <form action="/api/auth/logout" method="post">
-                  <button className="rounded-md px-2 py-1 text-[10px] text-neutral-500 hover:bg-neutral-900 hover:text-neutral-300 sm:text-[11px]">Sign out</button>
-                </form>
-              ) : null}
-            </div>
+            <div className="shrink-0 text-[9px] text-neutral-600 sm:text-[10px]">Read-only · auto sync ~8 a.m. ET</div>
           </div>
           <div className="border-t border-neutral-900/90"><TopNav /></div>
         </div>
       </header>
-      <main className="mx-auto w-full min-w-0 max-w-7xl px-3 py-4 pb-[calc(2rem+env(safe-area-inset-bottom))] sm:px-4 sm:py-6">
-        {children}
-      </main>
+      <main className="mx-auto w-full min-w-0 max-w-7xl px-3 py-4 pb-[calc(2rem+env(safe-area-inset-bottom))] sm:px-4 sm:py-6">{children}</main>
     </div>
   );
 }

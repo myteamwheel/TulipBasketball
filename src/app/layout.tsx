@@ -8,7 +8,7 @@ const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"]
 
 export const metadata: Metadata = {
   title: "Orlando Oswalds Market Dashboard",
-  description: "Private Dynasty Boys market dashboard",
+  description: "Dynasty Boys fantasy-football market dashboard",
   robots: {
     index: false,
     follow: false,
@@ -26,9 +26,5 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
-  return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full bg-neutral-950 antialiased`}>
-      <body className="min-h-full min-w-0 bg-neutral-950 text-neutral-100">{children}</body>
-    </html>
-  );
+  return <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full bg-neutral-950 antialiased`}><body className="min-h-full min-w-0 bg-neutral-950 text-neutral-100">{children}</body></html>;
 }

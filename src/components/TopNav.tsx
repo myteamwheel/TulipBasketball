@@ -3,29 +3,5 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const NAV = [
-  { href: "/", label: "My Team" },
-  { href: "/league", label: "League" },
-  { href: "/trade-finder", label: "Trade Lab" },
-  { href: "/transactions", label: "Transactions" },
-  { href: "/players", label: "Players" },
-  { href: "/refresh-history", label: "Refreshes" },
-  { href: "/settings", label: "Settings" },
-];
-
-function isActive(pathname: string, href: string) {
-  if (href === "/") return pathname === "/";
-  return pathname === href || pathname.startsWith(`${href}/`);
-}
-
-export default function TopNav() {
-  const pathname = usePathname();
-  return (
-    <nav aria-label="Dashboard" className="flex min-w-0 flex-wrap gap-1 py-1.5">
-      {NAV.map((item) => {
-        const active = isActive(pathname, item.href);
-        return <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={`rounded-md px-2.5 py-1.5 text-[11px] font-medium transition sm:px-3 sm:text-xs ${active ? "bg-neutral-800 text-neutral-50" : "text-neutral-500 hover:bg-neutral-900 hover:text-neutral-200"}`}>{item.label}</Link>;
-      })}
-    </nav>
-  );
-}
+const links=[{href:"/",label:"My Team"},{href:"/league",label:"League"},{href:"/trade-finder",label:"Trade Lab"},{href:"/transactions",label:"Transactions"},{href:"/players",label:"Players"},{href:"/refresh-history",label:"Refreshes",utility:true},{href:"/settings",label:"Data Health",utility:true}];
+export default function TopNav(){const pathname=usePathname();return <nav aria-label="Primary" className="flex w-full flex-wrap items-center gap-x-0.5 gap-y-0.5 py-1">{links.map((link)=>{const active=link.href==="/"?pathname===link.href:pathname.startsWith(link.href);return <Link key={link.href} href={link.href} className={`rounded-md px-2 py-1.5 text-[10px] font-medium transition sm:px-2.5 sm:text-[11px] ${active?"bg-neutral-800 text-neutral-100":link.utility?"text-neutral-600 hover:bg-neutral-900 hover:text-neutral-300":"text-neutral-500 hover:bg-neutral-900 hover:text-neutral-300"}`}>{link.label}</Link>})}</nav>}

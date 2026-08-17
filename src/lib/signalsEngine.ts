@@ -3,58 +3,52 @@ import { computeMarketDataForPlayers, type PlayerMarketData } from "@/lib/metric
 import { computeSignal, type RosterContext, type SignalResult } from "@/lib/signals";
 import { getAllCurrentRosterEntries } from "@/lib/queries";
 import { getLatestSlotMap } from "@/lib/teamMetrics";
+import { POSITION_STARTER_COUNTS } from "@/lib/config";
 
-const PLAYABLE_VALUE_THRESHOLD = 300;
-
-/**
- * Computes a live market signal for every currently-rostered player, using
- * each player's own team's positional depth as roster context. Signals are
- * always computed fresh at render time (never persisted as the source of
- * truth) so a manual KTC import between refreshes is reflected immediately.
- */
-export async function computeSignalsForCurrentRoster(): Promise<
-  Map<string, { result: SignalResult; market: PlayerMarketData }>
-> {
+export async function computeSignalsForCurrentRoster(): Promise<Map<string, { result: SignalResult; market: PlayerMarketData }>> {
   const [entries, slotMap] = await Promise.all([getAllCurrentRosterEntries(), getLatestSlotMap()]);
-  const playerIds = entries.map((e) => e.playerId);
+  const playerIds = entries.map((entry) => entry.playerId);
   const marketData = await computeMarketDataForPlayers(playerIds);
+  const managerIds = [...new Set(entries.map((entry) => entry.managerId))];
+  const positionCapital = new Map<string, number>();
 
-  // Team positional depth: count of roster-relevant (value >= threshold) players per manager+position.
-  const depthByManagerPosition = new Map<string, number>();
-  for (const e of entries) {
-    const value = marketData.get(e.playerId)?.currentValue ?? 0;
-    if (value < PLAYABLE_VALUE_THRESHOLD) continue;
-    const key = `${e.managerId}:${e.player.position}`;
-    depthByManagerPosition.set(key, (depthByManagerPosition.get(key) ?? 0) + 1);
+  for (const managerId of managerIds) {
+    for (const position of ["QB", "RB", "WR", "TE"] as const) {
+      const values = entries
+        .filter((entry) => entry.managerId === managerId && entry.player.position === position)
+        .map((entry) => marketData.get(entry.playerId))
+        .filter((market): market is PlayerMarketData => !!market && !market.isStale && market.currentValue !== null)
+        .map((market) => market.currentValue as number)
+        .sort((a, b) => b - a)
+        .slice(0, POSITION_STARTER_COUNTS[position]);
+      positionCapital.set(`${managerId}:${position}`, values.reduce((sum, value) => sum + value, 0));
+    }
+  }
+
+  const positionRank = new Map<string, number>();
+  for (const position of ["QB", "RB", "WR", "TE"] as const) {
+    const ranked = managerIds.map((managerId) => ({ managerId, value: positionCapital.get(`${managerId}:${position}`) ?? 0 })).sort((a, b) => b.value - a.value);
+    ranked.forEach((row, index) => positionRank.set(`${row.managerId}:${position}`, index + 1));
   }
 
   const result = new Map<string, { result: SignalResult; market: PlayerMarketData }>();
-  for (const e of entries) {
-    const market = marketData.get(e.playerId)!;
-    const slot = (slotMap.get(`${e.managerId}:${e.playerId}`) ?? "BENCH") as RosterContext["slot"];
+  for (const entry of entries) {
+    const market = marketData.get(entry.playerId)!;
+    const slot = (slotMap.get(`${entry.managerId}:${entry.playerId}`) ?? "BENCH") as RosterContext["slot"];
     const ctx: RosterContext = {
       slot,
-      position: e.player.position,
-      status: e.player.status,
-      teamPositionCount: depthByManagerPosition.get(`${e.managerId}:${e.player.position}`) ?? 0,
+      position: entry.player.position,
+      status: entry.player.status,
+      positionRank: positionRank.get(`${entry.managerId}:${entry.player.position}`) ?? managerIds.length,
+      leagueTeamCount: managerIds.length,
     };
-    result.set(e.playerId, { result: computeSignal(market, ctx), market });
+    result.set(entry.playerId, { result: computeSignal(market, ctx), market });
   }
   return result;
 }
 
-/** Persists a Signal row per rostered player for this refresh run's audit trail. */
 export async function persistSignalsForRun(refreshRunId: string): Promise<void> {
   const signals = await computeSignalsForCurrentRoster();
-  const rows = Array.from(signals.entries()).map(([playerId, { result }]) => ({
-    playerId,
-    refreshRunId,
-    signal: result.signal,
-    score: result.score,
-    confidence: result.confidence,
-    reasonCodes: JSON.stringify(result.reasonCodes),
-  }));
-  if (rows.length > 0) {
-    await prisma.signal.createMany({ data: rows });
-  }
+  const rows = Array.from(signals.entries()).map(([playerId, { result }]) => ({ playerId, refreshRunId, signal: result.signal, score: result.score, confidence: result.confidence, reasonCodes: JSON.stringify(result.reasonCodes) }));
+  if (rows.length > 0) await prisma.signal.createMany({ data: rows });
 }
