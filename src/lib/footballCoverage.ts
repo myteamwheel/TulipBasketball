@@ -23,6 +23,8 @@ type CoverageRow = {
 };
 
 export async function getFootballCoverage(): Promise<FootballCoverage> {
+  const currentYear = new Date().getUTCFullYear();
+  const minimumDecisionGradeSeason = currentYear - 1;
   const rows = await prisma.$queryRaw<CoverageRow[]>`
     WITH current_roster AS (
       SELECT DISTINCT oi."playerId"
@@ -38,18 +40,18 @@ export async function getFootballCoverage(): Promise<FootballCoverage> {
       WHERE "seasonType" = 'REG'
       GROUP BY "playerId"
     ), latest_season_games AS (
-      SELECT pgs."playerId", COUNT(*) AS games
+      SELECT pgs."playerId", pgs.season, COUNT(*) AS games
       FROM "PlayerGameStat" pgs
       JOIN latest_player_season lps
         ON lps."playerId" = pgs."playerId" AND lps.season = pgs.season
       WHERE pgs."seasonType" = 'REG'
-      GROUP BY pgs."playerId"
+      GROUP BY pgs."playerId", pgs.season
     )
     SELECT
       (SELECT COUNT(*) FROM current_roster) AS rostered,
       (SELECT COUNT(*) FROM current_roster cr JOIN "PlayerFootballProfile" pfp ON pfp."playerId" = cr."playerId") AS profiled,
       (SELECT COUNT(*) FROM current_roster cr WHERE EXISTS (SELECT 1 FROM "PlayerGameStat" pgs WHERE pgs."playerId" = cr."playerId" AND pgs."seasonType" = 'REG')) AS "withGames",
-      (SELECT COUNT(*) FROM current_roster cr JOIN latest_season_games lsg ON lsg."playerId" = cr."playerId" WHERE lsg.games >= 3) AS "decisionGrade",
+      (SELECT COUNT(*) FROM current_roster cr JOIN latest_season_games lsg ON lsg."playerId" = cr."playerId" WHERE lsg.games >= 3 AND lsg.season >= ${minimumDecisionGradeSeason}) AS "decisionGrade",
       (SELECT MAX(pgs."observedAt") FROM "PlayerGameStat" pgs JOIN current_roster cr ON cr."playerId" = pgs."playerId") AS "latestGameObservedAt",
       (SELECT MAX(pfp."sourceUpdatedAt") FROM "PlayerFootballProfile" pfp JOIN current_roster cr ON cr."playerId" = pfp."playerId") AS "latestProfileSourceUpdatedAt"
   `;
