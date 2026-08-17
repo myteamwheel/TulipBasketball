@@ -17,6 +17,9 @@ export interface RefreshRunView {
   requestedSources: string[];
   sleeperSyncOk: boolean | null;
   ktcSyncOk: boolean | null;
+  draftPickMarketOk: boolean | null;
+  draftPickMarketStale: boolean | null;
+  draftPickMarketSourceUpdatedAt: string | null;
   rosterChangesCount: number;
   playersRefreshed: number;
   ktcPlayersStored: number;
@@ -52,6 +55,12 @@ function toView(run: {
     .filter((error) => !["fantasycalc", "statsguy"].includes(String(error.source).toLowerCase()));
   const statuses = visibleStatuses(summary.marketSourceStatuses);
   const ktc = statuses.find((s) => s.source === "KTC");
+  const rawDraft = summary.draftPickMarket;
+  const draftPickMarket = rawDraft && typeof rawDraft === "object" && !Array.isArray(rawDraft)
+    ? rawDraft as { sourceUpdatedAt?: unknown; stale?: unknown }
+    : null;
+  const draftPickError = errors.some((error) => String(error.source).toLowerCase() === "draft_pick_market");
+  const draftPickStale = draftPickMarket && typeof draftPickMarket.stale === "boolean" ? draftPickMarket.stale : null;
   return {
     runId: run.id,
     status: run.status as RefreshRunView["status"],
@@ -60,6 +69,9 @@ function toView(run: {
     requestedSources: parseJsonArray(run.requestedSources).map(String).filter((s) => !/fantasycalc|statsguy/i.test(s)),
     sleeperSyncOk: run.sleeperSyncOk,
     ktcSyncOk: run.ktcSyncOk,
+    draftPickMarketOk: draftPickStale !== null ? !draftPickStale : draftPickError ? false : null,
+    draftPickMarketStale: draftPickStale,
+    draftPickMarketSourceUpdatedAt: typeof draftPickMarket?.sourceUpdatedAt === "string" ? draftPickMarket.sourceUpdatedAt : null,
     rosterChangesCount: run.rosterChangesCount,
     playersRefreshed: run.playersRefreshed,
     ktcPlayersStored: Number(summary.ktcPlayersStored ?? ktc?.rowsStored ?? 0),
@@ -192,6 +204,7 @@ async function executeRefresh(runId: string): Promise<void> {
   try {
     const picks = await fetchDraftPickMarketState();
     draftPickMarket = { rows: picks.rows, sourceUpdatedAt: picks.sourceUpdatedAt, stale: picks.stale };
+    if (picks.stale) errors.push({ source: "draft_pick_market", message: `Draft-pick board is ${(picks.ageMs / 3600000).toFixed(1)}h old.` });
   } catch (error) {
     errors.push({ source: "draft_pick_market", message: error instanceof Error ? error.message : String(error) });
   }
@@ -212,9 +225,10 @@ async function executeRefresh(runId: string): Promise<void> {
   }
 
   const optionalFailures = marketSourceStatuses.filter((s) => s.enabled && s.source !== "KTC" && !s.ok).length;
+  const draftPickMarketFresh = !!draftPickMarket && !draftPickMarket.stale;
   const status = !sleeperSyncOk && !ktcSyncOk
     ? "FAILED"
-    : !sleeperSyncOk || !ktcSyncOk || optionalFailures > 0
+    : !sleeperSyncOk || !ktcSyncOk || optionalFailures > 0 || !draftPickMarketFresh
       ? "PARTIAL_FAILURE"
       : "SUCCESS";
 

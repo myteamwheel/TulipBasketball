@@ -21,6 +21,9 @@ interface RunView {
   requestedSources: string[];
   sleeperSyncOk: boolean | null;
   ktcSyncOk: boolean | null;
+  draftPickMarketOk: boolean | null;
+  draftPickMarketStale: boolean | null;
+  draftPickMarketSourceUpdatedAt: string | null;
   rosterChangesCount: number;
   playersRefreshed: number;
   ktcPlayersStored: number;
@@ -117,9 +120,12 @@ export default function RefreshButton() {
       status: "RUNNING",
       startedAt: new Date().toISOString(),
       finishedAt: null,
-      requestedSources: ["sleeper", "ktc", "tradyr", "dynasty_dealer", "consensus"],
+      requestedSources: ["sleeper", "ktc", "tradyr", "dynasty_dealer", "consensus", "draft_pick_market"],
       sleeperSyncOk: null,
       ktcSyncOk: null,
+      draftPickMarketOk: null,
+      draftPickMarketStale: null,
+      draftPickMarketSourceUpdatedAt: null,
       rosterChangesCount: 0,
       playersRefreshed: 0,
       ktcPlayersStored: 0,
@@ -162,6 +168,13 @@ export default function RefreshButton() {
   const isRunning = run?.status === "RUNNING";
   const completedTone = run?.status === "SUCCESS" ? "bg-emerald-400" : run?.status === "PARTIAL_FAILURE" ? "bg-amber-400" : run?.status === "FAILED" ? "bg-red-400" : "bg-neutral-500";
   const completedLabel = run?.status === "SUCCESS" ? `Updated ${timeAgo(run.finishedAt)}` : run?.status === "PARTIAL_FAILURE" ? `Partial ${timeAgo(run.finishedAt)}` : run?.status === "FAILED" ? `Failed ${timeAgo(run.finishedAt)}` : "Not updated";
+  const pickStatus = run?.draftPickMarketOk === true
+    ? `Fresh${run.draftPickMarketSourceUpdatedAt ? ` · ${timeAgo(run.draftPickMarketSourceUpdatedAt)}` : ""}`
+    : run?.draftPickMarketStale
+      ? `Stale${run.draftPickMarketSourceUpdatedAt ? ` · ${timeAgo(run.draftPickMarketSourceUpdatedAt)}` : ""}`
+      : run?.draftPickMarketOk === false
+        ? "Not refreshed"
+        : "Not reported";
 
   return (
     <div className="relative">
@@ -176,9 +189,9 @@ export default function RefreshButton() {
 
       {showSummary && run && run.status !== "RUNNING" ? <div className="absolute right-0 top-full z-50 mt-2 w-[calc(100vw-1.5rem)] max-w-sm rounded-lg border border-neutral-700 bg-neutral-900 p-3 text-xs shadow-2xl shadow-black/50">
         <div className="mb-2 flex items-center justify-between gap-3"><p className={`font-semibold ${run.status === "SUCCESS" ? "text-emerald-300" : run.status === "PARTIAL_FAILURE" ? "text-amber-300" : "text-red-300"}`}>{run.status === "SUCCESS" ? "Refresh complete" : run.status === "PARTIAL_FAILURE" ? "Refresh partly completed" : "Refresh failed"}</p><button onClick={() => setShowSummary(false)} className="text-neutral-600 hover:text-neutral-300">Close</button></div>
-        <div className="grid grid-cols-2 gap-2 text-[11px]"><div className="rounded bg-neutral-950 p-2"><div className="text-neutral-600">Sleeper roster</div><div className={run.sleeperSyncOk ? "text-emerald-300" : "text-red-300"}>{run.sleeperSyncOk ? `Synced · ${run.playersRefreshed} players` : "Not updated"}</div></div><div className="rounded bg-neutral-950 p-2"><div className="text-neutral-600">KTC</div><div className={run.ktcSyncOk ? "text-emerald-300" : "text-amber-300"}>{run.ktcSyncOk ? `${run.ktcPlayersStored} stored` : "Not refreshed"}</div></div></div>
+        <div className="grid grid-cols-3 gap-2 text-[10px]"><div className="rounded bg-neutral-950 p-2"><div className="text-neutral-600">Sleeper</div><div className={run.sleeperSyncOk ? "text-emerald-300" : "text-red-300"}>{run.sleeperSyncOk ? `${run.playersRefreshed} players` : "Not updated"}</div></div><div className="rounded bg-neutral-950 p-2"><div className="text-neutral-600">KTC</div><div className={run.ktcSyncOk ? "text-emerald-300" : "text-amber-300"}>{run.ktcSyncOk ? `${run.ktcPlayersStored} stored` : "Not refreshed"}</div></div><div className="rounded bg-neutral-950 p-2"><div className="text-neutral-600">Draft picks</div><div className={run.draftPickMarketOk ? "text-emerald-300" : run.draftPickMarketStale ? "text-amber-300" : "text-neutral-500"}>{pickStatus}</div></div></div>
         <div className="mt-2 space-y-1">{run.marketSourceStatuses.map((s) => <div key={s.source} className="flex min-w-0 items-start justify-between gap-3 text-[10px]"><span className="shrink-0 text-neutral-500">{s.source}</span><span className={`min-w-0 text-right ${s.ok ? "text-neutral-400" : "text-amber-300"}`}>{s.ok ? `${s.rowsStored} rows` : s.message}</span></div>)}</div>
-        {run.errors.length ? <div className="mt-2 rounded bg-neutral-950 p-2 text-[10px] leading-4 text-neutral-500">Failed sources kept their prior valid data. A failed Sleeper sync means the roster itself did not update on this run.</div> : null}
+        {run.errors.length ? <div className="mt-2 rounded bg-neutral-950 p-2 text-[10px] leading-4 text-neutral-500">Failed or stale sources kept their prior verified data where safe. A failed Sleeper sync means the roster itself did not update; stale market data is excluded from current decision math.</div> : null}
       </div> : null}
     </div>
   );

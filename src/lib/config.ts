@@ -1,6 +1,6 @@
 export const SLEEPER_LEAGUE_ID = "1312155271526625280";
 
-// BrettTulip / Orlando Oswalds. Ownership is reconciled from Sleeper.
+// Primary Orlando Oswalds Sleeper account. Ownership is reconciled from Sleeper.
 export const ORLANDO_OSWALDS_SLEEPER_USER_ID = "819373914194067456";
 
 export const KTC_FORMAT = "SF-0.5PPR-noTEP";
