@@ -36,6 +36,39 @@ export interface LeagueSimulationResult {
   evidenceWeight: number;
 }
 
+type FootballFallbackRow = {
+  playerId: string;
+  position: string;
+  season: number;
+  games: bigint;
+  fantasyPpg: number;
+};
+
+const FOOTBALL_FALLBACK_BASELINE: Record<string, number> = {
+  QB: 8,
+  RB: 4,
+  WR: 4,
+  TE: 3.5,
+};
+
+function conservativeFootballFallbackPpg(row: FootballFallbackRow, currentSeason: number) {
+  const baseline = FOOTBALL_FALLBACK_BASELINE[row.position] ?? 3;
+  const games = Number(row.games);
+  if (!Number.isFinite(row.fantasyPpg) || games < 3) return baseline;
+
+  // A missing market value must not become fake negative evidence, but old or
+  // tiny football samples must not be accepted at face value either. Regress
+  // the latest-season PPG toward a conservative positional baseline according
+  // to sample size and recency.
+  const sampleWeight = Math.min(1, games / 12);
+  const seasonsOld = Math.max(0, currentSeason - row.season);
+  const recencyWeight = seasonsOld <= 1 ? 1 : seasonsOld === 2 ? 0.35 : 0.15;
+  const evidenceWeight = sampleWeight * recencyWeight;
+  const projected = baseline + (row.fantasyPpg - baseline) * evidenceWeight;
+  const ceiling = row.position === "QB" ? 24 : 20;
+  return Math.max(0.5, Math.min(ceiling, projected));
+}
+
 function fallbackWeeks(ids: string[], count: number): SimulationWeek[] {
   if (ids.length < 2) return [];
   const rotationSeed = [...ids];
@@ -86,13 +119,45 @@ export async function simulateDynastyBoys(iterations = 2500): Promise<LeagueSimu
     getLatestSlotMap(),
     prisma.league.findFirst({
       where: { sleeperId: SLEEPER_LEAGUE_ID },
-      select: { settings: true },
+      select: { settings: true, season: true },
     }),
     getNflState().catch(() => null),
   ]);
 
   const playerIds = entries.map((entry) => entry.playerId);
   const predictions = await getPredictivePlayerModels(playerIds);
+  const missingPredictionIds = playerIds.filter((playerId) => !predictions.has(playerId));
+  const currentSeason = Number(league?.season) || new Date().getUTCFullYear();
+  const footballFallbackRows = missingPredictionIds.length
+    ? await prisma.$queryRaw<FootballFallbackRow[]>`
+        WITH latest_season AS (
+          SELECT "playerId", MAX(season) AS season
+          FROM "PlayerGameStat"
+          WHERE "seasonType" = 'REG' AND "playerId" = ANY(${missingPredictionIds}::text[])
+          GROUP BY "playerId"
+        )
+        SELECT
+          s."playerId",
+          p.position,
+          s.season,
+          COUNT(*) AS games,
+          AVG(g."fantasyHalfPpr")::float8 AS "fantasyPpg"
+        FROM latest_season s
+        JOIN "PlayerGameStat" g
+          ON g."playerId" = s."playerId"
+         AND g.season = s.season
+         AND g."seasonType" = 'REG'
+        JOIN "Player" p ON p.id = s."playerId"
+        GROUP BY s."playerId", p.position, s.season
+      `
+    : [];
+  const footballFallbackPpg = new Map(
+    footballFallbackRows.map((row) => [
+      row.playerId,
+      conservativeFootballFallbackPpg(row, currentSeason),
+    ]),
+  );
+
   const byManager = new Map<string, typeof entries>();
   for (const entry of entries) {
     const list = byManager.get(entry.managerId) ?? [];
@@ -161,7 +226,11 @@ export async function simulateDynastyBoys(iterations = 2500): Promise<LeagueSimu
       return {
         id: entry.playerId,
         position: entry.player.position,
-        projectedPpg: prediction?.projectedWeeklyPoints ?? 2,
+        projectedPpg:
+          prediction?.projectedWeeklyPoints ??
+          footballFallbackPpg.get(entry.playerId) ??
+          FOOTBALL_FALLBACK_BASELINE[entry.player.position] ??
+          3,
         slot: slotMap.get(`${manager.id}:${entry.playerId}`) ?? "BENCH",
       };
     });
