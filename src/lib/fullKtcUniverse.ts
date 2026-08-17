@@ -89,7 +89,7 @@ export async function refreshFullKtcUniverse(refreshRunId: string): Promise<{ ma
       const candidates = byNamePos.get(`${normalizePlayerName(row.name)}|${row.position}`) ?? [];
       if (candidates.length !== 1) continue;
       const { sleeperId, meta } = candidates[0];
-      const fullName = meta.full_name ?? [meta.first_name, meta.last_name].filter(Boolean).join(" ") || row.name;
+      const fullName = meta.full_name ?? ([meta.first_name, meta.last_name].filter(Boolean).join(" ") || row.name);
       const existing = existingBySleeper.get(sleeperId);
       if (existing) {
         player = await prisma.player.update({
