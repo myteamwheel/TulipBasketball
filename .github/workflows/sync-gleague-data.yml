@@ -1,13 +1,13 @@
 name: Sync G League history
-# Explicit default-branch trigger after workflow installation.
 on:
   workflow_dispatch:
   push:
     branches: [main]
     paths:
-      - 'scripts/**'
+      - 'scripts/mirror-live-site.mjs'
+      - 'scripts/sync-gleague-data.mjs'
+      - 'scripts/audit-gleague-data.mjs'
       - 'gleague-static/**'
-      - '.github/workflows/sync-gleague-data.yml'
 permissions:
   contents: write
 concurrency:
