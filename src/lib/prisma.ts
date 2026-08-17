@@ -28,6 +28,24 @@ function deriveBridgePassword(configuredUrl: string) {
   return `rt_${digest}`;
 }
 
+function normalizePostgresSslMode(value: string) {
+  try {
+    const parsed = new URL(value);
+    if (!parsed.hostname.endsWith(".neon.tech")) return value;
+    const mode = parsed.searchParams.get("sslmode")?.toLowerCase();
+    if (mode === "require" || mode === "prefer" || mode === "verify-ca") {
+      // pg currently treats these as verify-full but warns that the aliases will
+      // change semantics in the next major release. Make the intended strict
+      // verification explicit so runtime behavior remains stable and warning-free.
+      parsed.searchParams.set("sslmode", "verify-full");
+      return parsed.toString();
+    }
+  } catch {
+    return value;
+  }
+  return value;
+}
+
 function decryptNeonDatabaseUrl(configuredUrl: string) {
   const bridgePassword = deriveBridgePassword(configuredUrl);
   const key = createHash("sha256")
@@ -50,12 +68,12 @@ function decryptNeonDatabaseUrl(configuredUrl: string) {
   if (!parsed.hostname.endsWith(".neon.tech")) {
     throw new Error("Recovered database envelope did not resolve to the expected Neon host.");
   }
-  return plaintext;
+  return normalizePostgresSslMode(plaintext);
 }
 
 function resolveDatabaseUrl() {
   const explicitRecovery = process.env.RECOVERY_DATABASE_URL?.trim();
-  if (explicitRecovery) return explicitRecovery;
+  if (explicitRecovery) return normalizePostgresSslMode(explicitRecovery);
 
   const configured = process.env.DATABASE_URL?.trim();
   if (!configured) throw new Error("Database connection is not configured.");
@@ -70,7 +88,7 @@ function resolveDatabaseUrl() {
     if (error instanceof Error && error.message.includes("password component")) throw error;
   }
 
-  return configured;
+  return normalizePostgresSslMode(configured);
 }
 
 const databaseUrl = resolveDatabaseUrl();
