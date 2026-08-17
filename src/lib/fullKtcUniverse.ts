@@ -3,6 +3,7 @@ import { KTC_FORMAT } from "@/lib/config";
 import { commitKtcImport, type KtcImportRow } from "@/lib/ktcImport";
 import { fetchKtcSnapshot } from "@/lib/marketSources";
 import { normalizePlayerName } from "@/lib/normalize";
+import { canonicalKtcMatchName, VERIFIED_KTC_IDENTITIES } from "@/lib/ktcIdentityOverrides";
 import { getPlayerCatalog, type SleeperPlayer } from "@/lib/sleeper";
 
 const marketDb = prisma as typeof prisma & { marketObservation: any };
@@ -55,8 +56,11 @@ export async function canonicalizeKtcRunTimestamps(refreshRunId: string): Promis
 
 /**
  * Store the full current KTC board, not only players already rostered in this
- * league. Exact name+position matching against Sleeper's catalog is required
- * before a new Player identity is created; ambiguous identities are skipped.
+ * league. Exact canonical name+position matching against Sleeper's catalog is
+ * required before a new Player identity is created; ambiguous identities are
+ * skipped. Verified Sleeper-to-KTC identity overrides are applied first so a
+ * nickname/legal-name difference, or a player falling outside today's KTC
+ * top-board payload, cannot erase a known stable KTC profile identity.
  */
 export async function refreshFullKtcUniverse(refreshRunId: string): Promise<{ matched: number; committed: number; marketRowsStored: number; sourceUpdatedAt: string }> {
   const [snapshot, catalog, existingPlayers] = await Promise.all([
@@ -71,7 +75,7 @@ export async function refreshFullKtcUniverse(refreshRunId: string): Promise<{ ma
     if (!FANTASY_POSITIONS.has(position)) continue;
     const fullName = meta.full_name ?? [meta.first_name, meta.last_name].filter(Boolean).join(" ");
     if (!fullName) continue;
-    const key = `${normalizePlayerName(fullName)}|${position}`;
+    const key = `${canonicalKtcMatchName(fullName)}|${position}`;
     const list = byNamePos.get(key) ?? [];
     list.push({ sleeperId, meta });
     byNamePos.set(key, list);
@@ -79,6 +83,36 @@ export async function refreshFullKtcUniverse(refreshRunId: string): Promise<{ ma
 
   const existingByKtcId = new Map(existingPlayers.filter((p) => p.ktcId).map((p) => [p.ktcId!, p]));
   const existingBySleeper = new Map(existingPlayers.map((p) => [p.sleeperId, p]));
+
+  // These mappings are sourced from verified public KTC profile IDs, never
+  // from a guessed value or fuzzy name match. Keep Sleeper's display name in
+  // the Player row; only the cross-provider identity is pinned here.
+  for (const identity of VERIFIED_KTC_IDENTITIES) {
+    const existing = existingBySleeper.get(identity.sleeperId);
+    if (!existing) continue;
+    const ktcOwner = existingByKtcId.get(identity.ktcId);
+    if (ktcOwner && ktcOwner.id !== existing.id) {
+      throw new Error(`Verified KTC identity ${identity.ktcId} is already assigned to ${ktcOwner.fullName}; refusing to remap ${existing.fullName}.`);
+    }
+    if (existing.ktcId && existing.ktcId !== identity.ktcId) {
+      throw new Error(`Sleeper ${identity.sleeperId} (${existing.fullName}) already has KTC id ${existing.ktcId}; verified override expects ${identity.ktcId}.`);
+    }
+    if (existing.ktcId === identity.ktcId && existing.mappingStatus === "MAPPED") {
+      existingByKtcId.set(identity.ktcId, existing);
+      continue;
+    }
+    const mapped = await prisma.player.update({
+      where: { id: existing.id },
+      data: {
+        ktcId: identity.ktcId,
+        mappingStatus: "MAPPED",
+        mappingNote: `Verified KTC profile identity: Sleeper "${existing.fullName}" -> KTC "${identity.ktcName}" (#${identity.ktcId}).`,
+      },
+    });
+    existingByKtcId.set(identity.ktcId, mapped);
+    existingBySleeper.set(identity.sleeperId, mapped);
+  }
+
   const importRows: KtcImportRow[] = [];
   const providerRowByKtcId = new Map<string, (typeof snapshot.rows)[number]>();
 
@@ -86,7 +120,7 @@ export async function refreshFullKtcUniverse(refreshRunId: string): Promise<{ ma
     if (!row.ktcId || !row.position || !FANTASY_POSITIONS.has(row.position)) continue;
     let player = existingByKtcId.get(row.ktcId);
     if (!player) {
-      const candidates = byNamePos.get(`${normalizePlayerName(row.name)}|${row.position}`) ?? [];
+      const candidates = byNamePos.get(`${canonicalKtcMatchName(row.name)}|${row.position}`) ?? [];
       if (candidates.length !== 1) continue;
       const { sleeperId, meta } = candidates[0];
       const fullName = meta.full_name ?? ([meta.first_name, meta.last_name].filter(Boolean).join(" ") || row.name);
