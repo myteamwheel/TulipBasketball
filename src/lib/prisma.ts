@@ -10,6 +10,9 @@ const globalForPrisma = globalThis as unknown as {
 
 const BRIDGE_CONTEXT = "dynasty-boys-dashboard:neon-runtime-bridge:v1";
 const ENVELOPE_CONTEXT = "dynasty-boys-dashboard:neon-owner-envelope:v1";
+const RECOVERY_ENVELOPE_CONTEXT = "dynasty-boys-dashboard:neon-recovery-envelope:v1";
+const EMBEDDED_RECOVERY_ACTIVE = true;
+
 const NEON_ENVELOPE = {
   v: 1,
   alg: "A256GCM",
@@ -17,6 +20,18 @@ const NEON_ENVELOPE = {
   tag: "skodFpQcRdNArZwPVCcMZQ",
   ciphertext:
     "MdnrQOJaOKCVpZUy2db_GQVDCnRPLIwdSMlsovri9qwn5cXsNaJcgxwmIAn1j3HYHkwT27bz3w0SYclAGxMgp6T64FrMNEXlzk8AsW75758aDafa-hI4zJMGLiqM85f0jYo-KqgtebnXo8fJETN5yUKY8wv3sLQsClTYbO252Zw8CkwzVmkbOVCyrSHCn9kpsEg",
+} as const;
+
+// Temporary operational failover target. The plaintext database credential is
+// not committed: this envelope can only be decrypted with the existing primary
+// Neon owner's password, which remains outside the repository.
+const RECOVERY_ENVELOPE = {
+  v: 1,
+  alg: "A256GCM",
+  iv: "CXlUOwo61t-rjpoM",
+  tag: "my4akh2l_TCFuPaxGTqcXg",
+  ciphertext:
+    "BJoA6quAn-hk-U33UwEfhs_Dw53bYcakh6nfUYil-gcV_1dMcuGhn-xeH2fh_2eL8zbkP4mDpLHGmlKNrHbA7_48aJiVpMR-k8rSn5E1sy42FIgmzuegE46uz__9SlSBUAmxsUImZSrg0OCmcMOQbKEghn0FLS5MPl7QQ_obYP9CVfu9CtEQTHThQrPxqI_PxP380g",
 } as const;
 
 function deriveBridgePassword(configuredUrl: string) {
@@ -34,9 +49,6 @@ function normalizePostgresSslMode(value: string) {
     if (!parsed.hostname.endsWith(".neon.tech")) return value;
     const mode = parsed.searchParams.get("sslmode")?.toLowerCase();
     if (mode === "require" || mode === "prefer" || mode === "verify-ca") {
-      // pg currently treats these as verify-full but warns that the aliases will
-      // change semantics in the next major release. Make the intended strict
-      // verification explicit so runtime behavior remains stable and warning-free.
       parsed.searchParams.set("sslmode", "verify-full");
       return parsed.toString();
     }
@@ -71,10 +83,7 @@ function decryptNeonDatabaseUrl(configuredUrl: string) {
   return normalizePostgresSslMode(plaintext);
 }
 
-function resolveDatabaseUrl() {
-  const explicitRecovery = process.env.RECOVERY_DATABASE_URL?.trim();
-  if (explicitRecovery) return normalizePostgresSslMode(explicitRecovery);
-
+function resolvePrimaryDatabaseUrl() {
   const configured = process.env.DATABASE_URL?.trim();
   if (!configured) throw new Error("Database connection is not configured.");
 
@@ -89,6 +98,39 @@ function resolveDatabaseUrl() {
   }
 
   return normalizePostgresSslMode(configured);
+}
+
+function decryptRecoveryDatabaseUrl(primaryUrl: string) {
+  const primary = new URL(primaryUrl);
+  if (!primary.hostname.endsWith(".neon.tech") || !primary.password) {
+    throw new Error("Primary database URL cannot unlock the recovery database envelope.");
+  }
+  const key = createHash("sha256")
+    .update(`${RECOVERY_ENVELOPE_CONTEXT}\0${decodeURIComponent(primary.password)}`)
+    .digest();
+  const decipher = createDecipheriv(
+    "aes-256-gcm",
+    key,
+    Buffer.from(RECOVERY_ENVELOPE.iv, "base64url"),
+  );
+  decipher.setAuthTag(Buffer.from(RECOVERY_ENVELOPE.tag, "base64url"));
+  const plaintext = Buffer.concat([
+    decipher.update(Buffer.from(RECOVERY_ENVELOPE.ciphertext, "base64url")),
+    decipher.final(),
+  ]).toString("utf8");
+  const parsed = new URL(plaintext);
+  if (!parsed.hostname.endsWith(".neon.tech")) {
+    throw new Error("Recovery database envelope did not resolve to the expected Neon host.");
+  }
+  return normalizePostgresSslMode(plaintext);
+}
+
+function resolveDatabaseUrl() {
+  const explicitRecovery = process.env.RECOVERY_DATABASE_URL?.trim();
+  if (explicitRecovery) return normalizePostgresSslMode(explicitRecovery);
+
+  const primary = resolvePrimaryDatabaseUrl();
+  return EMBEDDED_RECOVERY_ACTIVE ? decryptRecoveryDatabaseUrl(primary) : primary;
 }
 
 const databaseUrl = resolveDatabaseUrl();
