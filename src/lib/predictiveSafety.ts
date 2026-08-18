@@ -1,3 +1,4 @@
+import { cache } from "react";
 import {
   getPredictivePlayerModels,
   type PredictivePlayerModel,
@@ -30,7 +31,7 @@ type RecentPeerPool={ppg:number[];opportunity:number[];market:number[]};
  * this clean-peer recalculation instead of carrying a percentile built from a
  * contaminated peer population.
  */
-export async function getDecisionGradePredictiveModels(requestedIds?:string[]):Promise<Map<string,PredictivePlayerModel>>{
+async function computeDecisionGradePredictiveModels(requestedIds?:string[]):Promise<Map<string,PredictivePlayerModel>>{
   const models=await getPredictivePlayerModels(requestedIds),currentYear=new Date().getUTCFullYear(),peerCounts=new Map<string,number>(),recentPeers=new Map<string,RecentPeerPool>();
   for(const row of models.values()){
     if(!isDecisionGradeProductionSeason(row.latestSeason,row.games,currentYear))continue;
@@ -63,6 +64,20 @@ export async function getDecisionGradePredictiveModels(requestedIds?:string[]):P
     guarded.set(playerId,next);
   }
   return guarded;
+}
+
+// Forecast and simulation are composed in the same Server Component request.
+// Canonicalizing the player-id set to a primitive cache key lets React reuse the
+// expensive predictive read instead of transferring the same football/market
+// rows twice for one page render. The cache is request-scoped by React Server
+// Components, so it does not make market data stale across requests.
+const cachedDecisionGradePredictiveModels=cache(async(key:string)=>
+  computeDecisionGradePredictiveModels(key?key.split("\u001f"):undefined),
+);
+
+export async function getDecisionGradePredictiveModels(requestedIds?:string[]):Promise<Map<string,PredictivePlayerModel>>{
+  const key=requestedIds?.length?[...new Set(requestedIds)].sort().join("\u001f"):"";
+  return cachedDecisionGradePredictiveModels(key);
 }
 
 export const DECISION_GRADE_POSITIONAL_PEER_MINIMUM=MIN_POSITIONAL_FOOTBALL_PEERS;
