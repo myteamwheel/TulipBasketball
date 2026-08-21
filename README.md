@@ -11,6 +11,12 @@ Dynasty-fantasy market terminal for the Dynasty Boys Sleeper league, centered on
 - Trusted secondary markets: Tradyr and Dynasty Dealer
 - Automatic ingestion: daily around 8 a.m. America/New_York
 
+Tradyr full-board ingestion requires `TRADYR_API_KEY`. Tradyr capped anonymous
+bulk requests at 50 rows and began ignoring anonymous pagination on August 15,
+2026; the dashboard fails closed instead of treating that partial page as a
+complete market. Store the free key only as a server-side Vercel environment
+variable. Never expose it through a public `NEXT_PUBLIC_*` variable.
+
 ## Data rules
 
 - KTC is the primary player-value anchor.
