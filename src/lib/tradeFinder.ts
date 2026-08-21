@@ -1,21 +1,536 @@
 import { prisma } from "@/lib/prisma";
 import { SLEEPER_LEAGUE_ID } from "@/lib/config";
-import { getAllCurrentRosterEntries, getAllManagers, getPrimaryManager } from "@/lib/queries";
+import {
+  getAllCurrentRosterEntries,
+  getAllManagers,
+  getPrimaryManager,
+} from "@/lib/queries";
 import { computeMarketDataForPlayers } from "@/lib/metrics";
 import { computeAllTeamValuations, getLatestSlotMap } from "@/lib/teamMetrics";
 import { getFreshCurrentMarketMix } from "@/lib/currentMarket";
 import { getLatestMarketSourceStatuses } from "@/lib/marketSources";
 import { fetchFreshDraftPickMarketValues } from "@/lib/pickMarket";
 import { fetchFreshTradedPickOwnershipState } from "@/lib/pickOwnership";
-import { currentPickMarketValue, firstTradableDraftSeason, projectedRookieSlot } from "@/lib/pickValuation";
+import {
+  currentPickMarketValue,
+  firstTradableDraftSeason,
+  projectedRookieSlot,
+} from "@/lib/pickValuation";
 import { calculatePackageTradeValue } from "@/lib/tradeValue";
 import { publicTeamName } from "@/lib/publicIdentity";
-import { blocksOutgoing, ensureInitialOrlandoStrategyDefaults, getPlayerStrategies, outgoingAdjustment, targetAdjustment, type StrategyStatus } from "@/lib/strategy";
-const POSITIONS=["QB","RB","WR","TE"] as const;type Position=(typeof POSITIONS)[number];
-export type TradeFinderAsset={id:string;assetType:"player"|"pick";name:string;position:string;value:number;slot:string};export type TradeCalculatorAsset=TradeFinderAsset&{managerId:string;managerName:string;nflTeam:string|null;consensusValue:number|null;isStale:boolean};export type TradeFinderOffer={give:TradeFinderAsset[];get:TradeFinderAsset[];giveRawValue:number;getRawValue:number;giveAdjustedValue:number;getAdjustedValue:number;rawEdge:number;adjustedEdge:number;valueBalance:number;packageQuality:"STRONG"|"WORKABLE";ownerNeedMatch:string[]};export type TradeFinderTarget={id:string;name:string;position:string;nflTeam:string|null;ownerName:string;ownerId:string;value:number;consensusValue:number|null;change30d:number|null;change30dPercent:number|null;fitScore:number;confidence:"HIGH"|"MEDIUM"|"LOW";tags:string[];ownerNeeds:Position[];why:string;offers:TradeFinderOffer[]};export type TradeFinderData={targets:TradeFinderTarget[];orlandoNeeds:{position:string;leagueRank:number;note:string}[];playerTradeChipCount:number;pickTradeChipCount:number;shopEligibleAssetIds:string[];primaryManagerId:string;primaryManagerName:string;managers:{id:string;name:string}[];calculatorAssets:TradeCalculatorAsset[];ktcStale:boolean;ktcObservedAt:string|null;pickMarketAvailable:boolean;rankingComplete:boolean};type LiveAsset=TradeCalculatorAsset&{change30d:number|null;change30dPercent:number|null};type Valuations=Awaited<ReturnType<typeof computeAllTeamValuations>>;
-function managerPositionRank(managerId:string,position:Position,valuations:Valuations){const ranked=[...valuations].sort((a,b)=>(b.positionalStarterValue[position]??0)-(a.positionalStarterValue[position]??0)),index=ranked.findIndex(v=>v.managerId===managerId);return index>=0?index+1:ranked.length}function rankedPositionNeeds(managerId:string,valuations:Valuations){return POSITIONS.map(position=>({position,rank:managerPositionRank(managerId,position,valuations)})).sort((a,b)=>b.rank-a.rank||a.position.localeCompare(b.position))}function needsForManager(managerId:string,valuations:Valuations):Position[]{return rankedPositionNeeds(managerId,valuations).slice(0,2).map(row=>row.position)}
-function combinations(chips:LiveAsset[]):LiveAsset[][]{const pool=chips.slice(0,28),result:LiveAsset[][]=pool.map(chip=>[chip]);for(let i=0;i<pool.length;i++)for(let j=i+1;j<pool.length;j++)result.push([pool[i],pool[j]]);const triplePool=pool.slice(0,18);for(let i=0;i<triplePool.length;i++)for(let j=i+1;j<triplePool.length;j++)for(let k=j+1;k<triplePool.length;k++){const trio=[triplePool[i],triplePool[j],triplePool[k]];if(trio.some(a=>a.assetType==="pick")||trio.every(a=>a.value>=1000))result.push(trio)}return result}
-function cleanAsset(a:LiveAsset):TradeFinderAsset{const{id,assetType,name,position,value,slot}=a;return{id,assetType,name,position,value,slot}}
-function offerCandidates(target:LiveAsset,chips:LiveAsset[],ownerAssets:LiveAsset[],ownerNeeds:Position[],strategies:Map<string,StrategyStatus>):TradeFinderOffer[]{const secondaries=ownerAssets.filter(a=>a.id!==target.id&&!a.isStale&&a.value>=350&&a.value<=4200).sort((a,b)=>a.assetType===b.assetType?a.value-b.value:a.assetType==="pick"?-1:1).slice(0,14),getPackages:LiveAsset[][]=[[target],...secondaries.map(a=>[target,a])],givePackages=combinations(chips),candidates=getPackages.flatMap(get=>{const getPackage=calculatePackageTradeValue(get);return givePackages.map(give=>{const givePackage=calculatePackageTradeValue(give),ratio=getPackage.adjustedValue>0?givePackage.adjustedValue/getPackage.adjustedValue:99,needMatches=[...new Set(give.map(a=>a.position).filter(p=>ownerNeeds.includes(p as Position)))],containsPick=give.some(a=>a.assetType==="pick"),strategyBonus=give.reduce((s,a)=>s+outgoingAdjustment(strategies.get(a.id)),0),rankScore=Math.abs(givePackage.adjustedValue-getPackage.adjustedValue)-needMatches.length*425-(containsPick?90:0)+strategyBonus+Math.max(0,give.length-2)*120+Math.max(0,get.length-1)*90;return{give,get,givePackage,getPackage,ownerNeedMatch:needMatches,ratio,rankScore}})}).filter(c=>c.ratio>=.9&&c.ratio<=1.16).sort((a,b)=>a.rankScore-b.rankScore);const selected:typeof candidates=[],seen=new Set<string>();for(const c of candidates){const key=`${c.give.map(a=>a.id).sort().join(":")}=>${c.get.map(a=>a.id).sort().join(":")}`;if(seen.has(key))continue;seen.add(key);selected.push(c);if(selected.length===3)break}return selected.map(({give,get,givePackage,getPackage,ownerNeedMatch,ratio})=>({give:give.map(cleanAsset),get:get.map(cleanAsset),giveRawValue:givePackage.rawValue,getRawValue:getPackage.rawValue,giveAdjustedValue:givePackage.adjustedValue,getAdjustedValue:getPackage.adjustedValue,rawEdge:getPackage.rawValue-givePackage.rawValue,adjustedEdge:getPackage.adjustedValue-givePackage.adjustedValue,valueBalance:Math.min(ratio,1/ratio)*100,packageQuality:ratio>=.96&&ratio<=1.08?"STRONG":"WORKABLE",ownerNeedMatch}))}
-function dataConfidence(target:LiveAsset,offers:TradeFinderOffer[],ktcStale:boolean,rankingComplete:boolean):"HIGH"|"MEDIUM"|"LOW"{if(ktcStale||target.isStale||!offers.length||!rankingComplete)return"LOW";if(target.consensusValue!==null&&target.change30dPercent!==null)return"HIGH";if(target.consensusValue!==null||target.change30dPercent!==null)return"MEDIUM";return"LOW"}function ordinalRound(round:number){return round===1?"1st":round===2?"2nd":round===3?"3rd":`${round}th`}
-export async function buildTradeFinderData():Promise<TradeFinderData|null>{const primary=await getPrimaryManager();if(!primary)return null;const entries=await getAllCurrentRosterEntries(),playerIds=entries.map(e=>e.playerId);const[market,mix,valuations,slotMap,managers,pickOwnership,pickMarket,league,marketStatuses]=await Promise.all([computeMarketDataForPlayers(playerIds),getFreshCurrentMarketMix(playerIds),computeAllTeamValuations(),getLatestSlotMap(),getAllManagers(),fetchFreshTradedPickOwnershipState().catch(()=>null),fetchFreshDraftPickMarketValues().catch(()=>[]),prisma.league.findFirst({where:{sleeperId:SLEEPER_LEAGUE_ID},select:{settings:true,season:true}}),getLatestMarketSourceStatuses()]);const primaryEntries=entries.filter(e=>e.managerId===primary.id);await ensureInitialOrlandoStrategyDefaults(primary.id,primaryEntries);const strategies=await getPlayerStrategies(playerIds);const assets:LiveAsset[]=entries.map(entry=>{const pm=market.get(entry.playerId)!,cm=mix.get(entry.playerId);return{id:entry.player.id,assetType:"player" as const,name:entry.player.fullName,position:entry.player.position,value:pm.currentValue??0,slot:slotMap.get(`${entry.managerId}:${entry.playerId}`)??"BENCH",managerId:entry.managerId,managerName:publicTeamName(entry.manager),nflTeam:entry.player.nflTeam,consensusValue:cm?.consensusValue??null,isStale:pm.isStale,change30d:pm.change30d?.points??null,change30dPercent:pm.change30d?.percent??null}}).filter(a=>a.value>0);let draftRounds=4,leagueStatus="";try{const settings=league?.settings?JSON.parse(league.settings):null,parsed=Number(settings?.settings?.draft_rounds);if(Number.isFinite(parsed)&&parsed>=1&&parsed<=10)draftRounds=parsed;leagueStatus=String(settings?.status??"")}catch{}const leagueSeason=Number(league?.season??new Date().getUTCFullYear()),firstSeason=firstTradableDraftSeason(leagueSeason,leagueStatus),futureSeasons=[...new Set(pickMarket.map(p=>Number(p.season)).filter(y=>Number.isFinite(y)&&y>=firstSeason))].sort((a,b)=>a-b).slice(0,4),playerCapital=new Map(valuations.map(v=>[v.managerId,v.playerCapital])),managerByRosterId=new Map(managers.map(m=>[m.sleeperRosterId,m])),allPickAssets:LiveAsset[]=[];if(pickOwnership&&pickMarket.length)for(const season of futureSeasons)for(let round=1;round<=draftRounds;round++)for(const origin of managers){const moved=pickOwnership.rows.find(p=>Number(p.season)===season&&p.round===round&&p.roster_id===origin.sleeperRosterId),owner=managerByRosterId.get(moved?.owner_id??origin.sleeperRosterId);if(!owner)continue;const slot=projectedRookieSlot(origin.id,origin.sleeperRosterId,managers,playerCapital),value=currentPickMarketValue(pickMarket,season,round,slot);if(!value||value<200)continue;allPickAssets.push({id:`pick:${season}:${round}:${origin.sleeperRosterId}`,assetType:"pick",name:`${season} ${ordinalRound(round)} · ${publicTeamName(origin)} original`,position:"PICK",value,slot:"PICK",managerId:owner.id,managerName:publicTeamName(owner),nflTeam:null,consensusValue:null,isStale:false,change30d:null,change30dPercent:null})}const primaryPlayers=assets.filter(a=>a.managerId===primary.id).sort((a,b)=>b.value-a.value),playerChips=primaryPlayers.filter(a=>!a.isStale&&!blocksOutgoing(strategies.get(a.id))&&a.value>=500).sort((a,b)=>(a.value+outgoingAdjustment(strategies.get(a.id)))-(b.value+outgoingAdjustment(strategies.get(b.id)))),pickChips=allPickAssets.filter(a=>a.managerId===primary.id),chips=[...playerChips,...pickChips].sort((a,b)=>b.value-a.value),rankingComplete=valuations.every(v=>v.capitalComplete),orlandoNeeds=rankedPositionNeeds(primary.id,valuations).slice(0,3).map(({position,rank})=>({position,leagueRank:rank,note:`#${rank} of ${valuations.length} in start-eligible ${position} market capital${rankingComplete?"":" · provisional because some league players lack KTC"}`})),ktcStale=marketStatuses.KTC.stale,targetUniverse=[...assets,...allPickAssets];const targets=ktcStale?[]:assets.filter(a=>a.managerId!==primary.id&&!a.isStale&&POSITIONS.includes(a.position as Position)&&a.value>=1700&&strategies.get(a.id)!=="AVOID").map(target=>{const position=target.position as Position,ownerNeeds=needsForManager(target.managerId,valuations),ownerValuation=valuations.find(v=>v.managerId===target.managerId),ownerPosRank=managerPositionRank(target.managerId,position,valuations),ownerHasSurplus=ownerPosRank<=4&&(ownerValuation?.positionalDepthValue[position]??0)>=1500,ownerAssets=targetUniverse.filter(a=>a.managerId===target.managerId),offers=offerCandidates(target,chips,ownerAssets,ownerNeeds,strategies);if(!offers.length)return null;const tags:string[]=[];const rank=managerPositionRank(primary.id,position,valuations);let score=35+targetAdjustment(strategies.get(target.id));score+=Math.max(0,Math.min(24,(rank-3)*3));if(rank>=8)tags.push(`Orlando #${rank} ${position}`);if(target.value>=2500&&target.value<=6500)score+=8;else if(target.value<=7600)score+=4;if(target.change30dPercent!==null&&target.change30dPercent<0){score+=Math.min(6,Math.abs(target.change30dPercent)/2.5);tags.push("Valid 30d dip")}if(target.consensusValue!==null&&target.consensusValue>target.value*1.04){score+=5;tags.push("Trusted market > KTC")}if(ownerHasSurplus){score+=8;tags.push(`Owner strong/deep at ${position}`)}const best=offers[0];if(best.packageQuality==="STRONG")score+=10;if(best.ownerNeedMatch.length){score+=7;tags.push(`Package fits ${target.managerName}`)}if(offers.some(o=>o.give.some(a=>a.assetType==="pick")||o.get.some(a=>a.assetType==="pick")))tags.push("Pick structure available");if(offers.some(o=>o.get.length>1))tags.push("Multi-asset return available");const fitScore=Math.max(1,Math.min(92,Math.round(score))),confidence=dataConfidence(target,offers,ktcStale,rankingComplete),movementText=target.change30dPercent===null?"No decision-grade 30-day trend is available":`KTC is ${target.change30dPercent>=0?"up":"down"} ${Math.abs(target.change30dPercent).toFixed(1)}% over a valid 30-day window`;return{id:target.id,name:target.name,position:target.position,nflTeam:target.nflTeam,ownerName:target.managerName,ownerId:target.managerId,value:target.value,consensusValue:target.consensusValue,change30d:target.change30d,change30dPercent:target.change30dPercent,fitScore,confidence,tags:[...new Set(tags)].slice(0,5),ownerNeeds,why:`${position} is a market weakness for Orlando at #${rank} by start-eligible dynasty capital${rankingComplete?"":" (provisional)"}. ${target.managerName}'s weakest market-capital groups include ${ownerNeeds.join(" / ")}. ${movementText}.`,offers} satisfies TradeFinderTarget}).filter((t):t is TradeFinderTarget=>t!==null).sort((a,b)=>b.fitScore-a.fitScore||b.value-a.value).slice(0,30);const calculatorAssets:TradeCalculatorAsset[]=[...assets,...allPickAssets].filter(a=>a.assetType==="pick"||!a.isStale).map(({change30d:_a,change30dPercent:_b,...a})=>a).sort((a,b)=>a.managerName.localeCompare(b.managerName)||b.value-a.value);return{targets,orlandoNeeds,playerTradeChipCount:playerChips.length,pickTradeChipCount:pickChips.length,shopEligibleAssetIds:chips.map(a=>a.id),primaryManagerId:primary.id,primaryManagerName:publicTeamName(primary),managers:managers.map(m=>({id:m.id,name:publicTeamName(m)})),calculatorAssets,ktcStale,ktcObservedAt:marketStatuses.KTC.observedAt,pickMarketAvailable:!!pickOwnership&&pickMarket.length>0,rankingComplete}}
+import {
+  blocksOutgoing,
+  ensureInitialOrlandoStrategyDefaults,
+  getPlayerStrategies,
+  outgoingAdjustment,
+  targetAdjustment,
+  type StrategyStatus,
+} from "@/lib/strategy";
+const POSITIONS = ["QB", "RB", "WR", "TE"] as const;
+type Position = (typeof POSITIONS)[number];
+export type TradeFinderAsset = {
+  id: string;
+  assetType: "player" | "pick";
+  name: string;
+  position: string;
+  value: number;
+  slot: string;
+};
+export type TradeCalculatorAsset = TradeFinderAsset & {
+  managerId: string;
+  managerName: string;
+  nflTeam: string | null;
+  consensusValue: number | null;
+  isStale: boolean;
+};
+export type TradeFinderOffer = {
+  give: TradeFinderAsset[];
+  get: TradeFinderAsset[];
+  giveRawValue: number;
+  getRawValue: number;
+  giveAdjustedValue: number;
+  getAdjustedValue: number;
+  rawEdge: number;
+  adjustedEdge: number;
+  valueBalance: number;
+  packageQuality: "STRONG" | "WORKABLE";
+  ownerNeedMatch: string[];
+};
+export type TradeFinderTarget = {
+  id: string;
+  name: string;
+  position: string;
+  nflTeam: string | null;
+  ownerName: string;
+  ownerId: string;
+  value: number;
+  consensusValue: number | null;
+  change30d: number | null;
+  change30dPercent: number | null;
+  fitScore: number;
+  confidence: "HIGH" | "MEDIUM" | "LOW";
+  tags: string[];
+  ownerNeeds: Position[];
+  why: string;
+  offers: TradeFinderOffer[];
+};
+export type TradeFinderData = {
+  targets: TradeFinderTarget[];
+  orlandoNeeds: { position: string; leagueRank: number; note: string }[];
+  playerTradeChipCount: number;
+  pickTradeChipCount: number;
+  shopEligibleAssetIds: string[];
+  primaryManagerId: string;
+  primaryManagerName: string;
+  managers: { id: string; name: string }[];
+  calculatorAssets: TradeCalculatorAsset[];
+  ktcStale: boolean;
+  ktcObservedAt: string | null;
+  pickMarketAvailable: boolean;
+  rankingComplete: boolean;
+};
+type LiveAsset = TradeCalculatorAsset & {
+  change30d: number | null;
+  change30dPercent: number | null;
+};
+type Valuations = Awaited<ReturnType<typeof computeAllTeamValuations>>;
+function managerPositionRank(
+  managerId: string,
+  position: Position,
+  valuations: Valuations,
+) {
+  const ranked = [...valuations].sort(
+      (a, b) =>
+        (b.positionalStarterValue[position] ?? 0) -
+        (a.positionalStarterValue[position] ?? 0),
+    ),
+    index = ranked.findIndex((v) => v.managerId === managerId);
+  return index >= 0 ? index + 1 : ranked.length;
+}
+function rankedPositionNeeds(managerId: string, valuations: Valuations) {
+  return POSITIONS.map((position) => ({
+    position,
+    rank: managerPositionRank(managerId, position, valuations),
+  })).sort((a, b) => b.rank - a.rank || a.position.localeCompare(b.position));
+}
+function needsForManager(
+  managerId: string,
+  valuations: Valuations,
+): Position[] {
+  return rankedPositionNeeds(managerId, valuations)
+    .slice(0, 2)
+    .map((row) => row.position);
+}
+function combinations(chips: LiveAsset[]): LiveAsset[][] {
+  const pool = chips.slice(0, 28),
+    result: LiveAsset[][] = pool.map((chip) => [chip]);
+  for (let i = 0; i < pool.length; i++)
+    for (let j = i + 1; j < pool.length; j++) result.push([pool[i], pool[j]]);
+  const triplePool = pool.slice(0, 18);
+  for (let i = 0; i < triplePool.length; i++)
+    for (let j = i + 1; j < triplePool.length; j++)
+      for (let k = j + 1; k < triplePool.length; k++) {
+        const trio = [triplePool[i], triplePool[j], triplePool[k]];
+        if (
+          trio.some((a) => a.assetType === "pick") ||
+          trio.every((a) => a.value >= 1000)
+        )
+          result.push(trio);
+      }
+  return result;
+}
+function cleanAsset(a: LiveAsset): TradeFinderAsset {
+  const { id, assetType, name, position, value, slot } = a;
+  return { id, assetType, name, position, value, slot };
+}
+function offerCandidates(
+  target: LiveAsset,
+  chips: LiveAsset[],
+  ownerAssets: LiveAsset[],
+  ownerNeeds: Position[],
+  strategies: Map<string, StrategyStatus>,
+): TradeFinderOffer[] {
+  const secondaries = ownerAssets
+      .filter(
+        (a) =>
+          a.id !== target.id && !a.isStale && a.value >= 350 && a.value <= 4200,
+      )
+      .sort((a, b) =>
+        a.assetType === b.assetType
+          ? a.value - b.value
+          : a.assetType === "pick"
+            ? -1
+            : 1,
+      )
+      .slice(0, 14),
+    getPackages: LiveAsset[][] = [
+      [target],
+      ...secondaries.map((a) => [target, a]),
+    ],
+    givePackages = combinations(chips),
+    candidates = getPackages
+      .flatMap((get) => {
+        const getPackage = calculatePackageTradeValue(get);
+        return givePackages.map((give) => {
+          const givePackage = calculatePackageTradeValue(give),
+            ratio =
+              getPackage.adjustedValue > 0
+                ? givePackage.adjustedValue / getPackage.adjustedValue
+                : 99,
+            needMatches = [
+              ...new Set(
+                give
+                  .map((a) => a.position)
+                  .filter((p) => ownerNeeds.includes(p as Position)),
+              ),
+            ],
+            containsPick = give.some((a) => a.assetType === "pick"),
+            strategyBonus = give.reduce(
+              (s, a) => s + outgoingAdjustment(strategies.get(a.id)),
+              0,
+            ),
+            rankScore =
+              Math.abs(givePackage.adjustedValue - getPackage.adjustedValue) -
+              needMatches.length * 425 -
+              (containsPick ? 90 : 0) +
+              strategyBonus +
+              Math.max(0, give.length - 2) * 120 +
+              Math.max(0, get.length - 1) * 90;
+          return {
+            give,
+            get,
+            givePackage,
+            getPackage,
+            ownerNeedMatch: needMatches,
+            ratio,
+            rankScore,
+          };
+        });
+      })
+      .filter((c) => c.ratio >= 0.9 && c.ratio <= 1.16)
+      .sort((a, b) => a.rankScore - b.rankScore);
+  const selected: typeof candidates = [],
+    seen = new Set<string>();
+  for (const c of candidates) {
+    const key = `${c.give
+      .map((a) => a.id)
+      .sort()
+      .join(":")}=>${c.get
+      .map((a) => a.id)
+      .sort()
+      .join(":")}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    selected.push(c);
+    if (selected.length === 3) break;
+  }
+  return selected.map(
+    ({ give, get, givePackage, getPackage, ownerNeedMatch, ratio }) => ({
+      give: give.map(cleanAsset),
+      get: get.map(cleanAsset),
+      giveRawValue: givePackage.rawValue,
+      getRawValue: getPackage.rawValue,
+      giveAdjustedValue: givePackage.adjustedValue,
+      getAdjustedValue: getPackage.adjustedValue,
+      rawEdge: getPackage.rawValue - givePackage.rawValue,
+      adjustedEdge: getPackage.adjustedValue - givePackage.adjustedValue,
+      valueBalance: Math.min(ratio, 1 / ratio) * 100,
+      packageQuality: ratio >= 0.96 && ratio <= 1.08 ? "STRONG" : "WORKABLE",
+      ownerNeedMatch,
+    }),
+  );
+}
+function dataConfidence(
+  target: LiveAsset,
+  offers: TradeFinderOffer[],
+  ktcStale: boolean,
+  rankingComplete: boolean,
+): "HIGH" | "MEDIUM" | "LOW" {
+  if (ktcStale || target.isStale || !offers.length || !rankingComplete)
+    return "LOW";
+  if (target.consensusValue !== null && target.change30dPercent !== null)
+    return "HIGH";
+  if (target.consensusValue !== null || target.change30dPercent !== null)
+    return "MEDIUM";
+  return "LOW";
+}
+function ordinalRound(round: number) {
+  return round === 1
+    ? "1st"
+    : round === 2
+      ? "2nd"
+      : round === 3
+        ? "3rd"
+        : `${round}th`;
+}
+export async function buildTradeFinderData(): Promise<TradeFinderData | null> {
+  const primary = await getPrimaryManager();
+  if (!primary) return null;
+  const entries = await getAllCurrentRosterEntries(),
+    playerIds = entries.map((e) => e.playerId);
+  const [
+    market,
+    mix,
+    valuations,
+    slotMap,
+    managers,
+    pickOwnership,
+    pickMarket,
+    league,
+    marketStatuses,
+  ] = await Promise.all([
+    computeMarketDataForPlayers(playerIds),
+    getFreshCurrentMarketMix(playerIds),
+    computeAllTeamValuations(),
+    getLatestSlotMap(),
+    getAllManagers(),
+    fetchFreshTradedPickOwnershipState().catch(() => null),
+    fetchFreshDraftPickMarketValues().catch(() => []),
+    prisma.league.findFirst({
+      where: { sleeperId: SLEEPER_LEAGUE_ID },
+      select: { settings: true, season: true },
+    }),
+    getLatestMarketSourceStatuses(),
+  ]);
+  const primaryEntries = entries.filter((e) => e.managerId === primary.id);
+  await ensureInitialOrlandoStrategyDefaults(primary.id, primaryEntries);
+  const strategies = await getPlayerStrategies(playerIds);
+  const assets: LiveAsset[] = entries
+    .map((entry) => {
+      const pm = market.get(entry.playerId)!,
+        cm = mix.get(entry.playerId);
+      return {
+        id: entry.player.id,
+        assetType: "player" as const,
+        name: entry.player.fullName,
+        position: entry.player.position,
+        value: pm.currentValue ?? 0,
+        slot: slotMap.get(`${entry.managerId}:${entry.playerId}`) ?? "BENCH",
+        managerId: entry.managerId,
+        managerName: publicTeamName(entry.manager),
+        nflTeam: entry.player.nflTeam,
+        consensusValue: cm?.consensusValue ?? null,
+        isStale: pm.isStale,
+        change30d: pm.change30d?.points ?? null,
+        change30dPercent: pm.change30d?.percent ?? null,
+      };
+    })
+    .filter((a) => a.value > 0);
+  let draftRounds = 4,
+    leagueStatus = "";
+  try {
+    const settings = league?.settings ? JSON.parse(league.settings) : null,
+      parsed = Number(settings?.settings?.draft_rounds);
+    if (Number.isFinite(parsed) && parsed >= 1 && parsed <= 10)
+      draftRounds = parsed;
+    leagueStatus = String(settings?.status ?? "");
+  } catch {}
+  const leagueSeason = Number(league?.season ?? new Date().getUTCFullYear()),
+    firstSeason = firstTradableDraftSeason(leagueSeason, leagueStatus),
+    futureSeasons = [
+      ...new Set(
+        pickMarket
+          .map((p) => Number(p.season))
+          .filter((y) => Number.isFinite(y) && y >= firstSeason),
+      ),
+    ]
+      .sort((a, b) => a - b)
+      .slice(0, 4),
+    playerCapital = new Map(
+      valuations.map((v) => [v.managerId, v.playerCapital]),
+    ),
+    managerByRosterId = new Map(managers.map((m) => [m.sleeperRosterId, m])),
+    allPickAssets: LiveAsset[] = [];
+  if (pickOwnership && pickMarket.length)
+    for (const season of futureSeasons)
+      for (let round = 1; round <= draftRounds; round++)
+        for (const origin of managers) {
+          const moved = pickOwnership.rows.find(
+              (p) =>
+                Number(p.season) === season &&
+                p.round === round &&
+                p.roster_id === origin.sleeperRosterId,
+            ),
+            owner = managerByRosterId.get(
+              moved?.owner_id ?? origin.sleeperRosterId,
+            );
+          if (!owner) continue;
+          const slot = projectedRookieSlot(
+              origin.id,
+              origin.sleeperRosterId,
+              managers,
+              playerCapital,
+            ),
+            value = currentPickMarketValue(pickMarket, season, round, slot);
+          if (!value || value < 200) continue;
+          allPickAssets.push({
+            id: `pick:${season}:${round}:${origin.sleeperRosterId}`,
+            assetType: "pick",
+            name: `${season} ${ordinalRound(round)} · ${publicTeamName(origin)} original`,
+            position: "PICK",
+            value,
+            slot: "PICK",
+            managerId: owner.id,
+            managerName: publicTeamName(owner),
+            nflTeam: null,
+            consensusValue: null,
+            isStale: false,
+            change30d: null,
+            change30dPercent: null,
+          });
+        }
+  const primaryPlayers = assets
+      .filter((a) => a.managerId === primary.id)
+      .sort((a, b) => b.value - a.value),
+    playerChips = primaryPlayers
+      .filter(
+        (a) =>
+          !a.isStale && !blocksOutgoing(strategies.get(a.id)) && a.value >= 500,
+      )
+      .sort(
+        (a, b) =>
+          a.value +
+          outgoingAdjustment(strategies.get(a.id)) -
+          (b.value + outgoingAdjustment(strategies.get(b.id))),
+      ),
+    pickChips = allPickAssets.filter((a) => a.managerId === primary.id),
+    chips = [...playerChips, ...pickChips].sort((a, b) => b.value - a.value),
+    rankingComplete = valuations.every((v) => v.capitalComplete),
+    orlandoNeeds = rankedPositionNeeds(primary.id, valuations)
+      .slice(0, 3)
+      .map(({ position, rank }) => ({
+        position,
+        leagueRank: rank,
+        note: `#${rank} of ${valuations.length} in start-eligible ${position} market capital${rankingComplete ? "" : " · provisional because some league players lack KTC"}`,
+      })),
+    ktcStale = marketStatuses.KTC.stale,
+    targetUniverse = [...assets, ...allPickAssets];
+  const targets = ktcStale
+    ? []
+    : assets
+        .filter(
+          (a) =>
+            a.managerId !== primary.id &&
+            !a.isStale &&
+            POSITIONS.includes(a.position as Position) &&
+            a.value >= 1700 &&
+            strategies.get(a.id) !== "AVOID",
+        )
+        .map((target) => {
+          const position = target.position as Position,
+            ownerNeeds = needsForManager(target.managerId, valuations),
+            ownerValuation = valuations.find(
+              (v) => v.managerId === target.managerId,
+            ),
+            ownerPosRank = managerPositionRank(
+              target.managerId,
+              position,
+              valuations,
+            ),
+            ownerHasSurplus =
+              ownerPosRank <= 4 &&
+              (ownerValuation?.positionalDepthValue[position] ?? 0) >= 1500,
+            ownerAssets = targetUniverse.filter(
+              (a) => a.managerId === target.managerId,
+            ),
+            offers = offerCandidates(
+              target,
+              chips,
+              ownerAssets,
+              ownerNeeds,
+              strategies,
+            );
+          if (!offers.length) return null;
+          const tags: string[] = [];
+          const rank = managerPositionRank(primary.id, position, valuations);
+          let score = 35 + targetAdjustment(strategies.get(target.id));
+          score += Math.max(0, Math.min(24, (rank - 3) * 3));
+          if (rank >= 8) tags.push(`Orlando #${rank} ${position}`);
+          if (target.value >= 2500 && target.value <= 6500) score += 8;
+          else if (target.value <= 7600) score += 4;
+          if (target.change30dPercent !== null && target.change30dPercent < 0) {
+            score += Math.min(6, Math.abs(target.change30dPercent) / 2.5);
+            tags.push("Valid 30d dip");
+          }
+          if (
+            target.consensusValue !== null &&
+            target.consensusValue > target.value * 1.04
+          ) {
+            score += 5;
+            tags.push("Trusted market > KTC");
+          }
+          if (ownerHasSurplus) {
+            score += 8;
+            tags.push(`Owner strong/deep at ${position}`);
+          }
+          const best = offers[0];
+          if (best.packageQuality === "STRONG") score += 10;
+          if (best.ownerNeedMatch.length) {
+            score += 7;
+            tags.push(`Package fits ${target.managerName}`);
+          }
+          if (
+            offers.some(
+              (o) =>
+                o.give.some((a) => a.assetType === "pick") ||
+                o.get.some((a) => a.assetType === "pick"),
+            )
+          )
+            tags.push("Pick structure available");
+          if (offers.some((o) => o.get.length > 1))
+            tags.push("Multi-asset return available");
+          const fitScore = Math.max(1, Math.min(92, Math.round(score))),
+            confidence = dataConfidence(
+              target,
+              offers,
+              ktcStale,
+              rankingComplete,
+            ),
+            movementText =
+              target.change30dPercent === null
+                ? "No decision-grade 30-day trend is available"
+                : `KTC is ${target.change30dPercent >= 0 ? "up" : "down"} ${Math.abs(target.change30dPercent).toFixed(1)}% over a valid 30-day window`;
+          return {
+            id: target.id,
+            name: target.name,
+            position: target.position,
+            nflTeam: target.nflTeam,
+            ownerName: target.managerName,
+            ownerId: target.managerId,
+            value: target.value,
+            consensusValue: target.consensusValue,
+            change30d: target.change30d,
+            change30dPercent: target.change30dPercent,
+            fitScore,
+            confidence,
+            tags: [...new Set(tags)].slice(0, 5),
+            ownerNeeds,
+            why: `${position} is a market weakness for Orlando at #${rank} by start-eligible dynasty capital${rankingComplete ? "" : " (provisional)"}. ${target.managerName}'s weakest market-capital groups include ${ownerNeeds.join(" / ")}. ${movementText}.`,
+            offers,
+          } satisfies TradeFinderTarget;
+        })
+        .filter((t): t is TradeFinderTarget => t !== null)
+        .sort((a, b) => b.fitScore - a.fitScore || b.value - a.value)
+        .slice(0, 30);
+  const calculatorAssets: TradeCalculatorAsset[] = [...assets, ...allPickAssets]
+    .filter((a) => a.assetType === "pick" || !a.isStale)
+    .map(({ change30d: _a, change30dPercent: _b, ...a }) => a)
+    .sort(
+      (a, b) => a.managerName.localeCompare(b.managerName) || b.value - a.value,
+    );
+  return {
+    targets,
+    orlandoNeeds,
+    playerTradeChipCount: playerChips.length,
+    pickTradeChipCount: pickChips.length,
+    shopEligibleAssetIds: chips.map((a) => a.id),
+    primaryManagerId: primary.id,
+    primaryManagerName: publicTeamName(primary),
+    managers: managers.map((m) => ({ id: m.id, name: publicTeamName(m) })),
+    calculatorAssets,
+    ktcStale,
+    ktcObservedAt: marketStatuses.KTC.observedAt,
+    pickMarketAvailable: !!pickOwnership && pickMarket.length > 0,
+    rankingComplete,
+  };
+}

@@ -41,6 +41,20 @@ textarea {
   font: inherit;
 }
 
+:where(a, button, input, select, textarea):focus-visible {
+  outline: 2px solid #34d399;
+  outline-offset: 2px;
+}
+
+/* Neutral 600/700 are used for explanatory text throughout the terminal. */
+.text-neutral-600 {
+  color: #a3a3a3;
+}
+
+.text-neutral-700 {
+  color: #8a8a8a;
+}
+
 .no-scrollbar {
   scrollbar-width: none;
   -ms-overflow-style: none;
