@@ -3,10 +3,13 @@ import { KTC_FORMAT } from "@/lib/config";
 import { commitKtcImport, type KtcImportRow } from "@/lib/ktcImport";
 import { fetchKtcSnapshot } from "@/lib/marketSources";
 import { normalizePlayerName } from "@/lib/normalize";
-import { canonicalKtcMatchName, VERIFIED_KTC_IDENTITIES } from "@/lib/ktcIdentityOverrides";
+import {
+  canonicalKtcMatchName,
+  VERIFIED_KTC_IDENTITIES,
+} from "@/lib/ktcIdentityOverrides";
 import { getPlayerCatalog, type SleeperPlayer } from "@/lib/sleeper";
 
-const marketDb = prisma as typeof prisma & { marketObservation: any };
+const marketDb = prisma;
 const FANTASY_POSITIONS = new Set(["QB", "RB", "WR", "TE"]);
 
 type CatalogCandidate = { sleeperId: string; meta: SleeperPlayer };
@@ -17,17 +20,35 @@ type CatalogCandidate = { sleeperId: string; meta: SleeperPlayer };
  * keep the HTTP fetch timestamp instead. Existing same-value/source-time rows
  * are rejected as duplicate heartbeats rather than deleted.
  */
-export async function canonicalizeKtcRunTimestamps(refreshRunId: string): Promise<{ canonicalized: number; duplicatesRejected: number }> {
+export async function canonicalizeKtcRunTimestamps(
+  refreshRunId: string,
+): Promise<{ canonicalized: number; duplicatesRejected: number }> {
   const marketRows = await marketDb.marketObservation.findMany({
     where: { refreshRunId, source: "KTC" },
-    select: { playerId: true, rawValue: true, sourceUpdatedAt: true, observedAt: true },
+    select: {
+      playerId: true,
+      rawValue: true,
+      sourceUpdatedAt: true,
+      observedAt: true,
+    },
   });
   const anchorByPlayer = new Map<string, { value: number; at: Date }>();
-  for (const row of marketRows as Array<{ playerId:string;rawValue:number;sourceUpdatedAt:Date|null;observedAt:Date }>) {
-    anchorByPlayer.set(row.playerId, { value: Number(row.rawValue), at: row.sourceUpdatedAt ?? row.observedAt });
+  for (const row of marketRows as Array<{
+    playerId: string;
+    rawValue: number;
+    sourceUpdatedAt: Date | null;
+    observedAt: Date;
+  }>) {
+    anchorByPlayer.set(row.playerId, {
+      value: Number(row.rawValue),
+      at: row.sourceUpdatedAt ?? row.observedAt,
+    });
   }
-  const ktcRows = await prisma.ktcObservation.findMany({ where: { refreshRunId, sourceType: "AUTO_SCRAPE" } });
-  let canonicalized = 0, duplicatesRejected = 0;
+  const ktcRows = await prisma.ktcObservation.findMany({
+    where: { refreshRunId, sourceType: "AUTO_SCRAPE" },
+  });
+  let canonicalized = 0,
+    duplicatesRejected = 0;
   for (const row of ktcRows) {
     const anchor = anchorByPlayer.get(row.playerId);
     if (!anchor || row.value !== anchor.value) continue;
@@ -44,10 +65,20 @@ export async function canonicalizeKtcRunTimestamps(refreshRunId: string): Promis
       select: { id: true },
     });
     if (duplicate) {
-      await prisma.ktcObservation.update({ where: { id: row.id }, data: { validationStatus: "REJECTED", validationNote: "Duplicate KTC heartbeat at the same provider update timestamp." } });
+      await prisma.ktcObservation.update({
+        where: { id: row.id },
+        data: {
+          validationStatus: "REJECTED",
+          validationNote:
+            "Duplicate KTC heartbeat at the same provider update timestamp.",
+        },
+      });
       duplicatesRejected++;
     } else if (row.observedAt.getTime() !== anchor.at.getTime()) {
-      await prisma.ktcObservation.update({ where: { id: row.id }, data: { observedAt: anchor.at } });
+      await prisma.ktcObservation.update({
+        where: { id: row.id },
+        data: { observedAt: anchor.at },
+      });
       canonicalized++;
     }
   }
@@ -62,7 +93,14 @@ export async function canonicalizeKtcRunTimestamps(refreshRunId: string): Promis
  * nickname/legal-name difference, or a player falling outside today's KTC
  * top-board payload, cannot erase a known stable KTC profile identity.
  */
-export async function refreshFullKtcUniverse(refreshRunId: string): Promise<{ matched: number; committed: number; marketRowsStored: number; sourceUpdatedAt: string }> {
+export async function refreshFullKtcUniverse(
+  refreshRunId: string,
+): Promise<{
+  matched: number;
+  committed: number;
+  marketRowsStored: number;
+  sourceUpdatedAt: string;
+}> {
   const [snapshot, catalog, existingPlayers] = await Promise.all([
     fetchKtcSnapshot(),
     getPlayerCatalog(),
@@ -73,7 +111,9 @@ export async function refreshFullKtcUniverse(refreshRunId: string): Promise<{ ma
   for (const [sleeperId, meta] of Object.entries(catalog)) {
     const position = String(meta.position ?? "").toUpperCase();
     if (!FANTASY_POSITIONS.has(position)) continue;
-    const fullName = meta.full_name ?? [meta.first_name, meta.last_name].filter(Boolean).join(" ");
+    const fullName =
+      meta.full_name ??
+      [meta.first_name, meta.last_name].filter(Boolean).join(" ");
     if (!fullName) continue;
     const key = `${canonicalKtcMatchName(fullName)}|${position}`;
     const list = byNamePos.get(key) ?? [];
@@ -81,8 +121,12 @@ export async function refreshFullKtcUniverse(refreshRunId: string): Promise<{ ma
     byNamePos.set(key, list);
   }
 
-  const existingByKtcId = new Map(existingPlayers.filter((p) => p.ktcId).map((p) => [p.ktcId!, p]));
-  const existingBySleeper = new Map(existingPlayers.map((p) => [p.sleeperId, p]));
+  const existingByKtcId = new Map(
+    existingPlayers.filter((p) => p.ktcId).map((p) => [p.ktcId!, p]),
+  );
+  const existingBySleeper = new Map(
+    existingPlayers.map((p) => [p.sleeperId, p]),
+  );
 
   // These mappings are sourced from verified public KTC profile IDs, never
   // from a guessed value or fuzzy name match. Keep Sleeper's display name in
@@ -92,12 +136,19 @@ export async function refreshFullKtcUniverse(refreshRunId: string): Promise<{ ma
     if (!existing) continue;
     const ktcOwner = existingByKtcId.get(identity.ktcId);
     if (ktcOwner && ktcOwner.id !== existing.id) {
-      throw new Error(`Verified KTC identity ${identity.ktcId} is already assigned to ${ktcOwner.fullName}; refusing to remap ${existing.fullName}.`);
+      throw new Error(
+        `Verified KTC identity ${identity.ktcId} is already assigned to ${ktcOwner.fullName}; refusing to remap ${existing.fullName}.`,
+      );
     }
     if (existing.ktcId && existing.ktcId !== identity.ktcId) {
-      throw new Error(`Sleeper ${identity.sleeperId} (${existing.fullName}) already has KTC id ${existing.ktcId}; verified override expects ${identity.ktcId}.`);
+      throw new Error(
+        `Sleeper ${identity.sleeperId} (${existing.fullName}) already has KTC id ${existing.ktcId}; verified override expects ${identity.ktcId}.`,
+      );
     }
-    if (existing.ktcId === identity.ktcId && existing.mappingStatus === "MAPPED") {
+    if (
+      existing.ktcId === identity.ktcId &&
+      existing.mappingStatus === "MAPPED"
+    ) {
       existingByKtcId.set(identity.ktcId, existing);
       continue;
     }
@@ -117,13 +168,19 @@ export async function refreshFullKtcUniverse(refreshRunId: string): Promise<{ ma
   const providerRowByKtcId = new Map<string, (typeof snapshot.rows)[number]>();
 
   for (const row of snapshot.rows) {
-    if (!row.ktcId || !row.position || !FANTASY_POSITIONS.has(row.position)) continue;
+    if (!row.ktcId || !row.position || !FANTASY_POSITIONS.has(row.position))
+      continue;
     let player = existingByKtcId.get(row.ktcId);
     if (!player) {
-      const candidates = byNamePos.get(`${canonicalKtcMatchName(row.name)}|${row.position}`) ?? [];
+      const candidates =
+        byNamePos.get(`${canonicalKtcMatchName(row.name)}|${row.position}`) ??
+        [];
       if (candidates.length !== 1) continue;
       const { sleeperId, meta } = candidates[0];
-      const fullName = meta.full_name ?? ([meta.first_name, meta.last_name].filter(Boolean).join(" ") || row.name);
+      const fullName =
+        meta.full_name ??
+        ([meta.first_name, meta.last_name].filter(Boolean).join(" ") ||
+          row.name);
       const existing = existingBySleeper.get(sleeperId);
       if (existing) {
         player = await prisma.player.update({
@@ -156,7 +213,14 @@ export async function refreshFullKtcUniverse(refreshRunId: string): Promise<{ ma
       existingByKtcId.set(row.ktcId, player);
       existingBySleeper.set(sleeperId, player);
     }
-    importRows.push({ name: row.name, position: row.position, team: row.team, value: row.rawValue, ktcId: row.ktcId, rank: row.rank });
+    importRows.push({
+      name: row.name,
+      position: row.position,
+      team: row.team,
+      value: row.rawValue,
+      ktcId: row.ktcId,
+      rank: row.rank,
+    });
     providerRowByKtcId.set(row.ktcId, row);
   }
 
@@ -169,10 +233,18 @@ export async function refreshFullKtcUniverse(refreshRunId: string): Promise<{ ma
 
   let marketRowsStored = 0;
   for (const result of summary.results) {
-    if (!result.playerId || !result.row.ktcId || ["flagged","rejected","ambiguous","unmatched"].includes(result.outcome)) continue;
+    if (
+      !result.playerId ||
+      !result.row.ktcId ||
+      ["flagged", "rejected", "ambiguous", "unmatched"].includes(result.outcome)
+    )
+      continue;
     const row = providerRowByKtcId.get(result.row.ktcId);
     if (!row) continue;
-    const exists = await marketDb.marketObservation.findFirst({ where: { refreshRunId, source: "KTC", playerId: result.playerId }, select: { id: true } });
+    const exists = await marketDb.marketObservation.findFirst({
+      where: { refreshRunId, source: "KTC", playerId: result.playerId },
+      select: { id: true },
+    });
     if (exists) continue;
     await marketDb.marketObservation.create({
       data: {
@@ -186,11 +258,19 @@ export async function refreshFullKtcUniverse(refreshRunId: string): Promise<{ ma
         refreshRunId,
         sourceRank: row.rank,
         positionRank: row.positionRank,
-        metadata: JSON.stringify({ ...(row.metadata ?? {}), fullUniverse: true }),
+        metadata: JSON.stringify({
+          ...(row.metadata ?? {}),
+          fullUniverse: true,
+        }),
       },
     });
     marketRowsStored++;
   }
 
-  return { matched: importRows.length, committed: summary.committed, marketRowsStored, sourceUpdatedAt: snapshot.sourceUpdatedAt.toISOString() };
+  return {
+    matched: importRows.length,
+    committed: summary.committed,
+    marketRowsStored,
+    sourceUpdatedAt: snapshot.sourceUpdatedAt.toISOString(),
+  };
 }

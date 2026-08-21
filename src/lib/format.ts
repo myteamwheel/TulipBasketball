@@ -12,10 +12,21 @@ export function formatSigned(n: number | null | undefined): string {
   return `${sign}${rounded.toLocaleString("en-US")}`;
 }
 
-export function formatPercent(n: number | null | undefined, digits = 1): string {
+export function formatPercent(
+  n: number | null | undefined,
+  digits = 1,
+): string {
   if (n === null || n === undefined) return "—";
   const sign = n > 0 ? "+" : n < 0 ? "" : "";
   return `${sign}${n.toFixed(digits)}%`;
+}
+
+export function formatProbability(value: number): string {
+  const percent = Math.max(0, Math.min(1, value)) * 100;
+  if (percent === 0 || percent === 100) return `${percent}%`;
+  if (percent < 1) return "<1%";
+  if (percent > 99) return ">99%";
+  return `${Math.round(percent)}%`;
 }
 
 export function trendColorClass(n: number | null | undefined): string {

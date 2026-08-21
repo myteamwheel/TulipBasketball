@@ -8,5 +8,7 @@ site/
 .env.*
 !.env.example
 *.tsbuildinfo
+next-env.d.ts
+src/generated/
 scripts/nba-career-games.json
 scripts/nba-player-index.json

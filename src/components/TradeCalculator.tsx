@@ -1,4 +1,315 @@
 "use client";
-import{useMemo,useState}from"react";import type{TradeCalculatorAsset}from"@/lib/tradeFinder";import{calculateTradeBalance}from"@/lib/tradeValue";const points=(v:number)=>Math.round(v).toLocaleString("en-US");function verdictLabel(v:ReturnType<typeof calculateTradeBalance>["verdict"],p:string,o:string){if(v==="EVEN")return"Near even after package adjustment";if(v==="LEAN_GET")return`Slight lean ${p}`;if(v==="FAVORS_GET")return`Favors ${p}`;if(v==="HEAVILY_FAVORS_GET")return`Strongly favors ${p}`;if(v==="LEAN_GIVE")return`Slight lean ${o}`;if(v==="FAVORS_GIVE")return`Favors ${o}`;return`Strongly favors ${o}`}function assetValueLabel(a:TradeCalculatorAsset){return a.assetType==="pick"?`Market ${points(a.value)}`:`KTC ${points(a.value)}`}
-function Side({title,assets,ids,add,remove}:{title:string;assets:TradeCalculatorAsset[];ids:string[];add:(id:string)=>void;remove:(id:string)=>void}){const[query,setQuery]=useState(""),[kind,setKind]=useState<"ALL"|"PLAYER"|"PICK">("ALL"),selected=ids.map(id=>assets.find(a=>a.id===id)).filter(Boolean)as TradeCalculatorAsset[],suggestions=assets.filter(a=>!ids.includes(a.id)).filter(a=>kind==="ALL"||(kind==="PICK"?a.assetType==="pick":a.assetType==="player")).filter(a=>`${a.name} ${a.position} ${a.nflTeam??""}`.toLowerCase().includes(query.trim().toLowerCase())).slice(0,10);return <div className="rounded-lg border border-neutral-800 bg-neutral-950/60 p-3"><div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-neutral-500">{title}</div><div className="mb-2 flex gap-1">{["ALL","PLAYER","PICK"].map(v=><button key={v} onClick={()=>setKind(v as typeof kind)} className={`rounded px-2 py-1 text-[9px] ${kind===v?"bg-neutral-700 text-neutral-100":"bg-neutral-900 text-neutral-500"}`}>{v==="ALL"?"All":""+v.charAt(0)+v.slice(1).toLowerCase()+"s"}</button>)}</div><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search player or pick…" className="h-9 w-full rounded-md border border-neutral-700 bg-neutral-900 px-2.5 text-xs text-neutral-200 outline-none focus:border-emerald-700"/><div className="mt-2 max-h-48 space-y-1 overflow-auto">{suggestions.map(a=><button key={a.id} onClick={()=>{add(a.id);setQuery("")}} className="flex w-full items-center justify-between gap-2 rounded-md border border-neutral-800 bg-neutral-900 px-2.5 py-2 text-left hover:border-neutral-700"><span className="min-w-0 truncate text-[11px] text-neutral-200">{a.assetType==="pick"?"PICK":a.position} · {a.name}</span><span className="shrink-0 text-[9px] text-neutral-600">{points(a.value)}</span></button>)}</div><div className="mt-3 space-y-1.5">{selected.map(a=><div key={a.id} className="flex items-center justify-between gap-2 rounded-md border border-neutral-800 bg-neutral-900 px-2.5 py-2"><div className="min-w-0"><div className="truncate text-xs font-medium text-neutral-100">{a.name}</div><div className="text-[9px] text-neutral-600">{a.assetType==="pick"?"PICK":a.position} · {assetValueLabel(a)}{a.slot&&a.assetType!=="pick"?` · ${a.slot}`:""}</div></div><button onClick={()=>remove(a.id)} className="text-[10px] text-neutral-600 hover:text-red-300">Remove</button></div>)}</div></div>}
-export default function TradeCalculator({assets,managers,primaryManagerId,primaryManagerName,ktcStale,pickMarketAvailable}:{assets:TradeCalculatorAsset[];managers:{id:string;name:string}[];primaryManagerId:string;primaryManagerName:string;ktcStale:boolean;pickMarketAvailable:boolean}){const others=managers.filter(m=>m.id!==primaryManagerId),[otherManagerId,setOtherManagerId]=useState(others[0]?.id??""),[giveIds,setGiveIds]=useState<string[]>([]),[getIds,setGetIds]=useState<string[]>([]),primaryAssets=useMemo(()=>assets.filter(a=>a.managerId===primaryManagerId),[assets,primaryManagerId]),otherAssets=useMemo(()=>assets.filter(a=>a.managerId===otherManagerId),[assets,otherManagerId]),otherName=managers.find(m=>m.id===otherManagerId)?.name??"Other team",give=giveIds.map(id=>primaryAssets.find(a=>a.id===id)).filter(Boolean)as TradeCalculatorAsset[],get=getIds.map(id=>otherAssets.find(a=>a.id===id)).filter(Boolean)as TradeCalculatorAsset[],balance=calculateTradeBalance(give,get),staleSelection=[...give,...get].some(a=>a.isStale),canEvaluate=give.length>0&&get.length>0&&!ktcStale&&!staleSelection,positionImpact=["QB","RB","WR","TE"].map(position=>({position,delta:get.filter(a=>a.assetType==="player"&&a.position===position).reduce((s,a)=>s+a.value,0)-give.filter(a=>a.assetType==="player"&&a.position===position).reduce((s,a)=>s+a.value,0)})).filter(r=>r.delta!==0),rosterSpots=give.filter(a=>a.assetType==="player").length-get.filter(a=>a.assetType==="player").length,outgoingStarters=give.filter(a=>a.assetType==="player"&&a.slot==="STARTER").length;return <div className="space-y-4"><section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3 sm:p-4"><h2 className="text-sm font-semibold text-neutral-100">Manual Trade Calculator</h2><p className="mt-1 max-w-3xl text-[11px] leading-4 text-neutral-500">Search current assets with package adjustment and Orlando roster impact. Player values are KTC; pick values are verified current pick-market values normalized to the same comparison scale. Value balance is not an acceptance probability.</p>{ktcStale?<div className="mt-3 rounded-md border border-amber-900 bg-amber-950/20 px-3 py-2 text-[10px] text-amber-300">Current KTC is unavailable. Trade verdicts are paused.</div>:null}{!pickMarketAvailable?<div className="mt-2 rounded-md border border-amber-900 bg-amber-950/20 px-3 py-2 text-[10px] text-amber-300">Picks are hidden because current pick prices or ownership could not be verified as fresh.</div>:null}<label className="mt-4 block max-w-sm text-[9px] uppercase tracking-wide text-neutral-600">Other team<select value={otherManagerId} onChange={e=>{setOtherManagerId(e.target.value);setGetIds([])}} className="mt-1 h-9 w-full rounded-md border border-neutral-700 bg-neutral-950 px-2 text-xs text-neutral-200">{others.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</select></label></section><div className="grid gap-3 lg:grid-cols-2"><Side title={`${primaryManagerName} gives`} assets={primaryAssets} ids={giveIds} add={id=>setGiveIds(v=>[...v,id])} remove={id=>setGiveIds(v=>v.filter(x=>x!==id))}/><Side title={`${otherName} gives`} assets={otherAssets} ids={getIds} add={id=>setGetIds(v=>[...v,id])} remove={id=>setGetIds(v=>v.filter(x=>x!==id))}/></div><section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3 sm:p-4">{!give.length||!get.length?<div className="py-6 text-center text-xs text-neutral-600">Add at least one asset to both sides.</div>:!canEvaluate?<div className="py-6 text-center text-xs text-amber-300">A current verdict is unavailable until every selected asset and the KTC anchor are fresh.</div>:<><div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{[["Orlando raw",balance.give.rawValue],["Orlando adjusted",balance.give.adjustedValue],[`${otherName} raw`,balance.get.rawValue],[`${otherName} adjusted`,balance.get.adjustedValue]].map(([label,value])=><div key={String(label)} className="rounded-md bg-neutral-950 p-2.5"><div className="text-[9px] uppercase tracking-wide text-neutral-600">{label}</div><div className="mt-1 text-base font-semibold tabular-nums text-neutral-100">{points(Number(value))}</div></div>)}</div><div className="mt-3 rounded-md border border-neutral-800 bg-neutral-950 p-3"><div className="text-[9px] uppercase tracking-wide text-neutral-600">Adjusted verdict</div><div className="mt-1 text-sm font-semibold text-neutral-100">{verdictLabel(balance.verdict,primaryManagerName,otherName)}</div><div className="mt-1 text-[10px] text-neutral-600">Value balance {balance.fairnessPercent.toFixed(1)}% · Orlando adjusted edge {balance.adjustedEdge>0?"+":""}{points(balance.adjustedEdge)}</div></div><div className="mt-3 rounded-md border border-neutral-800 bg-neutral-950 p-3"><div className="text-[9px] uppercase tracking-wide text-neutral-600">Orlando roster impact</div><div className="mt-2 flex flex-wrap gap-2">{positionImpact.map(r=><span key={r.position} className={`rounded-md border border-neutral-800 px-2 py-1 text-[10px] ${r.delta>0?"text-emerald-300":"text-red-300"}`}>{r.position} {r.delta>0?"+":""}{points(r.delta)}</span>)}<span className="rounded-md border border-neutral-800 px-2 py-1 text-[10px] text-neutral-400">{rosterSpots>0?`${rosterSpots} roster spot${rosterSpots===1?"":"s"} freed`:rosterSpots<0?`${Math.abs(rosterSpots)} extra roster spot${rosterSpots===-1?"":"s"} needed`:"Roster spots neutral"}</span>{outgoingStarters>0?<span className="rounded-md border border-amber-900 px-2 py-1 text-[10px] text-amber-300">{outgoingStarters} current Sleeper starter-slot player{outgoingStarters===1?"":"s"} outgoing</span>:null}</div></div></>}</section></div>}
+import { useState } from "react";
+import type { TradeCalculatorAsset } from "@/lib/tradeFinder";
+import { calculateTradeBalance } from "@/lib/tradeValue";
+const points = (v: number) => Math.round(v).toLocaleString("en-US");
+function verdictLabel(
+  v: ReturnType<typeof calculateTradeBalance>["verdict"],
+  p: string,
+  o: string,
+) {
+  if (v === "EVEN") return "Near even after package adjustment";
+  if (v === "LEAN_GET") return `Slight lean ${p}`;
+  if (v === "FAVORS_GET") return `Favors ${p}`;
+  if (v === "HEAVILY_FAVORS_GET") return `Strongly favors ${p}`;
+  if (v === "LEAN_GIVE") return `Slight lean ${o}`;
+  if (v === "FAVORS_GIVE") return `Favors ${o}`;
+  return `Strongly favors ${o}`;
+}
+function assetValueLabel(a: TradeCalculatorAsset) {
+  return a.assetType === "pick"
+    ? `Market ${points(a.value)}`
+    : `KTC ${points(a.value)}`;
+}
+function Side({
+  title,
+  assets,
+  ids,
+  add,
+  remove,
+}: {
+  title: string;
+  assets: TradeCalculatorAsset[];
+  ids: string[];
+  add: (id: string) => void;
+  remove: (id: string) => void;
+}) {
+  const [query, setQuery] = useState(""),
+    [kind, setKind] = useState<"ALL" | "PLAYER" | "PICK">("ALL"),
+    selected = ids
+      .map((id) => assets.find((a) => a.id === id))
+      .filter(Boolean) as TradeCalculatorAsset[],
+    suggestions = assets
+      .filter((a) => !ids.includes(a.id))
+      .filter(
+        (a) =>
+          kind === "ALL" ||
+          (kind === "PICK" ? a.assetType === "pick" : a.assetType === "player"),
+      )
+      .filter((a) =>
+        `${a.name} ${a.position} ${a.nflTeam ?? ""}`
+          .toLowerCase()
+          .includes(query.trim().toLowerCase()),
+      )
+      .slice(0, 10);
+  return (
+    <div className="rounded-lg border border-neutral-800 bg-neutral-950/60 p-3">
+      <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-neutral-500">
+        {title}
+      </div>
+      <div className="mb-2 flex gap-1">
+        {["ALL", "PLAYER", "PICK"].map((v) => (
+          <button
+            key={v}
+            aria-pressed={kind === v}
+            onClick={() => setKind(v as typeof kind)}
+            className={`rounded px-2 py-1 text-[9px] ${kind === v ? "bg-neutral-700 text-neutral-100" : "bg-neutral-900 text-neutral-500"}`}
+          >
+            {v === "ALL"
+              ? "All"
+              : "" + v.charAt(0) + v.slice(1).toLowerCase() + "s"}
+          </button>
+        ))}
+      </div>
+      <input
+        aria-label={`Search assets for ${title}`}
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search player or pick…"
+        className="h-9 w-full rounded-md border border-neutral-700 bg-neutral-900 px-2.5 text-xs text-neutral-200 outline-none focus:border-emerald-700"
+      />
+      <div className="mt-2 max-h-48 space-y-1 overflow-auto">
+        {suggestions.map((a) => (
+          <button
+            key={a.id}
+            onClick={() => {
+              add(a.id);
+              setQuery("");
+            }}
+            className="flex w-full items-center justify-between gap-2 rounded-md border border-neutral-800 bg-neutral-900 px-2.5 py-2 text-left hover:border-neutral-700"
+          >
+            <span className="min-w-0 truncate text-[11px] text-neutral-200">
+              {a.assetType === "pick" ? "PICK" : a.position} · {a.name}
+            </span>
+            <span className="shrink-0 text-[9px] text-neutral-600">
+              {points(a.value)}
+            </span>
+          </button>
+        ))}
+      </div>
+      <div className="mt-3 space-y-1.5">
+        {selected.map((a) => (
+          <div
+            key={a.id}
+            className="flex items-center justify-between gap-2 rounded-md border border-neutral-800 bg-neutral-900 px-2.5 py-2"
+          >
+            <div className="min-w-0">
+              <div className="truncate text-xs font-medium text-neutral-100">
+                {a.name}
+              </div>
+              <div className="text-[9px] text-neutral-600">
+                {a.assetType === "pick" ? "PICK" : a.position} ·{" "}
+                {assetValueLabel(a)}
+                {a.slot && a.assetType !== "pick" ? ` · ${a.slot}` : ""}
+              </div>
+            </div>
+            <button
+              onClick={() => remove(a.id)}
+              className="text-[10px] text-neutral-600 hover:text-red-300"
+            >
+              Remove
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+export default function TradeCalculator({
+  assets,
+  managers,
+  primaryManagerId,
+  primaryManagerName,
+  ktcStale,
+  pickMarketAvailable,
+}: {
+  assets: TradeCalculatorAsset[];
+  managers: { id: string; name: string }[];
+  primaryManagerId: string;
+  primaryManagerName: string;
+  ktcStale: boolean;
+  pickMarketAvailable: boolean;
+}) {
+  const others = managers.filter((m) => m.id !== primaryManagerId),
+    [otherManagerId, setOtherManagerId] = useState(others[0]?.id ?? ""),
+    [giveIds, setGiveIds] = useState<string[]>([]),
+    [getIds, setGetIds] = useState<string[]>([]),
+    primaryAssets = assets.filter((a) => a.managerId === primaryManagerId),
+    otherAssets = assets.filter((a) => a.managerId === otherManagerId),
+    otherName =
+      managers.find((m) => m.id === otherManagerId)?.name ?? "Other team",
+    give = giveIds
+      .map((id) => primaryAssets.find((a) => a.id === id))
+      .filter(Boolean) as TradeCalculatorAsset[],
+    get = getIds
+      .map((id) => otherAssets.find((a) => a.id === id))
+      .filter(Boolean) as TradeCalculatorAsset[],
+    balance = calculateTradeBalance(give, get),
+    staleSelection = [...give, ...get].some((a) => a.isStale),
+    canEvaluate =
+      give.length > 0 && get.length > 0 && !ktcStale && !staleSelection,
+    positionImpact = ["QB", "RB", "WR", "TE"]
+      .map((position) => ({
+        position,
+        delta:
+          get
+            .filter((a) => a.assetType === "player" && a.position === position)
+            .reduce((s, a) => s + a.value, 0) -
+          give
+            .filter((a) => a.assetType === "player" && a.position === position)
+            .reduce((s, a) => s + a.value, 0),
+      }))
+      .filter((r) => r.delta !== 0),
+    rosterSpots =
+      give.filter((a) => a.assetType === "player").length -
+      get.filter((a) => a.assetType === "player").length,
+    outgoingStarters = give.filter(
+      (a) => a.assetType === "player" && a.slot === "STARTER",
+    ).length;
+  return (
+    <div className="space-y-4">
+      <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3 sm:p-4">
+        <h2 className="text-sm font-semibold text-neutral-100">
+          Manual Trade Calculator
+        </h2>
+        <p className="mt-1 max-w-3xl text-[11px] leading-4 text-neutral-500">
+          Search current assets with package adjustment and Orlando roster
+          impact. Player values are KTC; pick values are verified current
+          pick-market values normalized to the same comparison scale. Value
+          balance is not an acceptance probability.
+        </p>
+        {ktcStale ? (
+          <div className="mt-3 rounded-md border border-amber-900 bg-amber-950/20 px-3 py-2 text-[10px] text-amber-300">
+            Current KTC is unavailable. Trade verdicts are paused.
+          </div>
+        ) : null}
+        {!pickMarketAvailable ? (
+          <div className="mt-2 rounded-md border border-amber-900 bg-amber-950/20 px-3 py-2 text-[10px] text-amber-300">
+            Picks are hidden because current pick prices or ownership could not
+            be verified as fresh.
+          </div>
+        ) : null}
+        <label className="mt-4 block max-w-sm text-[9px] uppercase tracking-wide text-neutral-600">
+          Other team
+          <select
+            value={otherManagerId}
+            onChange={(e) => {
+              setOtherManagerId(e.target.value);
+              setGetIds([]);
+            }}
+            className="mt-1 h-9 w-full rounded-md border border-neutral-700 bg-neutral-950 px-2 text-xs text-neutral-200"
+          >
+            {others.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </section>
+      <div className="grid gap-3 lg:grid-cols-2">
+        <Side
+          title={`${primaryManagerName} gives`}
+          assets={primaryAssets}
+          ids={giveIds}
+          add={(id) => setGiveIds((v) => [...v, id])}
+          remove={(id) => setGiveIds((v) => v.filter((x) => x !== id))}
+        />
+        <Side
+          title={`${otherName} gives`}
+          assets={otherAssets}
+          ids={getIds}
+          add={(id) => setGetIds((v) => [...v, id])}
+          remove={(id) => setGetIds((v) => v.filter((x) => x !== id))}
+        />
+      </div>
+      <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3 sm:p-4">
+        {!give.length || !get.length ? (
+          <div className="py-6 text-center text-xs text-neutral-600">
+            Add at least one asset to both sides.
+          </div>
+        ) : !canEvaluate ? (
+          <div className="py-6 text-center text-xs text-amber-300">
+            A current verdict is unavailable until every selected asset and the
+            KTC anchor are fresh.
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {[
+                ["Orlando raw", balance.give.rawValue],
+                ["Orlando adjusted", balance.give.adjustedValue],
+                [`${otherName} raw`, balance.get.rawValue],
+                [`${otherName} adjusted`, balance.get.adjustedValue],
+              ].map(([label, value]) => (
+                <div
+                  key={String(label)}
+                  className="rounded-md bg-neutral-950 p-2.5"
+                >
+                  <div className="text-[9px] uppercase tracking-wide text-neutral-600">
+                    {label}
+                  </div>
+                  <div className="mt-1 text-base font-semibold tabular-nums text-neutral-100">
+                    {points(Number(value))}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 rounded-md border border-neutral-800 bg-neutral-950 p-3">
+              <div className="text-[9px] uppercase tracking-wide text-neutral-600">
+                Adjusted verdict
+              </div>
+              <div className="mt-1 text-sm font-semibold text-neutral-100">
+                {verdictLabel(balance.verdict, primaryManagerName, otherName)}
+              </div>
+              <div className="mt-1 text-[10px] text-neutral-600">
+                Value balance {balance.fairnessPercent.toFixed(1)}% · Orlando
+                adjusted edge {balance.adjustedEdge > 0 ? "+" : ""}
+                {points(balance.adjustedEdge)}
+              </div>
+            </div>
+            <div className="mt-3 rounded-md border border-neutral-800 bg-neutral-950 p-3">
+              <div className="text-[9px] uppercase tracking-wide text-neutral-600">
+                Orlando roster impact
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {positionImpact.map((r) => (
+                  <span
+                    key={r.position}
+                    className={`rounded-md border border-neutral-800 px-2 py-1 text-[10px] ${r.delta > 0 ? "text-emerald-300" : "text-red-300"}`}
+                  >
+                    {r.position} {r.delta > 0 ? "+" : ""}
+                    {points(r.delta)}
+                  </span>
+                ))}
+                <span className="rounded-md border border-neutral-800 px-2 py-1 text-[10px] text-neutral-400">
+                  {rosterSpots > 0
+                    ? `${rosterSpots} roster spot${rosterSpots === 1 ? "" : "s"} freed`
+                    : rosterSpots < 0
+                      ? `${Math.abs(rosterSpots)} extra roster spot${rosterSpots === -1 ? "" : "s"} needed`
+                      : "Roster spots neutral"}
+                </span>
+                {outgoingStarters > 0 ? (
+                  <span className="rounded-md border border-amber-900 px-2 py-1 text-[10px] text-amber-300">
+                    {outgoingStarters} current Sleeper starter-slot player
+                    {outgoingStarters === 1 ? "" : "s"} outgoing
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          </>
+        )}
+      </section>
+    </div>
+  );
+}
