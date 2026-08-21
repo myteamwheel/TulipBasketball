@@ -2,6 +2,8 @@ name: dynasty-main-ci
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -18,10 +20,14 @@ jobs:
         env:
           DATABASE_URL: postgresql://user:pass@localhost:5432/postgres
         run: npx prisma generate
+      - name: Run unit tests
+        run: npm test
+      - name: Run lint
+        run: npm run lint
       - name: Typecheck root production app
         env:
           DATABASE_URL: postgresql://user:pass@localhost:5432/postgres
-          BACKUP_DATABASE_URL: postgresql://user:pass@localhost:5432/postgres
+          RECOVERY_DATABASE_URL: postgresql://user:pass@localhost:5432/postgres
           TRADYR_REFRESH_ENABLED: "true"
         run: npx tsc --noEmit
       - name: Capture root production build
@@ -29,7 +35,7 @@ jobs:
         continue-on-error: true
         env:
           DATABASE_URL: postgresql://user:pass@localhost:5432/postgres
-          BACKUP_DATABASE_URL: postgresql://user:pass@localhost:5432/postgres
+          RECOVERY_DATABASE_URL: postgresql://user:pass@localhost:5432/postgres
           TRADYR_REFRESH_ENABLED: "true"
         shell: bash
         run: |
