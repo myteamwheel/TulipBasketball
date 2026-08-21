@@ -298,24 +298,24 @@ function positions(h, ast, reb, blk, listed = "") {
   return ast >= 3.5 ? ["PG", "SG"] : reb >= 6 ? ["SF", "PF"] : ["SG", "SF"];
 }
 function nbaBonus(g) {
-  if (g >= 800) return16;
-  if (g >= 600) return14;
-  if (g >= 400) return12;
-  if (g >= 300) return11;
-  if (g >= 200) return9;
-  if (g >= 100) return7;
-  if (g >= 50) return5;
-  if (g >= 10) return3;
-  if (g >= 1) return1;
-  return0;
+  if (g >= 800) return 16;
+  if (g >= 600) return 14;
+  if (g >= 400) return 12;
+  if (g >= 300) return 11;
+  if (g >= 200) return 9;
+  if (g >= 100) return 7;
+  if (g >= 50) return 5;
+  if (g >= 10) return 3;
+  if (g >= 1) return 1;
+  return 0;
 }
 function draftBonus(p) {
-  if (!p) return0;
-  if (p <= 5) return9;
-  if (p <= 14) return7;
-  if (p <= 30) return4;
-  if (p <= 60) return2;
-  return0;
+  if (!p) return 0;
+  if (p <= 5) return 9;
+  if (p <= 14) return 7;
+  if (p <= 30) return 4;
+  if (p <= 60) return 2;
+  return 0;
 }
 function rate(c, g) {
   let s =
@@ -386,7 +386,7 @@ async function awards() {
           map.set(k, list);
         }
       }
-    } catch (e) {
+    } catch {
       console.warn("award source", slug, e);
     }
   return map;
@@ -411,7 +411,7 @@ async function main() {
     let teams;
     try {
       teams = await api("leaguedashteamstats", common(season));
-    } catch (e) {
+    } catch {
       coverage.push({ season, status: "missing", teams: 0, cards: 0 });
       continue;
     }

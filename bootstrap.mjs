@@ -48,7 +48,8 @@ function copyDirectory(source, target) {
   for (const name of fs.readdirSync(source)) {
     const a = path.join(source, name),
       b = path.join(target, name);
-    fs.statSync(a).isDirectory() ? copyDirectory(a, b) : fs.copyFileSync(a, b);
+    if (fs.statSync(a).isDirectory()) copyDirectory(a, b);
+    else fs.copyFileSync(a, b);
   }
 }
 

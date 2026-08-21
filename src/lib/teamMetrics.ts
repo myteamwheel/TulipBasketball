@@ -131,11 +131,15 @@ function optimalLineupValue(
     take(best.position);
     return best.value ?? 0;
   };
-  for (const slot of normalized.filter(
+  const flexCount = normalized.filter(
     (slot) => slot === "FLEX" || slot === "REC_FLEX",
-  ))
+  ).length;
+  for (let index = 0; index < flexCount; index++)
     total += bestFrom(["RB", "WR", "TE"]);
-  for (const slot of normalized.filter((slot) => slot === "SUPER_FLEX"))
+  const superflexCount = normalized.filter(
+    (slot) => slot === "SUPER_FLEX",
+  ).length;
+  for (let index = 0; index < superflexCount; index++)
     total += bestFrom(["QB", "RB", "WR", "TE"]);
   return total;
 }

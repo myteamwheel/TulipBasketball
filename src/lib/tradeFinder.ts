@@ -514,7 +514,11 @@ export async function buildTradeFinderData(): Promise<TradeFinderData | null> {
         .slice(0, 30);
   const calculatorAssets: TradeCalculatorAsset[] = [...assets, ...allPickAssets]
     .filter((a) => a.assetType === "pick" || !a.isStale)
-    .map(({ change30d: _a, change30dPercent: _b, ...a }) => a)
+    .map(({ change30d, change30dPercent, ...asset }) => {
+      void change30d;
+      void change30dPercent;
+      return asset;
+    })
     .sort(
       (a, b) => a.managerName.localeCompare(b.managerName) || b.value - a.value,
     );

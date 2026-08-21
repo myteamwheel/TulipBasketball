@@ -10,9 +10,15 @@ import {
   SECONDARY_KTC_DIVERGENCE_LIMIT,
   SLEEPER_LEAGUE_ID,
   STATSGUY_REFRESH_ENABLED,
+  TRADYR_API_KEY,
   TRADYR_REFRESH_ENABLED,
 } from "@/lib/config";
 import { commitKtcImport, type KtcImportRow } from "@/lib/ktcImport";
+import {
+  requireCompleteTradyrAccess,
+  tradyrRequestHeaders,
+  type TradyrAccessMetadata,
+} from "@/lib/tradyrAccess";
 
 export type MarketSourceKey =
   | "KTC"
@@ -285,12 +291,9 @@ interface TradyrMeta {
   total?: number;
   limit?: number;
   offset?: number;
-  access?: {
-    limited?: boolean;
+  access?: TradyrAccessMetadata & {
     returned?: number;
     total?: number;
-    reason?: string;
-    message?: string;
   };
 }
 
@@ -311,7 +314,10 @@ function tradyrPageUrl(offset: number, limit = 50): string {
 
 export async function fetchTradyrSnapshot(): Promise<ProviderSnapshot> {
   const fetchedAt = new Date();
-  const pageSize = 50;
+  // Tradyr changed anonymous bulk access on 2026-08-15: unkeyed requests are
+  // capped at the first 50 rows and ignore offsets. A keyed request can return
+  // up to 1,000 rows, which covers the current full player board in one call.
+  const pageSize = TRADYR_API_KEY ? 1000 : 50;
   const maxPages = 20;
   const allData: Array<Record<string, unknown>> = [];
   let latestMeta: TradyrMeta | undefined;
@@ -324,11 +330,7 @@ export async function fetchTradyrSnapshot(): Promise<ProviderSnapshot> {
     const response = await fetch(tradyrPageUrl(offset, pageSize), {
       cache: "no-store",
       signal: withTimeout(20000),
-      headers: {
-        Accept: "application/json",
-        "Cache-Control": "no-cache, no-store, max-age=0",
-        Pragma: "no-cache",
-      },
+      headers: tradyrRequestHeaders(TRADYR_API_KEY),
     });
     if (!response.ok)
       throw new Error(
@@ -336,6 +338,7 @@ export async function fetchTradyrSnapshot(): Promise<ProviderSnapshot> {
       );
 
     const payload = (await response.json()) as TradyrPayload;
+    requireCompleteTradyrAccess(payload.meta?.access, !!TRADYR_API_KEY);
     const pageData = Array.isArray(payload.data) ? payload.data : [];
     const generatedAt = new Date(payload.meta?.generatedAt ?? "");
     if (!Number.isFinite(generatedAt.getTime())) {
