@@ -6,9 +6,13 @@ export const KTC_FORMAT = "SF-0.5PPR-noTEP";
 export const KTC_FORMAT_LABEL = "Superflex / 0.5 PPR / No TE Premium";
 
 export const KTC_DIRECT_REFRESH_ENABLED = true;
-export const TRADYR_REFRESH_ENABLED =
-  process.env.TRADYR_REFRESH_ENABLED !== "false";
 export const TRADYR_API_KEY = process.env.TRADYR_API_KEY?.trim() || null;
+// Tradyr's anonymous player endpoint is intentionally capped at 50 rows and
+// ignores pagination. A complete market snapshot therefore requires a key;
+// without one, disable the optional source instead of making every otherwise
+// healthy daily refresh report PARTIAL_FAILURE.
+export const TRADYR_REFRESH_ENABLED =
+  Boolean(TRADYR_API_KEY) && process.env.TRADYR_REFRESH_ENABLED !== "false";
 export const DYNASTY_DEALER_REFRESH_ENABLED =
   process.env.DYNASTY_DEALER_REFRESH_ENABLED !== "false";
 export const FANTASYCALC_REFRESH_ENABLED = false;
