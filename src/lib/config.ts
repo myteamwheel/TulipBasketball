@@ -16,7 +16,11 @@ export const TRADYR_REFRESH_ENABLED =
 export const DYNASTY_DEALER_REFRESH_ENABLED =
   process.env.DYNASTY_DEALER_REFRESH_ENABLED !== "false";
 export const FANTASYCALC_REFRESH_ENABLED = false;
-export const STATSGUY_REFRESH_ENABLED = false;
+// Stats Guy Fantasy exposes a documented, no-auth bulk API keyed by Sleeper ID
+// and archives daily historical snapshots. Keep it active as an independent
+// market input so Tradyr key availability is not a single point of failure.
+export const STATSGUY_REFRESH_ENABLED =
+  process.env.STATSGUY_REFRESH_ENABLED !== "false";
 export const KTC_AUTO_REFRESH_ENABLED = KTC_DIRECT_REFRESH_ENABLED;
 export const AUTO_REFRESH_ON_VISIT = false;
 
@@ -36,7 +40,7 @@ export const CONSENSUS_TRUSTED_SOURCES = [
   "TRADYR",
   "DYNASTY_DEALER",
 ] as const;
-export const DIAGNOSTIC_MARKET_SOURCES = [] as const;
+export const DIAGNOSTIC_MARKET_SOURCES = ["STATSGUY"] as const;
 export const SECONDARY_KTC_DIVERGENCE_LIMIT = Number(
   process.env.SECONDARY_KTC_DIVERGENCE_LIMIT || "0.35",
 );

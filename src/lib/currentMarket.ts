@@ -66,7 +66,7 @@ export async function getFreshCurrentMarketMix(playerIds: string[]): Promise<Map
         "playerId", "source"::text AS "source", "rawValue", "normalizedValue", "observedAt", "sourceUpdatedAt"
       FROM "MarketObservation"
       WHERE "playerId" = ANY(${uniquePlayerIds}::text[])
-        AND "source" IN ('KTC', 'TRADYR', 'DYNASTY_DEALER')
+        AND "source" IN ('KTC', 'TRADYR', 'DYNASTY_DEALER', 'STATSGUY')
       ORDER BY "playerId", "source", "observedAt" DESC, "createdAt" DESC
     `,
     prisma.$queryRaw<LatestConsensusRow[]>`
@@ -86,9 +86,11 @@ export async function getFreshCurrentMarketMix(playerIds: string[]): Promise<Map
     const ktc = latestByPlayerSource.get(`${playerId}:KTC`);
     const tradyr = latestByPlayerSource.get(`${playerId}:TRADYR`);
     const dealer = latestByPlayerSource.get(`${playerId}:DYNASTY_DEALER`);
+    const statsGuy = latestByPlayerSource.get(`${playerId}:STATSGUY`);
     if (ktc && freshTimestamp(ktc.sourceUpdatedAt, ktc.observedAt)) row.ktcValue = ktc.rawValue;
     if (tradyr && freshTimestamp(tradyr.sourceUpdatedAt, tradyr.observedAt)) row.tradyrValue = tradyr.normalizedValue;
     if (dealer && freshTimestamp(dealer.sourceUpdatedAt, dealer.observedAt)) row.dynastyDealerValue = dealer.normalizedValue;
+    if (statsGuy && freshTimestamp(statsGuy.sourceUpdatedAt, statsGuy.observedAt)) row.statsGuyValue = statsGuy.normalizedValue;
   }
 
   for (const c of consensus) {
