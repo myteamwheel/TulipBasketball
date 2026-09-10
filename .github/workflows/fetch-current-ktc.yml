@@ -28,49 +28,56 @@ jobs:
           import { writeFile } from "node:fs/promises";
           import { parseKtcRankingPage } from "./src/lib/ktcPageCompat";
 
-          const BASE = "https://keeptradecut.com/dynasty-rankings";
-          const headers = {
-            Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Cache-Control": "no-cache, no-store, max-age=0",
-            Pragma: "no-cache",
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
-          };
-          const pageUrl = (page: number) => {
-            const u = new URL(BASE);
-            u.searchParams.set("page", String(page));
-            u.searchParams.set("filters", "QB|WR|RB|TE|RDP");
-            u.searchParams.set("format", "2");
-            return u.toString();
-          };
-          const get = async (url: string) => {
-            const r = await fetch(url, { headers });
-            if (!r.ok) throw new Error(`${url} -> ${r.status}`);
-            return r.text();
-          };
-          const firstHtml = await get(BASE);
-          const freshness = firstHtml.match(/Values updated\s+(?:just now|moments ago|\d+\s+(?:second|minute|hour|day)s?\s+ago)/i)?.[0] ?? null;
-          const all = new Map<string, ReturnType<typeof parseKtcRankingPage>[number]>();
-          const add = (html: string) => {
-            let added = 0;
-            for (const row of parseKtcRankingPage(html)) {
-              const key = row.ktcId ? `id:${row.ktcId}` : `name:${row.name.toLowerCase()}|${row.position}`;
-              if (!all.has(key)) { all.set(key, row); added++; }
+          async function main() {
+            const BASE = "https://keeptradecut.com/dynasty-rankings";
+            const headers = {
+              Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+              "Accept-Language": "en-US,en;q=0.9",
+              "Cache-Control": "no-cache, no-store, max-age=0",
+              Pragma: "no-cache",
+              "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+            };
+            const pageUrl = (page: number) => {
+              const u = new URL(BASE);
+              u.searchParams.set("page", String(page));
+              u.searchParams.set("filters", "QB|WR|RB|TE|RDP");
+              u.searchParams.set("format", "2");
+              return u.toString();
+            };
+            const get = async (url: string) => {
+              const r = await fetch(url, { headers });
+              if (!r.ok) throw new Error(`${url} -> ${r.status}`);
+              return r.text();
+            };
+            const firstHtml = await get(BASE);
+            const freshness = firstHtml.match(/Values updated\s+(?:just now|moments ago|\d+\s+(?:second|minute|hour|day)s?\s+ago)/i)?.[0] ?? null;
+            const all = new Map<string, ReturnType<typeof parseKtcRankingPage>[number]>();
+            const add = (html: string) => {
+              let added = 0;
+              for (const row of parseKtcRankingPage(html)) {
+                const key = row.ktcId ? `id:${row.ktcId}` : `name:${row.name.toLowerCase()}|${row.position}`;
+                if (!all.has(key)) { all.set(key, row); added++; }
+              }
+              return added;
+            };
+            add(firstHtml);
+            for (let first = 1; first < 15; first += 3) {
+              const pages = [first, first + 1, first + 2].filter((p) => p < 15);
+              const html = await Promise.all(pages.map((p) => get(pageUrl(p))));
+              let added = 0;
+              for (const page of html) added += add(page);
+              if (added === 0) break;
             }
-            return added;
-          };
-          add(firstHtml);
-          for (let first = 1; first < 15; first += 3) {
-            const pages = [first, first + 1, first + 2].filter((p) => p < 15);
-            const html = await Promise.all(pages.map((p) => get(pageUrl(p))));
-            let added = 0;
-            for (const page of html) added += add(page);
-            if (added === 0) break;
+            const rows = [...all.values()].sort((a,b) => (a.rank ?? 99999) - (b.rank ?? 99999));
+            if (rows.length < 400) throw new Error(`Only ${rows.length} KTC fantasy rows parsed; refusing partial recovery`);
+            await writeFile("ktc-current.json", JSON.stringify({ fetchedAt: new Date().toISOString(), freshness, rows }));
+            console.log(JSON.stringify({ rows: rows.length, freshness, top: rows.slice(0,5) }, null, 2));
           }
-          const rows = [...all.values()].sort((a,b) => (a.rank ?? 99999) - (b.rank ?? 99999));
-          if (rows.length < 400) throw new Error(`Only ${rows.length} KTC fantasy rows parsed; refusing partial recovery`);
-          await writeFile("ktc-current.json", JSON.stringify({ fetchedAt: new Date().toISOString(), freshness, rows }));
-          console.log(JSON.stringify({ rows: rows.length, freshness, top: rows.slice(0,5) }, null, 2));
+
+          main().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
           TS
           npx tsx ktc-recovery-fetch.ts
       - uses: actions/upload-artifact@v4
