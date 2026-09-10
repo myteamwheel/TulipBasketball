@@ -11,6 +11,14 @@
     {
       "path": "/api/cron/daily-refresh/13",
       "schedule": "0 13 * * *"
+    },
+    {
+      "path": "/api/cron/statsguy-refresh/14",
+      "schedule": "0 14 * * *"
+    },
+    {
+      "path": "/api/cron/statsguy-refresh/15",
+      "schedule": "0 15 * * *"
     }
   ]
 }
