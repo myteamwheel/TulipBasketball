@@ -89,6 +89,7 @@ const IMPLAUSIBLE_MAX = 10000;
 const FLAG_RELATIVE_CHANGE = 0.75; // 75% in one observed step
 const FLAG_MIN_ABSOLUTE_CHANGE = 800;
 const BASELINE_FLAG_GRACE_MS = 14 * 24 * 60 * 60 * 1000;
+const REPEAT_CONFIRM_MIN_AGE_MS = 5 * 60 * 1000;
 
 export async function commitKtcImport(
   rows: KtcImportRow[],
@@ -176,14 +177,38 @@ export async function commitKtcImport(
         previous.sourceType === "SEED_BASELINE" &&
         now.getTime() - previous.observedAt.getTime() > BASELINE_FLAG_GRACE_MS;
       if (!oldSeedBaseline && relChange > FLAG_RELATIVE_CHANGE && absChange > FLAG_MIN_ABSOLUTE_CHANGE) {
-        validationStatus = "FLAGGED";
-        const prevDateLabel = previous.observedAt.toLocaleDateString("en-US", {
-          timeZone: "America/New_York",
-          month: "short",
-          day: "numeric",
-          year: "numeric",
+        // A single extreme move remains quarantined. If KTC independently
+        // publishes the exact same candidate again in a later import/run, the
+        // repeated observation is strong evidence that the jump is real rather
+        // than a transient parse error. This prevents legitimate breakouts from
+        // remaining flagged forever while preserving the first-observation guard.
+        const priorFlagged = await prisma.ktcObservation.findFirst({
+          where: {
+            playerId: player.id,
+            validationStatus: "FLAGGED",
+            value: row.value,
+            observedAt: { gt: previous.observedAt },
+          },
+          orderBy: { observedAt: "desc" },
         });
-        validationNote = `Changed ${previous.value} -> ${row.value} (${(relChange * 100).toFixed(0)}%) since ${prevDateLabel} — needs confirmation`;
+        const repeatedLaterObservation =
+          !!priorFlagged &&
+          priorFlagged.importBatchId !== importBatchId &&
+          (!opts.refreshRunId || priorFlagged.refreshRunId !== opts.refreshRunId) &&
+          now.getTime() - priorFlagged.observedAt.getTime() >= REPEAT_CONFIRM_MIN_AGE_MS;
+
+        if (repeatedLaterObservation) {
+          validationNote = `Confirmed repeated KTC move ${previous.value} -> ${row.value} after prior quarantine`;
+        } else {
+          validationStatus = "FLAGGED";
+          const prevDateLabel = previous.observedAt.toLocaleDateString("en-US", {
+            timeZone: "America/New_York",
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+          });
+          validationNote = `Changed ${previous.value} -> ${row.value} (${(relChange * 100).toFixed(0)}%) since ${prevDateLabel} — needs confirmation`;
+        }
       }
     }
 
