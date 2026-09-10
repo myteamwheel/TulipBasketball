@@ -89,7 +89,8 @@ const IMPLAUSIBLE_MAX = 10000;
 const FLAG_RELATIVE_CHANGE = 0.75; // 75% in one observed step
 const FLAG_MIN_ABSOLUTE_CHANGE = 800;
 const BASELINE_FLAG_GRACE_MS = 14 * 24 * 60 * 60 * 1000;
-const REPEAT_CONFIRM_MIN_AGE_MS = 5 * 60 * 1000;
+const SUSTAINED_CONFIRM_MIN_AGE_MS = 12 * 60 * 60 * 1000;
+const SUSTAINED_CONFIRM_TOLERANCE = 0.15;
 
 export async function commitKtcImport(
   rows: KtcImportRow[],
@@ -177,28 +178,36 @@ export async function commitKtcImport(
         previous.sourceType === "SEED_BASELINE" &&
         now.getTime() - previous.observedAt.getTime() > BASELINE_FLAG_GRACE_MS;
       if (!oldSeedBaseline && relChange > FLAG_RELATIVE_CHANGE && absChange > FLAG_MIN_ABSOLUTE_CHANGE) {
-        // A single extreme move remains quarantined. If KTC independently
-        // publishes the exact same candidate again in a later import/run, the
-        // repeated observation is strong evidence that the jump is real rather
-        // than a transient parse error. This prevents legitimate breakouts from
-        // remaining flagged forever while preserving the first-observation guard.
+        // Quarantine the first extreme move, but do not quarantine a genuine
+        // breakout forever. A later refresh may promote it only when KTC has
+        // already repeated a materially similar value in a different import
+        // at least 12 hours earlier and on the same side of the old baseline.
         const priorFlagged = await prisma.ktcObservation.findFirst({
           where: {
             playerId: player.id,
             validationStatus: "FLAGGED",
-            value: row.value,
             observedAt: { gt: previous.observedAt },
           },
           orderBy: { observedAt: "desc" },
         });
-        const repeatedLaterObservation =
+        const sameDirection = priorFlagged
+          ? Math.sign(priorFlagged.value - previous.value) ===
+            Math.sign(row.value - previous.value)
+          : false;
+        const candidateDistance = priorFlagged
+          ? Math.abs(priorFlagged.value - row.value) / Math.max(row.value, 1)
+          : Number.POSITIVE_INFINITY;
+        const sustainedLaterObservation =
           !!priorFlagged &&
+          sameDirection &&
+          candidateDistance <= SUSTAINED_CONFIRM_TOLERANCE &&
           priorFlagged.importBatchId !== importBatchId &&
           (!opts.refreshRunId || priorFlagged.refreshRunId !== opts.refreshRunId) &&
-          now.getTime() - priorFlagged.observedAt.getTime() >= REPEAT_CONFIRM_MIN_AGE_MS;
+          now.getTime() - priorFlagged.observedAt.getTime() >=
+            SUSTAINED_CONFIRM_MIN_AGE_MS;
 
-        if (repeatedLaterObservation) {
-          validationNote = `Confirmed repeated KTC move ${previous.value} -> ${row.value} after prior quarantine`;
+        if (sustainedLaterObservation) {
+          validationNote = `Confirmed sustained KTC move ${previous.value} -> ${row.value} after prior quarantine`;
         } else {
           validationStatus = "FLAGGED";
           const prevDateLabel = previous.observedAt.toLocaleDateString("en-US", {
