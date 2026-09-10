@@ -14,7 +14,7 @@ import { fetchDraftPickMarketForCapital } from "@/lib/pickMarket";
 import { fetchTradedPickOwnershipState } from "@/lib/pickOwnership";
 import { getFootballCoverage } from "@/lib/footballCoverage";
 import { getLatestRefreshRun } from "@/lib/refresh";
-import { formatDateEastern, timeAgo } from "@/lib/format";
+import { formatDateEastern, formatDateTimeEastern, timeAgo } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -61,6 +61,9 @@ export default async function SettingsPage() {
   const dealerCovered = entries.filter(
     (entry) => mix.get(entry.playerId)?.dynastyDealerValue !== null,
   ).length;
+  const statsGuyCovered = entries.filter(
+    (entry) => mix.get(entry.playerId)?.statsGuyValue !== null,
+  ).length;
   const consensusCovered = entries.filter(
     (entry) => mix.get(entry.playerId)?.consensusValue !== null,
   ).length;
@@ -76,8 +79,8 @@ export default async function SettingsPage() {
     {
       key: "TRADYR",
       label: "Tradyr",
-      role: "Trusted secondary",
-      detail: "Calibrated onto the KTC scale from same-refresh league overlap.",
+      role: "Optional trusted secondary",
+      detail: "Calibrated onto the KTC scale when complete keyed access is configured.",
       status: statuses.TRADYR,
       covered: tradyrCovered,
     },
@@ -89,6 +92,15 @@ export default async function SettingsPage() {
         "Player market calibrated onto the KTC scale; draft picks are modeled separately.",
       status: statuses.DYNASTY_DEALER,
       covered: dealerCovered,
+    },
+    {
+      key: "STATSGUY",
+      label: "Stats Guy Fantasy",
+      role: "Independent fallback",
+      detail:
+        "No-key Sleeper-ID market checkpoint retained as an independent diagnostic; never relabeled as KTC or silently blended into the trusted consensus.",
+      status: statuses.STATSGUY,
+      covered: statsGuyCovered,
     },
   ] as const;
   const latestSourceStatus = new Map(
@@ -257,7 +269,9 @@ export default async function SettingsPage() {
               Daily · around 8 a.m. ET
             </div>
             <p className="mt-1 text-[10px] text-neutral-600">
-              Page visits do not launch ingestion jobs.
+              {latestRun
+                ? `Latest ${latestRun.status.replaceAll("_", " ").toLowerCase()} run: ${formatDateTimeEastern(latestRun.startedAt)}.`
+                : "Page visits do not launch ingestion jobs."}
             </p>
           </div>
         </div>
@@ -273,67 +287,86 @@ export default async function SettingsPage() {
           usable observation.
         </p>
         <div className="mt-4 space-y-2">
-          {sources.map((source) => (
-            <div
-              key={source.key}
-              className="rounded-lg border border-neutral-800 bg-neutral-950/60 p-3"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-semibold text-neutral-200">
-                      {source.label}
-                    </span>
-                    <span className="rounded bg-neutral-800 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-neutral-500">
-                      {source.role}
-                    </span>
+          {sources.map((source) => {
+            const runStatus = latestSourceStatus.get(source.key);
+            const disabled = runStatus?.enabled === false;
+            const label = disabled
+              ? "Disabled"
+              : source.status.stale
+                ? runStatus?.ok === false
+                  ? "Refresh failed"
+                  : "Unavailable"
+                : "Fresh";
+            const labelClass = disabled
+              ? "text-neutral-500"
+              : source.status.stale
+                ? "text-amber-300"
+                : "text-emerald-300";
+            return (
+              <div
+                key={source.key}
+                className="rounded-lg border border-neutral-800 bg-neutral-950/60 p-3"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-semibold text-neutral-200">
+                        {source.label}
+                      </span>
+                      <span className="rounded bg-neutral-800 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-neutral-500">
+                        {source.role}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-[11px] leading-4 text-neutral-500">
+                      {source.detail}
+                    </p>
                   </div>
-                  <p className="mt-1 text-[11px] leading-4 text-neutral-500">
-                    {source.detail}
-                  </p>
+                  <span className={`text-[10px] font-medium ${labelClass}`}>
+                    {label}
+                  </span>
                 </div>
-                <span
-                  className={`text-[10px] font-medium ${source.status.stale ? "text-amber-300" : "text-emerald-300"}`}
-                >
-                  {source.status.stale
-                    ? latestSourceStatus.get(source.key)?.ok === false
-                      ? "Refresh failed"
-                      : "Unavailable"
-                    : "Fresh"}
-                </span>
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-neutral-600">
+                  <span>
+                    Coverage{" "}
+                    <strong
+                      className={
+                        source.covered === owned
+                          ? "text-neutral-300"
+                          : disabled
+                            ? "text-neutral-600"
+                            : "text-amber-300"
+                      }
+                    >
+                      {source.covered}/{owned}
+                    </strong>
+                  </span>
+                  <span>
+                    Last provider update{" "}
+                    {source.status.sourceUpdatedAt || source.status.observedAt
+                      ? timeAgo(
+                          source.status.sourceUpdatedAt ?? source.status.observedAt,
+                        )
+                      : "never"}
+                  </span>
+                </div>
+                {disabled ? (
+                  <p className="mt-2 text-[10px] leading-4 text-neutral-500">
+                    {runStatus?.message ?? "Optional source disabled by configuration."}
+                  </p>
+                ) : source.status.stale && runStatus?.ok === false ? (
+                  <p className="mt-2 text-[10px] leading-4 text-amber-300">
+                    {runStatus.message}
+                  </p>
+                ) : null}
               </div>
-              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-neutral-600">
-                <span>
-                  Coverage{" "}
-                  <strong
-                    className={
-                      source.covered === owned
-                        ? "text-neutral-300"
-                        : "text-amber-300"
-                    }
-                  >
-                    {source.covered}/{owned}
-                  </strong>
-                </span>
-                <span>
-                  Last provider update{" "}
-                  {timeAgo(
-                    source.status.sourceUpdatedAt ?? source.status.observedAt,
-                  )}
-                </span>
-              </div>
-              {source.status.stale &&
-              latestSourceStatus.get(source.key)?.ok === false ? (
-                <p className="mt-2 text-[10px] leading-4 text-amber-300">
-                  {latestSourceStatus.get(source.key)?.message}
-                </p>
-              ) : null}
-            </div>
-          ))}
+            );
+          })}
         </div>
         <p className="mt-3 text-[10px] text-neutral-600">
-          When all qualify: KTC 60% · Tradyr 20% · Dynasty Dealer 20%. A
-          secondary outside the divergence guard is excluded player-by-player.
+          When all trusted sources qualify: KTC 60% · Tradyr 20% · Dynasty
+          Dealer 20%, renormalized across the trusted sources that are actually
+          available. Stats Guy is retained independently and is not used to
+          manufacture KTC coverage or consensus.
         </p>
       </section>
 

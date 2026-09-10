@@ -13,8 +13,12 @@
       "schedule": "0 13 * * *"
     },
     {
-      "path": "/api/cron/opening-day-recovery",
-      "schedule": "25 0 10 9 *"
+      "path": "/api/cron/statsguy-refresh/14",
+      "schedule": "0 14 * * *"
+    },
+    {
+      "path": "/api/cron/statsguy-refresh/15",
+      "schedule": "0 15 * * *"
     }
   ]
 }

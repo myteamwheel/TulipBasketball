@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { repairCurrentOwnershipIntegrity } from "@/lib/ownershipIntegrity";
 import { getLatestSuccessfulRefreshRun, startRefresh } from "@/lib/refresh";
 import { DISPLAY_TIMEZONE } from "@/lib/config";
+import { backfillRecentStatsGuyHistory } from "@/lib/statsGuyRecovery";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
@@ -48,8 +49,27 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   try {
     await repairCurrentOwnershipIntegrity();
+
+    // Preserve today's and yesterday's independent no-key market checkpoints
+    // before the live refresh. This is deliberately non-blocking: KTC/Sleeper
+    // should still refresh if the auxiliary historical provider is unavailable.
+    let statsGuyHistory: Awaited<ReturnType<typeof backfillRecentStatsGuyHistory>> | null = null;
+    let statsGuyHistoryWarning: string | null = null;
+    try {
+      statsGuyHistory = await backfillRecentStatsGuyHistory(now);
+    } catch (error) {
+      statsGuyHistoryWarning = error instanceof Error ? error.message : String(error);
+    }
+
     const { runId } = await startRefresh();
-    return NextResponse.json({ ok: true, runId, slot, scheduledFor: "08:00 America/New_York" });
+    return NextResponse.json({
+      ok: true,
+      runId,
+      slot,
+      scheduledFor: "08:00 America/New_York",
+      statsGuyHistory,
+      statsGuyHistoryWarning,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (/already in progress/i.test(message)) {
