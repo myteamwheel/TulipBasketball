@@ -11,10 +11,6 @@
     {
       "path": "/api/cron/daily-refresh/13",
       "schedule": "0 13 * * *"
-    },
-    {
-      "path": "/api/cron/opening-day-recovery",
-      "schedule": "25 0 10 9 *"
     }
   ]
 }
