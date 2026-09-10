@@ -1,0 +1,38 @@
+name: Fetch opening-day Stats Guy snapshots
+
+on:
+  push:
+    branches: [fix/opening-day-market-recovery]
+    paths:
+      - ".github/workflows/fetch-opening-day-statsguy.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fetch historical boards
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p snapshots
+          for d in 2026-09-08 2026-09-09; do
+            curl --fail-with-body --silent --show-error --retry 3 --retry-delay 2 \
+              "https://api.statsguyfantasy.com/api/v1/rankings?format=sf_dynasty&date=${d}&limit=1000" \
+              -o "snapshots/${d}.json"
+          done
+          python - <<'PY'
+          import json, pathlib
+          for p in sorted(pathlib.Path('snapshots').glob('*.json')):
+              x=json.load(open(p))
+              print(p.name, 'asOf=', x.get('asOf'), 'total=', x.get('total'), 'rankings=', len(x.get('rankings', [])))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: opening-day-statsguy-snapshots
+          path: snapshots/*.json
+          retention-days: 1
