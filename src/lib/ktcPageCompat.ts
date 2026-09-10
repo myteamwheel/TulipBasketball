@@ -1,6 +1,10 @@
 const KTC_URL = "https://keeptradecut.com/dynasty-rankings";
 const FANTASY_POSITIONS = new Set(["QB", "RB", "WR", "TE"]);
-const MAX_KTC_PAGES = 15;
+// KTC's player board currently extends past rank 450. The prior 15-page cap
+// stopped around rank ~416 and silently omitted valid low-end roster assets.
+// Keep the batched early-stop behavior, but allow enough depth to reach the
+// bottom of the current fantasy-player board when pages continue contributing.
+const MAX_KTC_PAGES = 24;
 const MIN_COMPAT_ROWS = 200;
 
 type FantasyPosition = "QB" | "RB" | "WR" | "TE";
@@ -76,9 +80,7 @@ export function parseKtcRankingPage(html: string): KtcRankingPageRow[] {
     const block = html.slice(start, end);
 
     const nameHtml = classInnerHtml(block, "player-name");
-    const anchor = nameHtml?.match(
-      /<a\b([^>]*)>([\s\S]*?)<\/a>/i,
-    );
+    const anchor = nameHtml?.match(/<a\b([^>]*)>([\s\S]*?)<\/a>/i);
     const name = cleanText(anchor?.[2] ?? nameHtml);
     if (!name) continue;
 
