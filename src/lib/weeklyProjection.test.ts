@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { halfPprPoints, type ProjectedStatLine } from "@/lib/weeklyProjection";
+import type { ProjectedStatLine } from "./weeklyProjection";
+
+process.env.DATABASE_URL ??= "postgresql://user:pass@localhost:5432/postgres";
+process.env.RECOVERY_DATABASE_URL ??= "postgresql://user:pass@localhost:5432/postgres";
 
 const empty = (): ProjectedStatLine => ({
   completions: 0,
@@ -18,7 +21,8 @@ const empty = (): ProjectedStatLine => ({
   fumblesLost: 0,
 });
 
-test("halfPprPoints scores a passing line correctly", () => {
+test("halfPprPoints scores a passing line correctly", async () => {
+  const { halfPprPoints } = await import("./weeklyProjection");
   const stats = empty();
   stats.passingYards = 300;
   stats.passingTds = 2;
@@ -27,7 +31,8 @@ test("halfPprPoints scores a passing line correctly", () => {
   assert.equal(halfPprPoints(stats), 20);
 });
 
-test("halfPprPoints scores receiving and rushing correctly", () => {
+test("halfPprPoints scores receiving and rushing correctly", async () => {
+  const { halfPprPoints } = await import("./weeklyProjection");
   const stats = empty();
   stats.carries = 15;
   stats.rushingYards = 80;
