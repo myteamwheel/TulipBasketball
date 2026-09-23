@@ -937,6 +937,7 @@ export async function getProjectionDashboardData() {
     SELECT DISTINCT ON ("playerId") *
     FROM "WeeklyProjection"
     WHERE season = ${season} AND week = ${week}
+      AND "modelVersion" = 'weekly-consensus-v2.0'
     ORDER BY "playerId", "asOfDate" DESC, "createdAt" DESC
   `);
   const historyRaw = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(`
