@@ -14,7 +14,6 @@ import {
   getDecisionGradePredictiveModels as getPredictivePlayerModels,
   isDecisionGradeProductionSeason,
 } from "@/lib/predictiveSafety";
-import { predictiveQuadrantLabel } from "@/lib/predictive";
 import { simulateDynastyBoys } from "@/lib/leagueSimulation";
 import { computeAllTeamValuations, getLatestSlotMap } from "@/lib/teamMetrics";
 import { publicTeamName } from "@/lib/publicIdentity";
@@ -40,18 +39,26 @@ export default async function ForecastPage() {
     rows = [...models.values()],
     mySim = simulation.rows.find((r) => r.managerId === primary.id),
     managerById = new Map(managers.map((m) => [m.id, m])),
-    undervalued = rows
-      .filter((r) => r.currentValue >= 1000 && r.confidence !== "LOW")
-      .sort((a, b) => b.modelEdgePercent - a.modelEdgePercent)
-      .slice(0, 8),
-    footballLeads = rows
+    modelGaps = rows
       .filter(
         (r) =>
-          (r.mispricingQuadrant === "FOOTBALL_LEADS" ||
-            r.mispricingQuadrant === "BOTH_UP") &&
-          r.confidence !== "LOW",
+          r.currentValue >= 1000 &&
+          r.confidence !== "LOW" &&
+          isDecisionGradeProductionSeason(r.latestSeason, r.games),
       )
-      .sort((a, b) => b.modelEdgePercent - a.modelEdgePercent)
+      .sort(
+        (a, b) =>
+          Math.abs(b.modelEdgePercent) - Math.abs(a.modelEdgePercent),
+      )
+      .slice(0, 8),
+    productionLeaders = rows
+      .filter(
+        (r) =>
+          r.confidence !== "LOW" &&
+          r.fantasyPpg !== null &&
+          isDecisionGradeProductionSeason(r.latestSeason, r.games),
+      )
+      .sort((a, b) => (b.fantasyPpg ?? 0) - (a.fantasyPpg ?? 0))
       .slice(0, 6),
     productionCovered = rows.filter((r) =>
       isDecisionGradeProductionSeason(r.latestSeason, r.games),
@@ -237,40 +244,49 @@ export default async function ForecastPage() {
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3">
           <SectionHeader
-            title="Largest model discounts"
-            description="Players where evidence-gated model fair value sits furthest above current KTC, excluding low-confidence rows."
+            title="Largest model disagreements"
+            description="Decision-grade review flags where recent football evidence and the current dynasty market disagree most. These are not automatic buy or sell signals."
           />
           <div className="space-y-2">
-            {undervalued.map((r) => (
-              <Link
-                key={r.playerId}
-                href={`/players/${r.playerId}`}
-                className="grid grid-cols-[1fr_auto] gap-3 rounded-md bg-neutral-950 p-2.5"
-              >
-                <div>
-                  <div className="text-xs font-medium text-neutral-100">
-                    {r.fullName}
+            {modelGaps.length ? (
+              modelGaps.map((r) => (
+                <Link
+                  key={r.playerId}
+                  href={`/players/${r.playerId}`}
+                  className="grid grid-cols-[1fr_auto] gap-3 rounded-md bg-neutral-950 p-2.5"
+                >
+                  <div>
+                    <div className="text-xs font-medium text-neutral-100">
+                      {r.fullName}
+                    </div>
+                    <div className="text-[9px] text-neutral-600">
+                      {r.position} · KTC {formatPoints(r.currentValue)} · model{" "}
+                      {formatPoints(r.modelValue)} · {r.games} recent games
+                    </div>
                   </div>
-                  <div className="text-[9px] text-neutral-600">
-                    {r.position} · KTC {formatPoints(r.currentValue)} · model{" "}
-                    {formatPoints(r.modelValue)}
+                  <div
+                    className={`text-right text-sm font-semibold ${r.modelEdgePercent >= 0 ? "text-emerald-300" : "text-red-300"}`}
+                  >
+                    {r.modelEdgePercent >= 0 ? "+" : ""}
+                    {r.modelEdgePercent.toFixed(1)}%
                   </div>
-                </div>
-                <div className="text-right text-sm font-semibold text-emerald-300">
-                  +{r.modelEdgePercent.toFixed(1)}%
-                </div>
-              </Link>
-            ))}
+                </Link>
+              ))
+            ) : (
+              <div className="text-xs text-neutral-600">
+                No decision-grade market/model disagreements yet.
+              </div>
+            )}
           </div>
         </section>
         <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3">
           <SectionHeader
-            title="Market vs football"
-            description="The most interesting mispricing state: underlying football inputs lead while market value has not fully followed. Low-confidence peer samples are excluded."
+            title="Recent production leaders"
+            description="The strongest recent regular-season fantasy production among players with decision-grade samples. This is descriptive football evidence, not a dynasty ranking."
           />
           <div className="space-y-2">
-            {footballLeads.length ? (
-              footballLeads.map((r) => (
+            {productionLeaders.length ? (
+              productionLeaders.map((r) => (
                 <Link
                   key={r.playerId}
                   href={`/players/${r.playerId}`}
@@ -280,21 +296,22 @@ export default async function ForecastPage() {
                     <div className="text-xs font-medium text-neutral-100">
                       {r.fullName}
                     </div>
-                    <div className="text-[10px] text-emerald-300">
-                      {r.modelEdgePercent >= 0 ? "+" : ""}
-                      {r.modelEdgePercent.toFixed(1)}%
+                    <div className="text-sm font-semibold text-neutral-100">
+                      {r.fantasyPpg?.toFixed(1)} PPG
                     </div>
                   </div>
                   <div className="mt-1 text-[9px] text-neutral-600">
-                    {predictiveQuadrantLabel(r.mispricingQuadrant)} · usage pctl{" "}
-                    {Math.round(r.usageScore * 100)} ·{" "}
-                    {r.forecast1y.mean.toLocaleString("en-US")} 1y mean
+                    {r.position} · {r.games} games ·{" "}
+                    {r.opportunityPerGame === null
+                      ? "opportunity unavailable"
+                      : `${r.opportunityPerGame.toFixed(1)} opportunities/game`} ·{" "}
+                    {r.projectedWeeklyPoints.toFixed(1)} model weekly pts
                   </div>
                 </Link>
               ))
             ) : (
               <div className="text-xs text-neutral-600">
-                No decision-grade football-leading mispricing yet.
+                No decision-grade recent production sample yet.
               </div>
             )}
           </div>
