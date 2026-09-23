@@ -8,6 +8,7 @@ const links = [
   { href: "/forecast", label: "Predictions" },
   { href: "/projections", label: "Projected Points" },
   { href: "/audit", label: "Audit" },
+  { href: "/audit/report", label: "Full Report" },
   { href: "/league", label: "League" },
   { href: "/trade-finder", label: "Trade Lab" },
   { href: "/waivers", label: "Waivers" },
@@ -28,7 +29,9 @@ export default function TopNav() {
         const active =
           link.href === "/"
             ? pathname === link.href
-            : pathname.startsWith(link.href);
+            : link.href === "/audit"
+              ? pathname === "/audit" || pathname.startsWith("/audit/research")
+              : pathname.startsWith(link.href);
         return (
           <Link
             key={link.href}

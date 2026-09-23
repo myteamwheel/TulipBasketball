@@ -24,5 +24,6 @@ export async function GET(request: Request) {
   const rows = await prisma.$queryRawUnsafe<Array<{ body: Uint8Array }>>(`SELECT body FROM "FullAuditFile" WHERE "bundleId"=$1 AND name=$2`, audit.id, name);
   if (!rows[0]) return Response.json({ error: "File unavailable" }, { status: 404 });
   const type = name.endsWith(".pdf") ? "application/pdf" : name.endsWith(".xlsx") ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : "application/gzip";
-  return new Response(new Uint8Array(rows[0].body), { headers: { "Content-Type": type, "Content-Disposition": `attachment; filename="${name}"`, "Cache-Control": "private, no-store" } });
+  const inline = params.get("view") === "inline" && name.endsWith(".pdf");
+  return new Response(new Uint8Array(rows[0].body), { headers: { "Content-Type": type, "Content-Disposition": `${inline ? "inline" : "attachment"}; filename="${name}"`, "Cache-Control": "private, no-store" } });
 }

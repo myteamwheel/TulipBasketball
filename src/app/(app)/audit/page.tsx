@@ -175,14 +175,8 @@ export default async function AuditPage({
           >
             Download PDF
           </a></>}
-          <a
-            href="/audit/research"
-            target="_blank"
-            rel="noreferrer"
-            className="rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2 text-xs font-medium text-neutral-500"
-          >
-            Browse full research
-          </a>
+          <Link href="/audit/report" className="rounded-md border border-emerald-800 bg-emerald-950/30 px-3 py-2 text-xs font-medium text-emerald-300">View full report</Link>
+          <Link href="/audit/research" className="rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2 text-xs font-medium text-neutral-500">Browse full research</Link>
         </div>
       </section>
 
