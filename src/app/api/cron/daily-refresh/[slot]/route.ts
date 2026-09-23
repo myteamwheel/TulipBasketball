@@ -37,8 +37,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const now = new Date();
   const local = easternParts(now);
   // Vercel schedules in UTC. Two daily UTC slots cover EDT and EST; only the
-  // slot landing inside the 8 a.m. Eastern hour performs work.
-  if (local.hour !== 8) {
+  // slot landing inside the 8 a.m. Eastern hour performs work. An authorized
+  // owner-triggered cron run can force a recovery pass after an outage; the
+  // once-per-day guard below still prevents a duplicate successful refresh.
+  const forced = request.nextUrl.searchParams.get("force") === "1";
+  if (local.hour !== 8 && !forced) {
     return NextResponse.json({ ok: true, skipped: true, reason: "outside_8am_eastern_window", slot, observedHour: local.hour });
   }
 
