@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 const links = [
   { href: "/", label: "My Team" },
   { href: "/forecast", label: "Predictions" },
+  { href: "/projections", label: "Projected Points" },
   { href: "/league", label: "League" },
   { href: "/trade-finder", label: "Trade Lab" },
   { href: "/waivers", label: "Waivers" },
@@ -13,6 +14,7 @@ const links = [
   { href: "/players", label: "Players" },
   { href: "/refresh-history", label: "Refreshes", utility: true },
   { href: "/settings", label: "Data Health", utility: true },
+  { href: "/data-export", label: "Export", utility: true },
 ];
 export default function TopNav() {
   const pathname = usePathname();
