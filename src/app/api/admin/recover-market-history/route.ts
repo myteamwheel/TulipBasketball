@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { KTC_FORMAT } from "@/lib/config";
+import { recordAuditSnapshot } from "@/lib/audit";
 
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
@@ -11,14 +12,18 @@ export const dynamic = "force-dynamic";
 // database became unavailable. It cannot update or delete observations.
 const RECOVERY_BATCH = "user-export-recovery-2026-09-23";
 const RECOVERY_SOURCE = "Dynasty_Boys_Full_Data_2026-09-23.xlsx";
-const recoveryInput = z.object({
-  batch: z.literal(RECOVERY_BATCH),
-  records: z.array(z.object({
-    sleeperId: z.string().min(1).max(64),
-    observedAt: z.string().datetime(),
-    value: z.number().int().min(1).max(10000),
-  })).min(1).max(600),
-});
+const recoveryInput = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("records"),
+    batch: z.literal(RECOVERY_BATCH),
+    records: z.array(z.object({
+      sleeperId: z.string().min(1).max(64),
+      observedAt: z.string().datetime(),
+      value: z.number().int().min(1).max(10000),
+    })).min(1).max(600),
+  }),
+  z.object({ action: z.literal("finalize"), batch: z.literal(RECOVERY_BATCH) }),
+]);
 
 function authorized(request: Request) {
   const expected = process.env.AUDIT_INGEST_TOKEN ?? "";
@@ -33,6 +38,10 @@ export async function POST(request: Request) {
   try { parsed = recoveryInput.safeParse(await request.json()); }
   catch { return Response.json({ error: "Invalid JSON" }, { status: 400 }); }
   if (!parsed.success) return Response.json({ error: "Invalid recovery records" }, { status: 400 });
+  if (parsed.data.action === "finalize") {
+    const snapshot = await recordAuditSnapshot(null);
+    return Response.json({ ok: true, snapshotId: snapshot.snapshotId, generatedAt: snapshot.generatedAt }, { headers: { "Cache-Control": "no-store" } });
+  }
 
   const records = parsed.data.records;
   const now = Date.now();
