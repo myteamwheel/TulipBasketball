@@ -372,7 +372,7 @@ function scaleStatsToPoints(
   return next;
 }
 
-function discreteStatLine(stats: ProjectedStatLine): ProjectedStatLine {
+export function discreteStatLine(stats: ProjectedStatLine): ProjectedStatLine {
   const attempts = Math.max(0, Math.round(stats.attempts));
   const completions = Math.min(attempts, Math.max(0, Math.round(stats.completions)));
   const targets = Math.max(0, Math.round(stats.targets));
@@ -412,7 +412,7 @@ function blendExternalStats(
   return blended;
 }
 
-function externalRoleSupported(
+export function externalRoleSupported(
   position: string,
   external: ExternalWeeklyProjection[],
 ) {
