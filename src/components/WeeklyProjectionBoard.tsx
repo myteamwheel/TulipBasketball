@@ -183,7 +183,7 @@ export default function WeeklyProjectionBoard({
           <div>
             <h2 className="text-sm font-semibold text-neutral-100">Projection accuracy history</h2>
             <p className="text-[10px] text-neutral-500">
-              Uses the latest projection made before each player's game. MAE {mae === null ? "—" : mae.toFixed(2)} points · mean accuracy {meanAccuracy === null ? "—" : `${meanAccuracy.toFixed(1)}%`}.
+              Uses the latest projection made before each player&apos;s game. MAE {mae === null ? "—" : mae.toFixed(2)} points · mean accuracy {meanAccuracy === null ? "—" : `${meanAccuracy.toFixed(1)}%`}.
             </p>
           </div>
           <select
