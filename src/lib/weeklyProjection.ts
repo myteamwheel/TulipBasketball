@@ -545,6 +545,7 @@ async function calibrationByPosition(season: number, week: number) {
         "actualFantasyPoints", "asOfDate"
       FROM "WeeklyProjection"
       WHERE "actualFantasyPoints" IS NOT NULL
+        AND "modelVersion" = '${MODEL_VERSION}'
         AND (season < ${season} OR (season = ${season} AND week < ${week}))
       ORDER BY "playerId", season, week, "asOfDate" DESC
     ) x
@@ -946,6 +947,7 @@ export async function getProjectionDashboardData() {
     SELECT DISTINCT ON ("playerId", season, week) *
     FROM "WeeklyProjection"
     WHERE "actualFantasyPoints" IS NOT NULL
+      AND "modelVersion" = '${MODEL_VERSION}'
     ORDER BY "playerId", season, week, "asOfDate" DESC, "createdAt" DESC
   `);
   const availabilityRaw = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(`
