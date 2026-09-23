@@ -18,6 +18,7 @@ import { simulateDynastyBoys } from "@/lib/leagueSimulation";
 import { computeAllTeamValuations, getLatestSlotMap } from "@/lib/teamMetrics";
 import { publicTeamName } from "@/lib/publicIdentity";
 import { formatPoints, formatProbability } from "@/lib/format";
+import { getProjectionDashboardData } from "@/lib/weeklyProjection";
 export const dynamic = "force-dynamic";
 export default async function ForecastPage() {
   const [entries, managers, primary, valuations, slotMap] = await Promise.all([
@@ -32,10 +33,22 @@ export default async function ForecastPage() {
       <div className="text-sm text-neutral-500">Primary team unavailable.</div>
     );
   const ids = entries.map((e) => e.playerId),
-    [models, simulation] = await Promise.all([
+    [models, simulation, projectionData] = await Promise.all([
       getPredictivePlayerModels(ids),
       simulateDynastyBoys(2500),
+      getProjectionDashboardData(),
     ]),
+    weeklyProjectionByPlayer = new Map(
+      projectionData.current.map((row) => [
+        row.playerId,
+        row.projectedFantasyPoints,
+      ]),
+    ),
+    weeklyWithheld = new Set(
+      projectionData.unavailable
+        .filter((row) => row.status === "EXCLUDED")
+        .map((row) => row.playerId),
+    ),
     rows = [...models.values()],
     mySim = simulation.rows.find((r) => r.managerId === primary.id),
     managerById = new Map(managers.map((m) => [m.id, m])),
@@ -77,7 +90,10 @@ export default async function ForecastPage() {
       marketValue: model.currentValue,
       modelValue: model.modelValue,
       forecast1y: model.forecast1y.mean,
-      projectedPpg: model.projectedWeeklyPoints,
+      projectedPpg: weeklyWithheld.has(entry.playerId)
+        ? 0
+        : weeklyProjectionByPlayer.get(entry.playerId) ??
+          model.projectedWeeklyPoints,
       slot: slotMap.get(`${entry.managerId}:${entry.playerId}`) ?? "BENCH",
     });
   }
@@ -140,6 +156,14 @@ export default async function ForecastPage() {
           probability outputs are withheld.
         </div>
       ) : null}
+      {simulation.weeklyProjectionCoverage < 0.75 ? (
+        <div className="rounded-lg border border-amber-900/70 bg-amber-950/20 p-3 text-[11px] leading-5 text-amber-200">
+          Weekly consensus coverage is currently{" "}
+          {Math.round(simulation.weeklyProjectionCoverage * 100)}%. The forecast
+          remains intentionally conservative until the current-week projection
+          refresh has classified most rostered players.
+        </div>
+      ) : null}
       <section>
         <SectionHeader
           title="Orlando forecast"
@@ -179,13 +203,13 @@ export default async function ForecastPage() {
         ) : null}
         <p className="mt-2 text-[9px] leading-4 text-neutral-600">
           Simulation probabilities are model outputs, not betting probabilities.
-          When recent production coverage is sparse, win/seed/playoff/title
-          estimates are conservatively shrunk toward league-neutral priors
-          instead of presenting market-implied lineup projections as precise
-          probabilities. Current player projections blend recent half-PPR
-          production with market-implied role where evidence is current enough;
-          stale seasons fall back to market-implied role rather than carrying
-          old PPG forward.
+          The canonical weekly-consensus projection feed now drives lineup
+          strength when available, and players explicitly withheld for no current
+          role contribute zero rather than invented volume. Until the weekly feed
+          has classified most rostered players, season-outcome estimates remain
+          conservatively shrunk toward league-neutral priors. Recent-production
+          evidence remains a secondary fallback, not a competing projection
+          system.
         </p>
       </section>
       <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3 sm:p-4">
