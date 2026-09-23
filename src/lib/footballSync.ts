@@ -3,6 +3,11 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { normalizePlayerName } from "@/lib/normalize";
 import { SLEEPER_LEAGUE_ID } from "@/lib/config";
+import { getLeague } from "@/lib/sleeper";
+import {
+  scoreFantasyStats,
+  scoringFromSleeperSettings,
+} from "@/lib/fantasyScoring";
 
 const PLAYERS_URL =
   "https://github.com/nflverse/nflverse-data/releases/download/players/players.csv";
@@ -100,10 +105,12 @@ export async function refreshFootballUsageData(
   const existingProfiles = await prisma.$queryRaw<
     Array<{ count: bigint }>
   >`SELECT COUNT(*)::bigint AS count FROM "PlayerFootballProfile" pf JOIN "Player" p ON p.id=pf."playerId" WHERE EXISTS (SELECT 1 FROM "OwnershipInterval" oi JOIN "Manager" m ON m.id=oi."managerId" JOIN "League" l ON l.id=m."leagueId" WHERE oi."playerId"=p.id AND oi."validTo" IS NULL AND l."sleeperId"=${SLEEPER_LEAGUE_ID})`;
-  const [catalog, idRows] = await Promise.all([
+  const [catalog, idRows, league] = await Promise.all([
     fetchCsv(PLAYERS_URL),
     fetchCsv(FF_IDS_URL, true),
+    getLeague(SLEEPER_LEAGUE_ID),
   ]);
+  const scoring = scoringFromSleeperSettings(league.scoring_settings);
   const byNamePos = new Map<string, CsvRow[]>(),
     catalogByGsis = new Map<string, CsvRow>();
   for (const row of catalog) {
@@ -192,10 +199,31 @@ export async function refreshFootballUsageData(
         week = Number(row.week);
       if (!Number.isFinite(season) || !Number.isFinite(week)) continue;
       const receptions = num(row.receptions),
-        fantasyStandard = Number(row.fantasy_points),
-        half = Number.isFinite(fantasyStandard)
-          ? fantasyStandard + receptions * 0.5
-          : num(row.fantasy_points_ppr) - receptions * 0.5,
+        passingYards = num(row.passing_yards),
+        passingTds = num(row.passing_tds),
+        interceptions = num(row.interceptions),
+        rushingYards = num(row.rushing_yards),
+        rushingTds = num(row.rushing_tds),
+        receivingYards = num(row.receiving_yards),
+        receivingTds = num(row.receiving_tds),
+        fumblesLost =
+          num(row.rushing_fumbles_lost) +
+          num(row.receiving_fumbles_lost) +
+          num(row.sack_fumbles_lost),
+        half = scoreFantasyStats(
+          {
+            passingYards,
+            passingTds,
+            interceptions,
+            rushingYards,
+            rushingTds,
+            receptions,
+            receivingYards,
+            receivingTds,
+            fumblesLost,
+          },
+          scoring,
+        ),
         opportunities = num(row.attempts) + num(row.carries) + num(row.targets),
         score = Math.max(0, Math.min(100, (half / 24) * 100));
       if (row.target_share || row.air_yards_share || row.wopr) advancedRows++;
@@ -213,20 +241,17 @@ export async function refreshFootballUsageData(
         fantasyHalfPpr: Number.isFinite(half) ? half : 0,
         completions: num(row.completions),
         attempts: num(row.attempts),
-        passingYards: num(row.passing_yards),
-        passingTds: num(row.passing_tds),
-        interceptions: num(row.interceptions),
+        passingYards,
+        passingTds,
+        interceptions,
         carries: num(row.carries),
-        rushingYards: num(row.rushing_yards),
-        rushingTds: num(row.rushing_tds),
+        rushingYards,
+        rushingTds,
         targets: num(row.targets),
         receptions,
-        receivingYards: num(row.receiving_yards),
-        receivingTds: num(row.receiving_tds),
-        fumblesLost:
-          num(row.rushing_fumbles_lost) +
-          num(row.receiving_fumbles_lost) +
-          num(row.sack_fumbles_lost),
+        receivingYards,
+        receivingTds,
+        fumblesLost,
         grade: grade(score),
         gradeScore: score,
         performanceSummary: `${half.toFixed(1)} half-PPR points · ${opportunities.toFixed(0)} recorded opportunities`,
