@@ -9,7 +9,7 @@ const points = (value: number | null) =>
 const pct = (value: number) =>
   `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
 
-type SortKey = "edge" | "market" | "model" | "ppg" | "recent" | "usage";
+type SortKey = "edge" | "market" | "model" | "recent" | "usage";
 
 function evidenceLabel(row: PredictivePlayerModel) {
   if (row.latestSeason === null || row.games < 3) return "Market-led";
@@ -41,8 +41,6 @@ export default function PredictiveBoard({
         .sort((a, b) => {
           if (sort === "edge") return b.modelEdgePercent - a.modelEdgePercent;
           if (sort === "market") return b.currentValue - a.currentValue;
-          if (sort === "ppg")
-            return b.projectedWeeklyPoints - a.projectedWeeklyPoints;
           if (sort === "recent")
             return (b.fantasyPpg ?? -Infinity) - (a.fantasyPpg ?? -Infinity);
           if (sort === "usage")
@@ -92,14 +90,13 @@ export default function PredictiveBoard({
           <option value="model">Model fair value</option>
           <option value="market">KTC market value</option>
           <option value="edge">Model edge</option>
-          <option value="ppg">Weekly projection</option>
           <option value="recent">Recent NFL PPG</option>
           <option value="usage">Opportunity / game</option>
         </select>
       </div>
 
       <div className="overflow-x-auto rounded-lg border border-neutral-800">
-        <table className="w-full min-w-[1050px] text-xs">
+        <table className="w-full min-w-[960px] text-xs">
           <caption className="sr-only">
             Evidence-gated dynasty player valuation board
           </caption>
@@ -112,7 +109,6 @@ export default function PredictiveBoard({
               <th className="px-2 py-2 text-right">Edge</th>
               <th className="px-2 py-2 text-right">Recent NFL PPG</th>
               <th className="px-2 py-2 text-right">Opp / game</th>
-              <th className="px-2 py-2 text-right">Weekly proj</th>
               <th className="px-2 py-2 text-right">Evidence</th>
               <th className="px-2 py-2 text-right">Confidence</th>
             </tr>
@@ -157,9 +153,6 @@ export default function PredictiveBoard({
                     ? "—"
                     : row.opportunityPerGame.toFixed(1)}
                 </td>
-                <td className="px-2 py-2 text-right font-medium tabular-nums text-neutral-200">
-                  {row.projectedWeeklyPoints.toFixed(1)}
-                </td>
                 <td className="px-2 py-2 text-right text-neutral-500">
                   {evidenceLabel(row)}
                 </td>
@@ -176,7 +169,9 @@ export default function PredictiveBoard({
         The board intentionally omits uncalibrated one-year probability columns
         from the primary decision table. Long-range scenario ranges remain
         available in the underlying player model, but the main view prioritizes
-        observable market, production, opportunity and weekly-role evidence.
+        observable market, production, opportunity and evidence quality. Weekly
+        fantasy projections are intentionally kept in the Projected Points tab
+        so this dynasty-value board does not present a second competing forecast.
       </p>
     </div>
   );
