@@ -155,10 +155,6 @@ async function fetchSleeper(
     const player = bySleeper.get(sleeperId);
     if (!player) continue;
     const stats = sleeperStats(raw);
-    const rawStats =
-      raw.stats && typeof raw.stats === "object"
-        ? (raw.stats as Record<string, unknown>)
-        : raw;
     const points = halfPprFromStats(stats, scoring);
     if (!Number.isFinite(points)) continue;
     rows.push({
