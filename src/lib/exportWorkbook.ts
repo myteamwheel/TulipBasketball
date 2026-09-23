@@ -289,13 +289,6 @@ export async function buildDynastyWorkbook() {
     getProjectionDashboardData(),
   ]);
 
-  const managerName = new Map(
-    managers.map((manager) => [
-      manager.id,
-      manager.teamName?.trim() || `Team ${manager.sleeperRosterId}`,
-    ]),
-  );
-
   const sheets: Sheet[] = [
     {
       name: "README",
