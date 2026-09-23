@@ -490,7 +490,33 @@ async function executeRefresh(runId: string) {
   const footballUsageOk = !sleeperSyncOk || footballUsage !== null;
   const draftFresh = !!draftPickMarket && !draftPickMarket.stale;
   const pickOwnershipOk = !!tradedPickOwnership;
-  const projectionsOk = projectionRefresh !== null;
+  const projectionSourceHealthy =
+    projectionRefresh?.sourceStatuses.some(
+      (source) => source.ok && source.rows >= 25,
+    ) ?? false;
+  const projectionClassifiedCount = projectionRefresh
+    ? projectionRefresh.projected +
+      projectionRefresh.excluded +
+      projectionRefresh.skippedAlreadyPlayed
+    : 0;
+  const projectionsOk =
+    projectionRefresh !== null &&
+    projectionSourceHealthy &&
+    projectionClassifiedCount > 0;
+  if (projectionRefresh && !projectionSourceHealthy) {
+    errors.push({
+      source: "projections",
+      message:
+        "Weekly projection refresh completed without a healthy external projection source; results are not decision-grade.",
+    });
+  }
+  if (projectionRefresh && projectionClassifiedCount === 0) {
+    errors.push({
+      source: "projections",
+      message:
+        "Weekly projection refresh classified zero rostered skill players; results are not decision-grade.",
+    });
+  }
   const exportSnapshotOk = exportSnapshot !== null;
   const universeRequired = ktcSyncOk === true;
   const status =
