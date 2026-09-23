@@ -37,8 +37,33 @@ export async function GET() {
       AND p.position IN ('QB','RB','WR','TE')
   `;
 
-  const bundle = await fetchWeeklyProjectionSources(season, week, players);
+  const [bundle, storedProjectionRows, storedAvailabilityRows] = await Promise.all([
+    fetchWeeklyProjectionSources(season, week, players),
+    prisma.$queryRaw<Array<{ playerId: string }>>`
+      SELECT DISTINCT ON ("playerId") "playerId"
+      FROM "WeeklyProjection"
+      WHERE season = ${season}
+        AND week = ${week}
+        AND "modelVersion" = 'weekly-consensus-v2.0'
+      ORDER BY "playerId", "asOfDate" DESC, "createdAt" DESC
+    `,
+    prisma.$queryRaw<Array<{ playerId: string; status: string }>>`
+      SELECT DISTINCT ON ("playerId") "playerId", status
+      FROM "ProjectionAvailability"
+      WHERE season = ${season}
+        AND week = ${week}
+      ORDER BY "playerId", "asOfDate" DESC, "createdAt" DESC
+    `,
+  ]);
   const playersWithAnySource = bundle.byPlayer.size;
+  const storedProjected = storedProjectionRows.length;
+  const storedWithheld = storedAvailabilityRows.filter(
+    (row) => row.status === "EXCLUDED",
+  ).length;
+  const storedClassified = new Set([
+    ...storedProjectionRows.map((row) => row.playerId),
+    ...storedAvailabilityRows.map((row) => row.playerId),
+  ]).size;
   const sourceCoverage = Object.fromEntries(
     bundle.statuses.map((status) => [
       status.source,
@@ -59,6 +84,13 @@ export async function GET() {
       anySourceCoverage:
         players.length > 0 ? playersWithAnySource / players.length : 0,
       sources: sourceCoverage,
+      stored: {
+        projected: storedProjected,
+        withheld: storedWithheld,
+        classified: storedClassified,
+        classificationCoverage:
+          players.length > 0 ? storedClassified / players.length : 0,
+      },
       checkedAt: new Date().toISOString(),
     },
     {
