@@ -23,21 +23,28 @@ export default async function ProjectionsPage() {
           Weekly NFL Projections
         </h1>
         <p className="mt-1 max-w-3xl text-sm leading-5 text-neutral-500">
-          Player-level projected NFL stat lines and half-PPR fantasy points. Every
-          morning refresh grades completed games, preserves the pregame forecast,
-          and uses prior projection error to calibrate later weeks by position.
+          Player-level projected NFL stat lines and half-PPR fantasy points.
+          Weekly role must be supported by current external projection data, and
+          the displayed stat line is a concrete whole-number outcome. Every
+          refresh preserves the pregame forecast and grades it against actual NFL
+          results so later weeks can be recalibrated.
         </p>
       </section>
 
       <section>
         <SectionHeader
           title={`${data.season} Week ${data.week}`}
-          description="Current projections are regenerated from the latest roster, market context, and nflverse game history. Completed players are never reprojected after their result is known."
+          description="Current projections blend Sleeper, CBS and the local recency model. Players without a current team, players marked unavailable, and players without a meaningful projected weekly role are withheld rather than assigned fake volume."
         />
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
           <MetricCard
             label="Players projected"
             value={data.current.length.toLocaleString("en-US")}
+          />
+          <MetricCard
+            label="Withheld"
+            value={data.unavailable.length.toLocaleString("en-US")}
+            detail="inactive / no supported role / already played"
           />
           <MetricCard
             label="High confidence"
@@ -59,6 +66,7 @@ export default async function ProjectionsPage() {
       <WeeklyProjectionBoard
         current={data.current}
         history={data.history}
+        unavailable={data.unavailable}
         season={data.season}
         week={data.week}
       />
@@ -66,12 +74,13 @@ export default async function ProjectionsPage() {
       <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3 text-[10px] leading-5 text-neutral-500">
         <div className="font-semibold text-neutral-300">How the projection model learns</div>
         <p className="mt-1">
-          The model starts from a position baseline, blends a recency-weighted
-          sample of each player&apos;s latest regular-season stat lines with current
-          dynasty market role, and applies a position-level correction learned
-          from prior graded forecasts. Small samples are regressed more heavily.
-          Actual results come from the same nflverse ingestion used elsewhere on
-          the dashboard. Accuracy is descriptive model error, not a betting edge.
+          Sleeper and CBS weekly projections establish current playing-time and
+          role expectations. Those inputs are blended with a recency-weighted
+          local NFL stat model and then adjusted by position-level error learned
+          from prior graded forecasts. The visible stat line is converted to
+          whole-number football events before fantasy points are calculated.
+          Actual results come from nflverse. Accuracy is descriptive model error,
+          not a betting edge.
         </p>
       </section>
     </div>
