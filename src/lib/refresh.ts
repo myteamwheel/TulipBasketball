@@ -18,6 +18,7 @@ import {
   refreshFootballUsageData,
   type FootballSyncResult,
 } from "@/lib/footballSync";
+import { persistWeeklyProjections } from "@/lib/playerProjections";
 
 const VISIBLE_SOURCES = new Set(["KTC", "TRADYR", "DYNASTY_DEALER", "STATSGUY"]);
 const REFRESH_LOCK_KEY = 731521527;
@@ -237,6 +238,7 @@ export async function startRefresh(): Promise<{ runId: string }> {
         "consensus",
         "draft_pick_market",
         "traded_pick_ownership",
+        "weekly_projections",
       ];
       return tx.refreshRun.create({
         data: {
@@ -272,6 +274,9 @@ async function executeRefresh(runId: string) {
   let marketObservationsStored = 0;
   let consensusPlayersStored = 0;
   let footballUsage: FootballSyncResult | null = null;
+  let weeklyProjections:
+    | Awaited<ReturnType<typeof persistWeeklyProjections>>
+    | null = null;
   let fullKtcUniverse: {
     matched: number;
     committed: number;
@@ -451,6 +456,17 @@ async function executeRefresh(runId: string) {
     }
   }
 
+  if (sleeperSyncOk) {
+    try {
+      weeklyProjections = await persistWeeklyProjections(runId);
+    } catch (error) {
+      errors.push({
+        source: "weekly_projections",
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   // Diagnostic-only Stats Guy failures are visible in source status but do not
   // turn an otherwise healthy KTC/Sleeper refresh amber. Trusted secondary
   // failures still do.
@@ -463,6 +479,7 @@ async function executeRefresh(runId: string) {
   const footballUsageOk = !sleeperSyncOk || footballUsage !== null;
   const draftFresh = !!draftPickMarket && !draftPickMarket.stale;
   const pickOwnershipOk = !!tradedPickOwnership;
+  const projectionsOk = !sleeperSyncOk || weeklyProjections !== null;
   const universeRequired = ktcSyncOk === true;
   const status =
     !sleeperSyncOk && !ktcSyncOk
@@ -473,7 +490,8 @@ async function executeRefresh(runId: string) {
           trustedOptionalFailures > 0 ||
           (universeRequired && !fullKtcUniverseOk) ||
           !draftFresh ||
-          !pickOwnershipOk
+          !pickOwnershipOk ||
+          !projectionsOk
         ? "PARTIAL_FAILURE"
         : "SUCCESS";
 
@@ -491,6 +509,7 @@ async function executeRefresh(runId: string) {
     fullKtcUniverse,
     draftPickMarket,
     tradedPickOwnership,
+    weeklyProjections,
   };
 
   await prisma.refreshRun.update({

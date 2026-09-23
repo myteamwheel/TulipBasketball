@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { normalizePlayerName } from "@/lib/normalize";
 import { SLEEPER_LEAGUE_ID } from "@/lib/config";
+import { getNflState } from "@/lib/sleeper";
 
 const PLAYERS_URL =
   "https://github.com/nflverse/nflverse-data/releases/download/players/players.csv";
@@ -20,6 +21,9 @@ export interface FootballSyncResult {
   source: "nflverse";
   directIdMatches: number;
   fallbackNameMatches: number;
+  currentSeason: number;
+  currentSeasonRows: number;
+  latestRegularSeasonWeek: number | null;
 }
 function num(value: unknown) {
   const n = Number(value);
@@ -79,6 +83,9 @@ async function storeGames(rows: Array<Record<string, unknown>>) {
 export async function refreshFootballUsageData(
   refreshRunId: string,
 ): Promise<FootballSyncResult> {
+  const nflState = await getNflState();
+  const currentSeason =
+    Number(nflState.season) || new Date().getUTCFullYear();
   const players = await prisma.player.findMany({
     where: {
       ownershipIntervals: {
@@ -170,19 +177,22 @@ export async function refreshFootballUsageData(
     });
   }
   const profileRowsStored = await storeProfiles(profiles),
-    currentYear = new Date().getUTCFullYear(),
     needsInitial =
       Number(existingProfiles[0]?.count ?? 0) < players.length * 0.82,
     years = needsInitial
       ? Array.from(
-          { length: Math.max(1, currentYear - 2022 + 1) },
+          { length: Math.max(1, currentSeason - 2022 + 1) },
           (_, i) => 2022 + i,
         )
-      : [currentYear - 1, currentYear],
+      : [currentSeason - 1, currentSeason],
     gameRecords: Array<Record<string, unknown>> = [];
   let advancedRows = 0;
   for (const year of years) {
-    const rows = await fetchCsv(statsUrl(year), true);
+    const currentStatsRequired =
+      year === currentSeason &&
+      String(nflState.season_type ?? "").toLowerCase() === "regular" &&
+      Number(nflState.week) > 1;
+    const rows = await fetchCsv(statsUrl(year), !currentStatsRequired);
     for (const row of rows) {
       if (String(row.season_type ?? "REG").toUpperCase() !== "REG") continue;
       const gsis = String(row.player_id ?? "").trim(),
@@ -238,6 +248,25 @@ export async function refreshFootballUsageData(
       });
     }
   }
+  const currentSeasonRecords = gameRecords.filter(
+    (row) => Number(row.season) === currentSeason,
+  );
+  const latestRegularSeasonWeek = currentSeasonRecords.length
+    ? Math.max(...currentSeasonRecords.map((row) => Number(row.week) || 0))
+    : null;
+  const expectedCompletedWeek =
+    String(nflState.season_type ?? "").toLowerCase() === "regular"
+      ? Math.max(0, Number(nflState.week) - 1)
+      : 0;
+  if (
+    expectedCompletedWeek >= 1 &&
+    (latestRegularSeasonWeek === null ||
+      latestRegularSeasonWeek < expectedCompletedWeek)
+  ) {
+    throw new Error(
+      `nflverse current-season stats are behind: expected at least week ${expectedCompletedWeek}, latest available is ${latestRegularSeasonWeek ?? "none"}`,
+    );
+  }
   const gameRowsStored = await storeGames(gameRecords);
   return {
     profilesMatched: profiles.length,
@@ -248,5 +277,8 @@ export async function refreshFootballUsageData(
     source: "nflverse",
     directIdMatches,
     fallbackNameMatches,
+    currentSeason,
+    currentSeasonRows: currentSeasonRecords.length,
+    latestRegularSeasonWeek,
   };
 }
