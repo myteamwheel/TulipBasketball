@@ -6,11 +6,13 @@ import { usePathname } from "next/navigation";
 const links = [
   { href: "/", label: "My Team" },
   { href: "/forecast", label: "Predictions" },
+  { href: "/projections", label: "Projected Points" },
   { href: "/league", label: "League" },
   { href: "/trade-finder", label: "Trade Lab" },
   { href: "/waivers", label: "Waivers" },
   { href: "/transactions", label: "Transactions" },
   { href: "/players", label: "Players" },
+  { href: "/exports", label: "Export", utility: true },
   { href: "/refresh-history", label: "Refreshes", utility: true },
   { href: "/settings", label: "Data Health", utility: true },
 ];
