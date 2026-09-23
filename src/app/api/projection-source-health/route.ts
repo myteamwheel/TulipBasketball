@@ -3,6 +3,10 @@ import { prisma } from "@/lib/prisma";
 import { SLEEPER_LEAGUE_ID } from "@/lib/config";
 import { getLeague, getNflState } from "@/lib/sleeper";
 import { fetchWeeklyProjectionSources } from "@/lib/weeklyProjectionSources";
+import {
+  scoringFromSleeperSettings,
+  unsupportedNonzeroScoring,
+} from "@/lib/fantasyScoring";
 
 export const dynamic = "force-dynamic";
 
@@ -37,8 +41,10 @@ export async function GET() {
       AND p.position IN ('QB','RB','WR','TE')
   `;
 
-  const [bundle, storedProjectionRows, storedAvailabilityRows, league] = await Promise.all([
-    fetchWeeklyProjectionSources(season, week, players),
+  const league = await getLeague(SLEEPER_LEAGUE_ID).catch(() => null);
+  const scoring = scoringFromSleeperSettings(league?.scoring_settings);
+  const [bundle, storedProjectionRows, storedAvailabilityRows] = await Promise.all([
+    fetchWeeklyProjectionSources(season, week, players, scoring),
     prisma.$queryRaw<Array<{ playerId: string }>>`
       SELECT DISTINCT ON ("playerId") "playerId"
       FROM "WeeklyProjection"
@@ -54,7 +60,6 @@ export async function GET() {
         AND week = ${week}
       ORDER BY "playerId", "asOfDate" DESC, "createdAt" DESC
     `,
-    getLeague(SLEEPER_LEAGUE_ID).catch(() => null),
   ]);
   const playersWithAnySource = bundle.byPlayer.size;
   const storedProjected = storedProjectionRows.length;
@@ -85,19 +90,10 @@ export async function GET() {
       anySourceCoverage:
         players.length > 0 ? playersWithAnySource / players.length : 0,
       sources: sourceCoverage,
-      scoring: league
-        ? {
-            reception: league.scoring_settings?.rec ?? null,
-            passingYard: league.scoring_settings?.pass_yd ?? null,
-            passingTd: league.scoring_settings?.pass_td ?? null,
-            interception: league.scoring_settings?.pass_int ?? null,
-            rushingYard: league.scoring_settings?.rush_yd ?? null,
-            rushingTd: league.scoring_settings?.rush_td ?? null,
-            receivingYard: league.scoring_settings?.rec_yd ?? null,
-            receivingTd: league.scoring_settings?.rec_td ?? null,
-            fumbleLost: league.scoring_settings?.fum_lost ?? null,
-          }
-        : null,
+      scoring,
+      unsupportedNonzeroScoring: unsupportedNonzeroScoring(
+        league?.scoring_settings,
+      ),
       stored: {
         projected: storedProjected,
         withheld: storedWithheld,
