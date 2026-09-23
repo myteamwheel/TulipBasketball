@@ -1,7 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { SLEEPER_LEAGUE_ID } from "@/lib/config";
-import { getNflState, getPlayerCatalog } from "@/lib/sleeper";
+import { getLeague, getNflState, getPlayerCatalog } from "@/lib/sleeper";
+import {
+  scoreFantasyStats,
+  scoringFromSleeperSettings,
+  VERIFIED_DYNASTY_BOIS_SCORING,
+  type FantasyScoringSettings,
+} from "@/lib/fantasyScoring";
 import {
   fetchWeeklyProjectionSources,
   type ExternalWeeklyProjection,
@@ -266,17 +272,7 @@ export async function ensureAnalyticsStorage() {
 }
 
 export function halfPprPoints(stats: ProjectedStatLine) {
-  return (
-    stats.passingYards / 25 +
-    stats.passingTds * 4 -
-    stats.interceptions * 2 +
-    stats.rushingYards / 10 +
-    stats.rushingTds * 6 +
-    stats.receptions * 0.5 +
-    stats.receivingYards / 10 +
-    stats.receivingTds * 6 -
-    stats.fumblesLost * 2
-  );
+  return scoreFantasyStats(stats, VERIFIED_DYNASTY_BOIS_SCORING);
 }
 
 function marketImpliedPpg(position: string, value: number | null) {
@@ -307,8 +303,14 @@ function statsFromGame(row: GameRow): ProjectedStatLine {
   };
 }
 
-function weightedAverageStats(games: GameRow[], baseline: ProjectedStatLine) {
-  if (!games.length) return { stats: { ...baseline }, ppg: halfPprPoints(baseline) };
+function weightedAverageStats(
+  games: GameRow[],
+  baseline: ProjectedStatLine,
+  scoring: FantasyScoringSettings,
+) {
+  if (!games.length) {
+    return { stats: { ...baseline }, ppg: scoreFantasyStats(baseline, scoring) };
+  }
   const ordered = [...games].sort(
     (a, b) => b.season - a.season || b.week - a.week,
   ).slice(0, 12);
@@ -319,7 +321,7 @@ function weightedAverageStats(games: GameRow[], baseline: ProjectedStatLine) {
     const weight = Math.pow(0.87, index);
     const stats = statsFromGame(game);
     weightSum += weight;
-    ppgWeighted += (Number(game.fantasyHalfPpr) || halfPprPoints(stats)) * weight;
+    ppgWeighted += scoreFantasyStats(stats, scoring) * weight;
     (Object.keys(totals) as Array<keyof ProjectedStatLine>).forEach((key) => {
       totals[key] += stats[key] * weight;
     });
@@ -332,7 +334,9 @@ function weightedAverageStats(games: GameRow[], baseline: ProjectedStatLine) {
   });
   return {
     stats,
-    ppg: weightSum ? ppgWeighted / weightSum : halfPprPoints(baseline),
+    ppg: weightSum
+      ? ppgWeighted / weightSum
+      : scoreFantasyStats(baseline, scoring),
   };
 }
 
@@ -340,8 +344,9 @@ function scaleStatsToPoints(
   stats: ProjectedStatLine,
   targetPoints: number,
   position: string,
+  scoring: FantasyScoringSettings,
 ) {
-  const current = Math.max(1, halfPprPoints(stats));
+  const current = Math.max(1, scoreFantasyStats(stats, scoring));
   const factor = clamp(targetPoints / current, 0.55, 1.65);
   const next = { ...stats };
   const volumeKeys: Array<keyof ProjectedStatLine> =
@@ -563,7 +568,7 @@ async function calibrationByPosition(season: number, week: number) {
   return map;
 }
 
-async function gradeExistingProjections() {
+async function gradeExistingProjections(scoring: FantasyScoringSettings) {
   const rows = await prisma.$queryRawUnsafe<
     Array<{
       id: string;
@@ -599,15 +604,6 @@ async function gradeExistingProjections() {
   `);
   let graded = 0;
   for (const row of rows) {
-    const actual = Number(row.fantasyHalfPpr) || 0;
-    const projected = Number(row.projectedFantasyPoints) || 0;
-    const signedError = projected - actual;
-    const absoluteError = Math.abs(signedError);
-    const accuracyScore = clamp(
-      100 * (1 - absoluteError / Math.max(8, Math.abs(actual) + 5)),
-      0,
-      100,
-    );
     const actualStats: ProjectedStatLine = {
       completions: Number(row.completions) || 0,
       attempts: Number(row.attempts) || 0,
@@ -623,6 +619,15 @@ async function gradeExistingProjections() {
       receivingTds: Number(row.receivingTds) || 0,
       fumblesLost: Number(row.fumblesLost) || 0,
     };
+    const actual = scoreFantasyStats(actualStats, scoring);
+    const projected = Number(row.projectedFantasyPoints) || 0;
+    const signedError = projected - actual;
+    const absoluteError = Math.abs(signedError);
+    const accuracyScore = clamp(
+      100 * (1 - absoluteError / Math.max(8, Math.abs(actual) + 5)),
+      0,
+      100,
+    );
     await prisma.$executeRawUnsafe(
       `UPDATE "WeeklyProjection"
        SET "actualFantasyPoints" = $1,
@@ -663,13 +668,15 @@ export async function refreshWeeklyProjections(
   const state = await getNflState().catch(() => null);
   const season = Number(state?.season ?? new Date().getUTCFullYear());
   const week = Math.max(1, Number(state?.week ?? 1));
-  const [players, allGames, catalog] = await Promise.all([
+  const [players, allGames, catalog, league] = await Promise.all([
     currentPlayers(),
     footballGames(season),
     getPlayerCatalog().catch(
       () => ({} as Awaited<ReturnType<typeof getPlayerCatalog>>),
     ),
+    getLeague(SLEEPER_LEAGUE_ID),
   ]);
+  const scoring = scoringFromSleeperSettings(league.scoring_settings);
   const sourceBundle = await fetchWeeklyProjectionSources(
     season,
     week,
@@ -679,8 +686,9 @@ export async function refreshWeeklyProjections(
       position: player.position,
       nflTeam: player.nflTeam,
     })),
+    scoring,
   );
-  const graded = await gradeExistingProjections();
+  const graded = await gradeExistingProjections(scoring);
   const calibration = await calibrationByPosition(season, week);
   const gamesByPlayer = new Map<string, GameRow[]>();
   const playedThisWeek = new Set<string>();
@@ -746,6 +754,7 @@ export async function refreshWeeklyProjections(
     const { stats: weightedStats, ppg: historicalPpg } = weightedAverageStats(
       historical,
       baseline,
+      scoring,
     );
     const marketPpg = marketImpliedPpg(
       player.position,
@@ -757,7 +766,7 @@ export async function refreshWeeklyProjections(
         ? historicalPpg * (currentSeasonGames.length ? 0.86 : 0.72) +
           (marketPpg ?? historicalPpg) *
             (currentSeasonGames.length ? 0.14 : 0.28)
-        : marketPpg ?? halfPprPoints(baseline);
+        : marketPpg ?? scoreFantasyStats(baseline, scoring);
 
     const externalTarget =
       external.reduce((sum, row) => sum + row.fantasyPointsHalfPpr, 0) /
@@ -772,9 +781,12 @@ export async function refreshWeeklyProjections(
       blendExternalStats(external, weightedStats),
       targetPoints,
       player.position,
+      scoring,
     );
     const projectedStats = discreteStatLine(expectedStats);
-    const projectedFantasyPoints = round1(halfPprPoints(projectedStats));
+    const projectedFantasyPoints = round1(
+      scoreFantasyStats(projectedStats, scoring),
+    );
     const expectedFantasyPoints = round1(targetPoints);
 
     await prisma.$executeRawUnsafe(
