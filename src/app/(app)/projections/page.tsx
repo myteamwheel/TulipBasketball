@@ -38,7 +38,7 @@ export default async function ProjectionsPage() {
       <section>
         <SectionHeader
           title={`${data.season} Week ${data.week}`}
-          description="Current projections blend Sleeper, CBS and the local recency model. Players without a current team, players marked unavailable, and players without a meaningful projected weekly role are withheld rather than assigned fake volume."
+          description="Current projections blend Sleeper, CBS, DraftKings game-market context through ESPN, and the local recency model. Players without a current team, players marked unavailable, and players without a meaningful projected weekly role are withheld rather than assigned fake volume."
         />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
           <MetricCard
@@ -81,10 +81,12 @@ export default async function ProjectionsPage() {
         <div className="font-semibold text-neutral-300">How the projection model learns</div>
         <p className="mt-1">
           Sleeper and CBS weekly projections establish current playing-time and
-          role expectations. Those inputs are blended with a recency-weighted
-          local NFL stat model and then adjusted by position-level error learned
-          from prior graded forecasts. The visible stat line is converted to
-          whole-number football events before fantasy points are calculated.
+          role expectations. DraftKings game totals and spreads, supplied through
+          ESPN, make a bounded team-environment adjustment. Those inputs are
+          blended with a recency-weighted local NFL stat model and then adjusted
+          by position-level error learned from prior graded forecasts. The visible
+          stat line is converted to whole-number football events before fantasy
+          points are calculated.
           Actual results come from nflverse. Accuracy is descriptive model error,
           not a betting edge.
         </p>

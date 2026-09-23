@@ -58,6 +58,28 @@ export default async function SettingsPage() {
   const anyKtc = entries.filter(
     (entry) => market.get(entry.playerId)?.currentValue !== null,
   ).length;
+  const ktcExceptions = entries
+    .map((entry) => {
+      const row = market.get(entry.playerId);
+      if (row && !row.isStale && row.currentValue !== null) return null;
+      const reason =
+        entry.player.mappingStatus !== "MAPPED"
+          ? "identity mapping needs review"
+          : !entry.player.nflTeam
+            ? "no current NFL team"
+            : row?.isStale
+              ? "KTC observation is stale"
+              : "no current KTC value";
+      return {
+        playerId: entry.playerId,
+        name: entry.player.fullName,
+        position: entry.player.position,
+        nflTeam: entry.player.nflTeam,
+        reason,
+      };
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
+    .sort((a, b) => a.name.localeCompare(b.name));
   const tradyrCovered = entries.filter(
     (entry) => mix.get(entry.playerId)?.tradyrValue !== null,
   ).length;
@@ -143,7 +165,7 @@ export default async function SettingsPage() {
             {freshKtc}/{owned}
           </div>
           <div className="text-[10px] text-neutral-600">
-            {owned - freshKtc} unavailable/stale · {anyKtc} ever valued
+            {owned - freshKtc} exceptions · {anyKtc} ever valued
           </div>
         </div>
         <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-3">
@@ -173,6 +195,27 @@ export default async function SettingsPage() {
           </div>
         </div>
       </section>
+
+      {ktcExceptions.length ? (
+        <section className="rounded-lg border border-amber-900/60 bg-amber-950/15 p-4">
+          <h2 className="text-sm font-semibold text-amber-100">
+            KTC coverage exceptions ({ktcExceptions.length})
+          </h2>
+          <p className="mt-1 text-[11px] leading-5 text-neutral-400">
+            These rows are withheld from fresh-KTC totals. They are shown here
+            instead of being filled with zero or silently replaced by another
+            provider. Historical observations remain available where present.
+          </p>
+          <div className="mt-3 overflow-auto">
+            <table className="w-full min-w-[520px] text-xs">
+              <thead className="border-b border-amber-900/50 text-left text-[10px] uppercase tracking-wide text-neutral-500">
+                <tr><th className="px-2 py-2">Player</th><th className="px-2 py-2">Position</th><th className="px-2 py-2">Team</th><th className="px-2 py-2">Reason</th></tr>
+              </thead>
+              <tbody>{ktcExceptions.map((entry) => <tr key={entry.playerId} className="border-b border-neutral-800/70 last:border-0"><td className="px-2 py-2 text-neutral-200">{entry.name}</td><td className="px-2 py-2 text-neutral-400">{entry.position}</td><td className="px-2 py-2 text-neutral-400">{entry.nflTeam ?? "—"}</td><td className="px-2 py-2 text-amber-200">{entry.reason}</td></tr>)}</tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
 
       <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
         <h2 className="text-sm font-semibold text-neutral-100">
@@ -215,7 +258,8 @@ export default async function SettingsPage() {
                 {projectionData.current.filter((row) => row.sourceCount > 0).length}
               </div>
               <div className="text-[10px] text-neutral-600">
-                current projections backed by Sleeper and/or CBS
+                player feeds plus local model; DraftKings game context is
+                shown in each current projection when available
               </div>
             </div>
           </div>

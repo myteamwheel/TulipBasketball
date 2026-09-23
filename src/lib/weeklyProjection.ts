@@ -668,6 +668,15 @@ function confidence(
   return "LOW" as const;
 }
 
+function bettingMarketFactor(team: string | null, teamImpliedPoints: Map<string, number>) {
+  if (!team) return 1;
+  const implied = teamImpliedPoints.get(team.toUpperCase());
+  if (!implied) return 1;
+  // Game totals and spreads are a third, independent market view. Keep their
+  // effect small and bounded: player-level source projections still dominate.
+  return clamp(1 + ((implied - 22.5) / 22.5) * 0.12, 0.94, 1.06);
+}
+
 export async function refreshWeeklyProjections(
   refreshRunId: string | null,
 ): Promise<ProjectionRefreshResult> {
@@ -786,6 +795,7 @@ export async function refreshWeeklyProjections(
     let targetPoints =
       externalTarget * (external.length >= 2 ? 0.82 : 0.74) +
       ownTarget * (external.length >= 2 ? 0.18 : 0.26);
+    targetPoints *= bettingMarketFactor(team ?? null, sourceBundle.betting.teamImpliedPoints);
     const positionCalibration = calibration.get(player.position) ?? 1;
     targetPoints *= positionCalibration;
 
@@ -853,7 +863,7 @@ export async function refreshWeeklyProjections(
       asOfDate,
       refreshRunId,
       "PROJECTED",
-      `Projected from ${external.map((row) => row.source).join(" + ")} plus local recency model`,
+      `Projected from ${external.map((row) => row.source).join(" + ")} plus local recency model${sourceBundle.betting.teamImpliedPoints.has((team ?? "").toUpperCase()) ? " and bounded DraftKings game-market context" : ""}`,
       external,
     );
     projected++;

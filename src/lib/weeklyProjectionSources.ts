@@ -22,6 +22,7 @@ export type ProjectionStatLine = {
 };
 
 export type ProjectionSourceName = "SLEEPER" | "CBS";
+export type ProjectionInputName = ProjectionSourceName | "ESPN_DRAFTKINGS_ODDS";
 
 export type ExternalWeeklyProjection = {
   source: ProjectionSourceName;
@@ -35,10 +36,15 @@ export type ExternalWeeklyProjection = {
 };
 
 export type ProjectionSourceStatus = {
-  source: ProjectionSourceName;
+  source: ProjectionInputName;
   ok: boolean;
   rows: number;
   message: string;
+};
+
+export type BettingMarketContext = {
+  teamImpliedPoints: Map<string, number>;
+  status: ProjectionSourceStatus;
 };
 
 type ProjectionPlayer = {
@@ -305,6 +311,44 @@ async function fetchCbs(
   return rows;
 }
 
+function nflTeamCode(value: string) {
+  const code = value.toUpperCase();
+  return ({ JAX: "JAC", WSH: "WAS", LVR: "LV", GBP: "GB", SFO: "SF", KCC: "KC", TBB: "TB", NOS: "NO", NEP: "NE", LAR: "LAR" } as Record<string, string>)[code] ?? code;
+}
+
+async function fetchEspnDraftKingsOdds(season: number, week: number): Promise<BettingMarketContext> {
+  const response = await fetch(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=${season}&seasontype=2&week=${week}&limit=100`, {
+    headers: { Accept: "application/json" }, cache: "no-store", signal: AbortSignal.timeout(15000),
+  });
+  if (!response.ok) throw new Error(`ESPN odds failed (${response.status} ${response.statusText})`);
+  type EspnCompetition = {
+    competitors?: Array<{ homeAway?: string; team?: { abbreviation?: string } }>;
+    odds?: Array<{
+      provider?: { name?: string };
+      overUnder?: number;
+      spread?: number;
+    }>;
+  };
+  const payload = (await response.json()) as {
+    events?: Array<{ competitions?: EspnCompetition[] }>;
+  };
+  const teamImpliedPoints = new Map<string, number>();
+  for (const event of payload.events ?? []) {
+    const competition = event.competitions?.[0];
+    const odds = competition?.odds?.find(row => row.provider?.name === "DraftKings") ?? competition?.odds?.[0];
+    const total = Number(odds?.overUnder), homeSpread = Number(odds?.spread);
+    const home = competition?.competitors?.find(row => row.homeAway === "home")?.team?.abbreviation;
+    const away = competition?.competitors?.find(row => row.homeAway === "away")?.team?.abbreviation;
+    if (!home || !away || !Number.isFinite(total) || !Number.isFinite(homeSpread) || total < 25 || total > 80) continue;
+    const homeImplied = total / 2 - homeSpread / 2;
+    const awayImplied = total - homeImplied;
+    teamImpliedPoints.set(nflTeamCode(home), homeImplied);
+    teamImpliedPoints.set(nflTeamCode(away), awayImplied);
+  }
+  if (!teamImpliedPoints.size) throw new Error("ESPN returned no usable current-week totals and spreads");
+  return { teamImpliedPoints, status: { source: "ESPN_DRAFTKINGS_ODDS", ok: true, rows: teamImpliedPoints.size, message: "DraftKings game totals and spreads loaded through ESPN" } };
+}
+
 export async function fetchWeeklyProjectionSources(
   season: number,
   week: number,
@@ -314,9 +358,10 @@ export async function fetchWeeklyProjectionSources(
   const statuses: ProjectionSourceStatus[] = [];
   const collected: ExternalWeeklyProjection[] = [];
 
-  const [sleeperResult, cbsResult] = await Promise.allSettled([
+  const [sleeperResult, cbsResult, oddsResult] = await Promise.allSettled([
     fetchSleeper(season, week, players, scoring),
     fetchCbs(season, week, players, scoring),
+    fetchEspnDraftKingsOdds(season, week),
   ]);
 
   if (sleeperResult.status === "fulfilled") {
@@ -359,6 +404,11 @@ export async function fetchWeeklyProjectionSources(
     });
   }
 
+  const betting = oddsResult.status === "fulfilled"
+    ? oddsResult.value
+    : { teamImpliedPoints: new Map<string, number>(), status: { source: "ESPN_DRAFTKINGS_ODDS" as const, ok: false, rows: 0, message: oddsResult.reason instanceof Error ? oddsResult.reason.message : String(oddsResult.reason) } };
+  statuses.push(betting.status);
+
   const byPlayer = new Map<string, ExternalWeeklyProjection[]>();
   for (const row of collected) {
     const list = byPlayer.get(row.sleeperId) ?? [];
@@ -366,5 +416,5 @@ export async function fetchWeeklyProjectionSources(
     byPlayer.set(row.sleeperId, list);
   }
 
-  return { byPlayer, statuses };
+  return { byPlayer, statuses, betting };
 }

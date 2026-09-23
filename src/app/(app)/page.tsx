@@ -22,6 +22,7 @@ import {
 import { ORLANDO_BASELINE_DATE } from "@/lib/config";
 import { getLatestMarketSourceStatuses } from "@/lib/marketSources";
 import { getFreshCurrentMarketMix } from "@/lib/currentMarket";
+import ManualRefreshButton from "@/components/ManualRefreshButton";
 export const dynamic = "force-dynamic";
 const COVERAGE_MIN = 0.75;
 function tone(
@@ -206,12 +207,7 @@ export default async function HomePage() {
               sync {timeAgo(lastGoodSleeperSync)}
             </p>
           </div>
-          <Link
-            href="/trade-finder"
-            className="mt-2 inline-flex w-fit rounded-md border border-emerald-800 bg-emerald-950/30 px-3 py-1.5 text-xs font-medium text-emerald-300 sm:mt-0"
-          >
-            Open Trade Lab →
-          </Link>
+          <div className="mt-2 flex w-fit items-start gap-2 sm:mt-0"><ManualRefreshButton /><Link href="/trade-finder" className="inline-flex rounded-md border border-emerald-800 bg-emerald-950/30 px-3 py-1.5 text-xs font-medium text-emerald-300">Open Trade Lab →</Link></div>
         </div>
       </section>
       {latestSleeperFailed ? (
