@@ -436,7 +436,7 @@ function availabilityReason(
   catalogPlayer: Awaited<ReturnType<typeof getPlayerCatalog>>[string] | undefined,
   external: ExternalWeeklyProjection[],
 ) {
-  const team = catalogPlayer?.team ?? player.nflTeam;
+  const team = catalogPlayer ? (catalogPlayer.team ?? null) : player.nflTeam;
   const status = String(catalogPlayer?.status ?? player.status ?? "").toLowerCase();
   const injury = String(catalogPlayer?.injury_status ?? "").toLowerCase();
   if (!team) return "No current NFL team";
@@ -803,7 +803,9 @@ export async function refreshWeeklyProjections(
       player.id,
       player.fullName,
       player.position,
-      catalog[player.sleeperId]?.team ?? player.nflTeam,
+      catalog[player.sleeperId]
+        ? (catalog[player.sleeperId].team ?? null)
+        : player.nflTeam,
       season,
       week,
       asOfDate,
