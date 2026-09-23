@@ -36,6 +36,7 @@ export interface LeagueSimulationResult {
   scheduleSource: "SLEEPER" | "FALLBACK";
   completedWeeks: number;
   productionCoverage: number;
+  weeklyProjectionCoverage: number;
   evidenceWeight: number;
 }
 
@@ -130,7 +131,36 @@ export async function simulateDynastyBoys(iterations = 2500): Promise<LeagueSimu
   const playerIds = entries.map((entry) => entry.playerId);
   const predictions = await getPredictivePlayerModels(playerIds);
   const missingPredictionIds = playerIds.filter((playerId) => !predictions.has(playerId));
-  const currentSeason = Number(league?.season) || new Date().getUTCFullYear();
+  const currentSeason = Number(state?.season ?? league?.season) || new Date().getUTCFullYear();
+  const currentWeek = Math.max(1, Number(state?.week ?? 1));
+  const [weeklyProjectionRows, weeklyAvailabilityRows] = await Promise.all([
+    prisma.$queryRaw<Array<{ playerId: string; projectedFantasyPoints: number }>>`
+      SELECT DISTINCT ON ("playerId")
+        "playerId", "projectedFantasyPoints"
+      FROM "WeeklyProjection"
+      WHERE season = ${currentSeason}
+        AND week = ${currentWeek}
+        AND "modelVersion" = 'weekly-consensus-v2.0'
+      ORDER BY "playerId", "asOfDate" DESC, "createdAt" DESC
+    `.catch(() => []),
+    prisma.$queryRaw<Array<{ playerId: string; status: string }>>`
+      SELECT DISTINCT ON ("playerId")
+        "playerId", status
+      FROM "ProjectionAvailability"
+      WHERE season = ${currentSeason}
+        AND week = ${currentWeek}
+      ORDER BY "playerId", "asOfDate" DESC, "createdAt" DESC
+    `.catch(() => []),
+  ]);
+  const weeklyProjectionByPlayer = new Map(
+    weeklyProjectionRows.map((row) => [
+      row.playerId,
+      Number(row.projectedFantasyPoints) || 0,
+    ]),
+  );
+  const weeklyAvailabilityByPlayer = new Map(
+    weeklyAvailabilityRows.map((row) => [row.playerId, row.status]),
+  );
   const footballFallbackRows = missingPredictionIds.length
     ? await prisma.$queryRaw<FootballFallbackRow[]>`
         WITH latest_season AS (
@@ -230,10 +260,19 @@ export async function simulateDynastyBoys(iterations = 2500): Promise<LeagueSimu
         id: entry.playerId,
         position: entry.player.position,
         projectedPpg:
-          prediction?.projectedWeeklyPoints ??
-          footballFallbackPpg.get(entry.playerId) ??
-          FOOTBALL_FALLBACK_BASELINE[entry.player.position] ??
-          3,
+          weeklyAvailabilityByPlayer.get(entry.playerId) === "EXCLUDED"
+            ? 0
+            : weeklyProjectionByPlayer.get(entry.playerId) ??
+              (prediction &&
+              isDecisionGradeProductionSeason(
+                prediction.latestSeason,
+                prediction.games,
+                currentSeason,
+              )
+                ? prediction.projectedWeeklyPoints
+                : footballFallbackPpg.get(entry.playerId) ??
+                  FOOTBALL_FALLBACK_BASELINE[entry.player.position] ??
+                  3),
         slot: slotMap.get(`${manager.id}:${entry.playerId}`) ?? "BENCH",
       };
     });
@@ -291,11 +330,27 @@ export async function simulateDynastyBoys(iterations = 2500): Promise<LeagueSimu
       ).length / predictions.size
     : 0;
 
-  // When football evidence is sparse, weekly projections are mostly market-implied role estimates.
-  // Shrink season-outcome probabilities toward league-neutral priors so low coverage cannot create
-  // false precision. Once roughly a full league's starter pool has recent production (~35% of all
-  // rostered assets in this deep league), the simulation receives full weight.
-  const evidenceWeight = Math.max(0, Math.min(1, productionCoverage / 0.35));
+  const weeklyProjectionCoverage = playerIds.length
+    ? [...new Set([
+        ...weeklyProjectionRows.map((row) => row.playerId),
+        ...weeklyAvailabilityRows.map((row) => row.playerId),
+      ])].length / playerIds.length
+    : 0;
+
+  // The weekly consensus feed is now the preferred lineup input. Until it has
+  // classified most rostered players for the current week, keep season-outcome
+  // probabilities conservative and also retain the existing recent-production
+  // evidence gate. A player deliberately withheld for no current role counts as
+  // classified evidence, because the model knows not to invent fantasy volume.
+  const productionWeight = Math.max(0, Math.min(1, productionCoverage / 0.35));
+  const projectionWeight = Math.max(
+    0,
+    Math.min(1, weeklyProjectionCoverage / 0.75),
+  );
+  const evidenceWeight = Math.min(
+    1,
+    Math.max(productionWeight * 0.7, projectionWeight),
+  );
   const neutralPlayoffProbability = managers.length ? playoffTeams / managers.length : 0;
   const neutralTitleProbability = managers.length ? 1 / managers.length : 0;
   const neutralSeed = managers.length ? (managers.length + 1) / 2 : 1;
@@ -345,6 +400,7 @@ export async function simulateDynastyBoys(iterations = 2500): Promise<LeagueSimu
     scheduleSource: hasSleeperSchedule ? "SLEEPER" : "FALLBACK",
     completedWeeks,
     productionCoverage,
+    weeklyProjectionCoverage,
     evidenceWeight,
   };
 }
