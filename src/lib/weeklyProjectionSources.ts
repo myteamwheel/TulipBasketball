@@ -1,4 +1,9 @@
 import { normalizePlayerName } from "@/lib/normalize";
+import {
+  scoreFantasyStats,
+  VERIFIED_DYNASTY_BOIS_SCORING,
+  type FantasyScoringSettings,
+} from "@/lib/fantasyScoring";
 
 export type ProjectionStatLine = {
   completions: number;
@@ -71,18 +76,11 @@ const pick = (obj: Record<string, unknown>, ...keys: string[]) => {
   return 0;
 };
 
-export function halfPprFromStats(stats: ProjectionStatLine) {
-  return (
-    stats.passingYards / 25 +
-    stats.passingTds * 4 -
-    stats.interceptions * 2 +
-    stats.rushingYards / 10 +
-    stats.rushingTds * 6 +
-    stats.receptions * 0.5 +
-    stats.receivingYards / 10 +
-    stats.receivingTds * 6 -
-    stats.fumblesLost * 2
-  );
+export function halfPprFromStats(
+  stats: ProjectionStatLine,
+  scoring: FantasyScoringSettings = VERIFIED_DYNASTY_BOIS_SCORING,
+) {
+  return scoreFantasyStats(stats, scoring);
 }
 
 function sleeperStats(raw: Record<string, unknown>): ProjectionStatLine {
@@ -111,6 +109,7 @@ async function fetchSleeper(
   season: number,
   week: number,
   players: ProjectionPlayer[],
+  scoring: FantasyScoringSettings,
 ): Promise<ExternalWeeklyProjection[]> {
   const response = await fetch(
     `https://api.sleeper.app/v1/projections/nfl/regular/${season}/${week}`,
@@ -160,13 +159,7 @@ async function fetchSleeper(
       raw.stats && typeof raw.stats === "object"
         ? (raw.stats as Record<string, unknown>)
         : raw;
-    const pointsValue = pick(
-      rawStats,
-      "pts_half_ppr",
-      "pts_half",
-      "fantasy_points_half_ppr",
-    );
-    const points = n(pointsValue) || halfPprFromStats(stats);
+    const points = halfPprFromStats(stats, scoring);
     if (!Number.isFinite(points)) continue;
     rows.push({
       source: "SLEEPER",
@@ -250,6 +243,7 @@ async function fetchCbs(
   season: number,
   week: number,
   players: ProjectionPlayer[],
+  scoring: FantasyScoringSettings,
 ): Promise<ExternalWeeklyProjection[]> {
   const fetchedAt = new Date().toISOString();
   const rows: ExternalWeeklyProjection[] = [];
@@ -298,7 +292,7 @@ async function fetchCbs(
       const numbers = cells.slice(1).map(numericCell);
       const stats = cbsStats(position, numbers);
       if (!stats) continue;
-      const points = halfPprFromStats(stats);
+      const points = halfPprFromStats(stats, scoring);
       if (!Number.isFinite(points)) continue;
       rows.push({
         source: "CBS",
@@ -319,13 +313,14 @@ export async function fetchWeeklyProjectionSources(
   season: number,
   week: number,
   players: ProjectionPlayer[],
+  scoring: FantasyScoringSettings = VERIFIED_DYNASTY_BOIS_SCORING,
 ) {
   const statuses: ProjectionSourceStatus[] = [];
   const collected: ExternalWeeklyProjection[] = [];
 
   const [sleeperResult, cbsResult] = await Promise.allSettled([
-    fetchSleeper(season, week, players),
-    fetchCbs(season, week, players),
+    fetchSleeper(season, week, players, scoring),
+    fetchCbs(season, week, players, scoring),
   ]);
 
   if (sleeperResult.status === "fulfilled") {
