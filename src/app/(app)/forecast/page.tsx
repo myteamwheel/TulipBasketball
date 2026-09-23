@@ -329,7 +329,9 @@ export default async function ForecastPage() {
                     {r.opportunityPerGame === null
                       ? "opportunity unavailable"
                       : `${r.opportunityPerGame.toFixed(1)} opportunities/game`} ·{" "}
-                    {r.projectedWeeklyPoints.toFixed(1)} model weekly pts
+                    {weeklyProjectionByPlayer.has(r.playerId)
+                      ? `${weeklyProjectionByPlayer.get(r.playerId)?.toFixed(1)} consensus weekly pts`
+                      : "weekly projection unavailable"}
                   </div>
                 </Link>
               ))
