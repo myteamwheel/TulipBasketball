@@ -242,6 +242,8 @@ export async function startRefresh(): Promise<{ runId: string }> {
         "consensus",
         "draft_pick_market",
         "traded_pick_ownership",
+        "weekly_projections",
+        "daily_export_snapshot",
       ];
       return tx.refreshRun.create({
         data: {
