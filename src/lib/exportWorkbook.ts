@@ -124,7 +124,7 @@ export async function buildCompleteDataWorkbook() {
       ["League", SLEEPER_LEAGUE_ID],
       [
         "What is included",
-        "Every historical row currently retained by the dashboard for refreshes, roster snapshots, ownership, KTC, independent market feeds, consensus, transactions, football profiles, NFL game stats, model signals, weekly projections, and projection accuracy.",
+        "Every historical row currently retained by the dashboard for refreshes, roster snapshots, ownership, KTC, independent market feeds, consensus, transactions, football profiles, NFL game stats, model signals, weekly projections, projection eligibility/source inputs, and projection accuracy.",
       ],
       [
         "Daily append behavior",
@@ -282,15 +282,27 @@ export async function buildCompleteDataWorkbook() {
       },
       {
         name: "Weekly Projections",
-        description: "Every saved daily weekly projection snapshot",
+        description: "Every saved daily weekly projection snapshot, including external source inputs",
         sql: `
           SELECT wp."asOfDate", wp.season, wp.week, wp."playerName",
             wp.position, wp."nflTeam", wp."projectedFantasyPoints",
-            wp."projectedStats", wp.confidence, wp."sampleGames",
+            wp."expectedFantasyPoints", wp."projectedStats", wp."sourceInputs",
+            wp."sourceCount", wp.confidence, wp."sampleGames",
             wp."calibrationFactor", wp."modelVersion", wp."refreshRunId",
             wp."createdAt"
           FROM "WeeklyProjection" wp
           ORDER BY wp.season, wp.week, wp."asOfDate", wp."playerName"
+        `,
+      },
+      {
+        name: "Projection Eligibility",
+        description: "Daily record of projected, withheld, and already-played rostered players",
+        sql: `
+          SELECT pa."asOfDate", pa.season, pa.week, pa."playerName",
+            pa.position, pa."nflTeam", pa.status, pa.reason,
+            pa."sourceInputs", pa."refreshRunId", pa."createdAt"
+          FROM "ProjectionAvailability" pa
+          ORDER BY pa.season, pa.week, pa."asOfDate", pa."playerName"
         `,
       },
       {
