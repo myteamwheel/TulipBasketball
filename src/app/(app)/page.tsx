@@ -49,6 +49,9 @@ function providerDetail(
 ) {
   if (!stale) return "Fresh provider";
   const latest = run?.marketSourceStatuses.find((row) => row.source === source);
+  if (latest?.message?.toLowerCase().includes("disabled")) {
+    return "Disabled";
+  }
   if (latest?.ok === false) {
     return latest.message.includes("TRADYR_API_KEY")
       ? "API key required"
