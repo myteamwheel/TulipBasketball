@@ -23,6 +23,7 @@ import {
   recordDailyExportSnapshot,
   type ProjectionRefreshResult,
 } from "@/lib/weeklyProjection";
+import { recordAuditSnapshot, type AuditSnapshotData } from "@/lib/audit";
 
 const VISIBLE_SOURCES = new Set(["KTC", "TRADYR", "DYNASTY_DEALER", "STATSGUY"]);
 const REFRESH_LOCK_KEY = 731521527;
@@ -244,6 +245,7 @@ export async function startRefresh(): Promise<{ runId: string }> {
         "traded_pick_ownership",
         "weekly_projections",
         "daily_export_snapshot",
+        "audit_snapshot",
       ];
       return tx.refreshRun.create({
         data: {
@@ -281,6 +283,7 @@ async function executeRefresh(runId: string) {
   let footballUsage: FootballSyncResult | null = null;
   let projectionRefresh: ProjectionRefreshResult | null = null;
   let exportSnapshot: { snapshotDate: string; counts: Record<string, number> } | null = null;
+  let auditSnapshot: AuditSnapshotData | null = null;
   let fullKtcUniverse: {
     matched: number;
     committed: number;
@@ -550,12 +553,22 @@ async function executeRefresh(runId: string) {
     tradedPickOwnership,
     projectionRefresh,
     exportSnapshot,
+    auditSnapshot: null as { snapshotDate: string; generatedAt: string; changeCount: number } | null,
   };
+
+  // Persist the completed inputs before taking the immutable audit snapshot.
+  await prisma.refreshRun.update({ where: { id: runId }, data: { status, finishedAt: new Date(), sleeperSyncOk, ktcSyncOk, summary: JSON.stringify(summary) } });
+  if (status === "SUCCESS") {
+    try { auditSnapshot = await recordAuditSnapshot(runId); }
+    catch (error) { errors.push({ source: "audit_snapshot", message: error instanceof Error ? error.message : String(error) }); }
+  }
+
+  summary.auditSnapshot = auditSnapshot ? { snapshotDate: auditSnapshot.snapshotDate, generatedAt: auditSnapshot.generatedAt, changeCount: auditSnapshot.changes.length } : null;
 
   await prisma.refreshRun.update({
     where: { id: runId },
     data: {
-      status,
+      status: status === "SUCCESS" && !auditSnapshot ? "PARTIAL_FAILURE" : status,
       finishedAt: new Date(),
       sleeperSyncOk,
       ktcSyncOk,

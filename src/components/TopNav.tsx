@@ -7,6 +7,7 @@ const links = [
   { href: "/", label: "My Team" },
   { href: "/forecast", label: "Predictions" },
   { href: "/projections", label: "Projected Points" },
+  { href: "/audit", label: "Audit" },
   { href: "/league", label: "League" },
   { href: "/trade-finder", label: "Trade Lab" },
   { href: "/waivers", label: "Waivers" },
