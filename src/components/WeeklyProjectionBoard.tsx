@@ -1,7 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import type { WeeklyProjectionRow, ProjectedStatLine } from "@/lib/weeklyProjection";
+import type {
+  WeeklyProjectionRow,
+  ProjectedStatLine,
+  ProjectionAvailabilityRow,
+} from "@/lib/weeklyProjection";
 
 type SortKey =
   | "player"
@@ -17,9 +21,9 @@ const number = (value: number | null, digits = 1) =>
 function statLine(position: string, stats: ProjectedStatLine | null) {
   if (!stats) return "—";
   if (position === "QB") {
-    return `${stats.completions.toFixed(1)}/${stats.attempts.toFixed(1)} pass · ${stats.passingYards.toFixed(0)} yd · ${stats.passingTds.toFixed(2)} TD · ${stats.interceptions.toFixed(2)} INT · ${stats.carries.toFixed(1)} car · ${stats.rushingYards.toFixed(0)} rush yd · ${stats.rushingTds.toFixed(2)} rush TD`;
+    return `${Math.round(stats.completions)}/${Math.round(stats.attempts)} pass · ${Math.round(stats.passingYards)} yd · ${Math.round(stats.passingTds)} TD · ${Math.round(stats.interceptions)} INT · ${Math.round(stats.carries)} car · ${Math.round(stats.rushingYards)} rush yd · ${Math.round(stats.rushingTds)} rush TD`;
   }
-  return `${stats.carries.toFixed(1)} car · ${stats.rushingYards.toFixed(0)} rush yd · ${stats.rushingTds.toFixed(2)} rush TD · ${stats.targets.toFixed(1)} tgt · ${stats.receptions.toFixed(1)} rec · ${stats.receivingYards.toFixed(0)} rec yd · ${stats.receivingTds.toFixed(2)} rec TD`;
+  return `${Math.round(stats.carries)} car · ${Math.round(stats.rushingYards)} rush yd · ${Math.round(stats.rushingTds)} rush TD · ${Math.round(stats.targets)} tgt · ${Math.round(stats.receptions)} rec · ${Math.round(stats.receivingYards)} rec yd · ${Math.round(stats.receivingTds)} rec TD`;
 }
 
 function confidenceWeight(value: WeeklyProjectionRow["confidence"]) {
@@ -29,11 +33,13 @@ function confidenceWeight(value: WeeklyProjectionRow["confidence"]) {
 export default function WeeklyProjectionBoard({
   current,
   history,
+  unavailable,
   season,
   week,
 }: {
   current: WeeklyProjectionRow[];
   history: WeeklyProjectionRow[];
+  unavailable: ProjectionAvailabilityRow[];
   season: number;
   week: number;
 }) {
@@ -43,15 +49,15 @@ export default function WeeklyProjectionBoard({
   const [historySort, setHistorySort] = useState<SortKey>("accuracy");
   const [historyWeek, setHistoryWeek] = useState("ALL");
 
+  const matchesSearch = (name: string, team: string | null, pos: string) =>
+    (position === "ALL" || pos === position) &&
+    `${name} ${team ?? ""}`
+      .toLowerCase()
+      .includes(query.toLowerCase().trim());
+
   const filterRows = (rows: WeeklyProjectionRow[], key: SortKey) =>
     [...rows]
-      .filter(
-        (row) =>
-          (position === "ALL" || row.position === position) &&
-          `${row.playerName} ${row.nflTeam ?? ""}`
-            .toLowerCase()
-            .includes(query.toLowerCase().trim()),
-      )
+      .filter((row) => matchesSearch(row.playerName, row.nflTeam, row.position))
       .sort((a, b) => {
         if (key === "player") return a.playerName.localeCompare(b.playerName);
         if (key === "actual")
@@ -66,6 +72,9 @@ export default function WeeklyProjectionBoard({
       });
 
   const currentRows = filterRows(current, sort);
+  const unavailableRows = unavailable
+    .filter((row) => matchesSearch(row.playerName, row.nflTeam, row.position))
+    .sort((a, b) => a.playerName.localeCompare(b.playerName));
 
   const filteredHistory =
     historyWeek === "ALL"
@@ -91,6 +100,16 @@ export default function WeeklyProjectionBoard({
 
   return (
     <div className="space-y-6">
+      <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-3 text-[10px] leading-5 text-neutral-500">
+        <span className="font-semibold text-neutral-300">Projection rules: </span>
+        a player must have a current NFL team, not be marked unavailable, and
+        have a meaningful weekly role supported by Sleeper and/or CBS. The
+        displayed NFL stat line is a concrete whole-number prediction; fantasy
+        points are calculated from that stat line. External expected-value inputs
+        can contain decimals internally, but fractional touchdowns are never
+        shown as the predicted real-life result.
+      </div>
+
       <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
         <input
           value={query}
@@ -120,7 +139,8 @@ export default function WeeklyProjectionBoard({
               {season} Week {week} projections
             </h2>
             <p className="text-[10px] text-neutral-500">
-              Latest pregame projection for each rostered player. Players who have already played are not reprojected after their result is known.
+              Consensus-informed pregame projections only for players with a
+              supported Week {week} role.
             </p>
           </div>
           <select
@@ -134,15 +154,14 @@ export default function WeeklyProjectionBoard({
           </select>
         </div>
         <div className="overflow-x-auto rounded-lg border border-neutral-800">
-          <table className="w-full min-w-[1040px] text-xs">
+          <table className="w-full min-w-[1080px] text-xs">
             <thead>
               <tr className="bg-neutral-950 text-[9px] uppercase tracking-wide text-neutral-600">
                 <th className="px-2.5 py-2 text-left">Player</th>
                 <th className="px-2 py-2 text-right">Proj FP</th>
-                <th className="px-2 py-2 text-right">Actual FP</th>
-                <th className="px-2 py-2 text-left">Projected NFL stat line</th>
+                <th className="px-2 py-2 text-left">Predicted NFL stat line</th>
+                <th className="px-2 py-2 text-left">Sources</th>
                 <th className="px-2 py-2 text-right">Sample</th>
-                <th className="px-2 py-2 text-right">Calibration</th>
                 <th className="px-2 py-2 text-right">Confidence</th>
                 <th className="px-2 py-2 text-right">As of</th>
               </tr>
@@ -159,31 +178,76 @@ export default function WeeklyProjectionBoard({
                   <td className="px-2 py-2 text-right text-base font-semibold tabular-nums text-emerald-300">
                     {row.projectedFantasyPoints.toFixed(1)}
                   </td>
-                  <td className="px-2 py-2 text-right tabular-nums text-neutral-300">
-                    {number(row.actualFantasyPoints)}
-                  </td>
                   <td className="max-w-[520px] px-2 py-2 text-[10px] leading-4 text-neutral-300">
                     {statLine(row.position, row.projectedStats)}
                   </td>
-                  <td className="px-2 py-2 text-right text-neutral-400">{row.sampleGames} g</td>
-                  <td className="px-2 py-2 text-right text-neutral-400">
-                    {row.calibrationFactor.toFixed(2)}×
+                  <td className="px-2 py-2 text-[10px] text-neutral-400">
+                    {row.sourceNames.length ? row.sourceNames.join(" + ") : "Local only"}
                   </td>
+                  <td className="px-2 py-2 text-right text-neutral-400">{row.sampleGames} g</td>
                   <td className="px-2 py-2 text-right text-neutral-400">{row.confidence}</td>
                   <td className="px-2 py-2 text-right text-neutral-500">{row.asOfDate}</td>
                 </tr>
               ))}
+              {!currentRows.length ? (
+                <tr>
+                  <td colSpan={7} className="px-3 py-8 text-center text-xs text-neutral-600">
+                    No supported projections match these filters.
+                  </td>
+                </tr>
+              ) : null}
             </tbody>
           </table>
         </div>
       </section>
+
+      {unavailableRows.length ? (
+        <section className="space-y-2">
+          <div>
+            <h2 className="text-sm font-semibold text-neutral-100">
+              Not projected
+            </h2>
+            <p className="text-[10px] text-neutral-500">
+              Rostered players deliberately withheld instead of receiving a
+              fabricated projection.
+            </p>
+          </div>
+          <div className="overflow-x-auto rounded-lg border border-neutral-800">
+            <table className="w-full min-w-[720px] text-xs">
+              <thead>
+                <tr className="bg-neutral-950 text-[9px] uppercase tracking-wide text-neutral-600">
+                  <th className="px-2.5 py-2 text-left">Player</th>
+                  <th className="px-2 py-2 text-left">Reason</th>
+                  <th className="px-2 py-2 text-left">Sources seen</th>
+                </tr>
+              </thead>
+              <tbody>
+                {unavailableRows.map((row) => (
+                  <tr key={row.playerId} className="border-t border-neutral-800 bg-neutral-900/50">
+                    <td className="px-2.5 py-2">
+                      <div className="font-medium text-neutral-200">{row.playerName}</div>
+                      <div className="text-[9px] text-neutral-600">
+                        {row.position}{row.nflTeam ? ` · ${row.nflTeam}` : ""}
+                      </div>
+                    </td>
+                    <td className="px-2 py-2 text-[10px] text-neutral-400">{row.reason}</td>
+                    <td className="px-2 py-2 text-[10px] text-neutral-500">
+                      {row.sourceNames.length ? row.sourceNames.join(" + ") : "None"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
 
       <section className="space-y-2">
         <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto] sm:items-end">
           <div>
             <h2 className="text-sm font-semibold text-neutral-100">Projection accuracy history</h2>
             <p className="text-[10px] text-neutral-500">
-              Uses the latest projection made before each player&apos;s game. MAE {mae === null ? "—" : mae.toFixed(2)} points · mean accuracy {meanAccuracy === null ? "—" : `${meanAccuracy.toFixed(1)}%`}.
+              Uses the latest saved pregame projection. MAE {mae === null ? "—" : mae.toFixed(2)} points · mean accuracy {meanAccuracy === null ? "—" : `${meanAccuracy.toFixed(1)}%`}.
             </p>
           </div>
           <select
