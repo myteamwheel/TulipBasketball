@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { prisma } from "@/lib/prisma";
 import { SLEEPER_LEAGUE_ID } from "@/lib/config";
 import { ensureAnalyticsStorage } from "@/lib/weeklyProjection";
+import { getAuditDashboardData } from "@/lib/audit";
 
 type Row = Record<string, unknown>;
 
@@ -30,11 +31,7 @@ function excelValue(value: unknown): string | number | boolean | Date | null {
 }
 
 async function query(sql: string) {
-  try {
-    return await prisma.$queryRawUnsafe<Row[]>(sql);
-  } catch {
-    return [];
-  }
+  return prisma.$queryRawUnsafe<Row[]>(sql);
 }
 
 function createStreamingWorkbook(filePath: string) {
@@ -102,8 +99,12 @@ function addRows(
   sheet.commit();
 }
 
-export async function buildCompleteDataWorkbook() {
+export async function buildCompleteDataWorkbook(options?: {
+  auditDate?: string | null;
+  auditOnly?: boolean;
+}) {
   await ensureAnalyticsStorage();
+  const audit = options?.auditOnly ? await getAuditDashboardData(options.auditDate) : null;
 
   const leagueClause = `l."sleeperId" = '${SLEEPER_LEAGUE_ID.replaceAll("'", "''")}'`;
   const tempPath = join(
@@ -113,6 +114,99 @@ export async function buildCompleteDataWorkbook() {
   const workbook = createStreamingWorkbook(tempPath);
 
   try {
+    if (audit) {
+    addRows(
+      workbook,
+      "Audit Overview",
+      [
+        {
+          snapshotDate: audit.data.snapshotDate,
+          generatedAt: audit.data.generatedAt,
+          team: audit.data.team.teamName,
+          totalDynastyValue: audit.data.team.totalDynastyValue,
+          totalRank: audit.data.team.totalRank,
+          playerCapital: audit.data.team.playerCapital,
+          playerRank: audit.data.team.playerRank,
+          draftCapital: audit.data.team.draftCapital,
+          draftRank: audit.data.team.draftRank,
+          optimalLineupValue: audit.data.team.optimalLineupValue,
+          lineupRank: audit.data.team.lineupRank,
+          depthValue: audit.data.team.depthValue,
+          depthRank: audit.data.team.depthRank,
+          valuedPlayers: audit.data.team.valuedPlayerCount,
+          rosteredPlayers: audit.data.team.playerCount,
+          projectionCoverage: audit.data.projection.coverage,
+          latestRefreshStatus: audit.data.health.latestRefreshStatus,
+        },
+      ],
+      "Orlando Oswalds current audit summary",
+    );
+    addRows(
+      workbook,
+      "Audit Changes",
+      audit.data.changes.map((change) => ({ ...change })),
+      "Material changes from the previous validated audit snapshot",
+    );
+    addRows(
+      workbook,
+      "Team Comparison",
+      audit.data.league.map((team) => ({
+        team: team.teamName,
+        totalDynastyValue: team.totalDynastyValue,
+        totalRank: team.totalRank,
+        playerCapital: team.playerCapital,
+        playerRank: team.playerRank,
+        draftCapital: team.draftCapital,
+        draftRank: team.draftRank,
+        optimalLineupValue: team.optimalLineupValue,
+        lineupRank: team.lineupRank,
+        depthValue: team.depthValue,
+        depthRank: team.depthRank,
+        qbRank: team.positionRanks.QB,
+        rbRank: team.positionRanks.RB,
+        wrRank: team.positionRanks.WR,
+        teRank: team.positionRanks.TE,
+        rosteredPlayers: team.playerCount,
+        valuedPlayers: team.valuedPlayerCount,
+        futurePicks: team.draftPickCount,
+      })),
+      "Every Dynasty Bois team ranked by current player, pick, lineup and depth capital",
+    );
+    addRows(
+      workbook,
+      "Orlando Roster",
+      audit.data.roster.map((player) => ({ ...player })),
+      "Current Orlando Oswalds roster with current values and recent changes",
+    );
+    addRows(
+      workbook,
+      "Orlando Picks",
+      audit.data.picks.map((pick) => ({ ...pick })),
+      "Current future-pick inventory and modeled values",
+    );
+    addRows(
+      workbook,
+      "Orlando Activity",
+      audit.data.activity.map((row) => ({ ...row })),
+      "Trades, waivers, free-agent additions and drops by season",
+    );
+    addRows(
+      workbook,
+      "Audit Recommendations",
+      audit.data.recommendations.map((row) => ({ ...row })),
+      "Current data-based prompts plus durable historical audit findings",
+    );
+    addRows(
+      workbook,
+      "Audit Trends",
+      [...audit.snapshots].reverse().map((snapshot) => ({ ...snapshot })),
+      "Validated Orlando audit snapshots over time",
+    );
+
+    await workbook.commit();
+    return await readFile(tempPath);
+    }
+
     const readme = workbook.addWorksheet("README");
     readme.getColumn(1).width = 28;
     readme.getColumn(2).width = 92;
@@ -124,7 +218,7 @@ export async function buildCompleteDataWorkbook() {
       ["League", SLEEPER_LEAGUE_ID],
       [
         "What is included",
-        "Every historical row currently retained by the dashboard for refreshes, roster snapshots, ownership, KTC, independent market feeds, consensus, transactions, football profiles, NFL game stats, model signals, weekly projections, projection eligibility/source inputs, and projection accuracy.",
+        "This workbook includes every historical row currently retained by the dashboard for refreshes, roster snapshots, ownership, KTC, independent market feeds, consensus, transactions, football profiles, NFL game stats, model signals, weekly projections, projection eligibility/source inputs, and projection accuracy.",
       ],
       [
         "Daily append behavior",

@@ -51,6 +51,7 @@ export default async function ForecastPage() {
     ),
     rows = [...models.values()],
     mySim = simulation.rows.find((r) => r.managerId === primary.id),
+    weeklyForecastReady = simulation.weeklyProjectionCoverage >= 0.75,
     managerById = new Map(managers.map((m) => [m.id, m])),
     modelGaps = rows
       .filter(
@@ -92,8 +93,7 @@ export default async function ForecastPage() {
       forecast1y: model.forecast1y.mean,
       projectedPpg: weeklyWithheld.has(entry.playerId)
         ? 0
-        : weeklyProjectionByPlayer.get(entry.playerId) ??
-          model.projectedWeeklyPoints,
+        : weeklyProjectionByPlayer.get(entry.playerId) ?? 0,
       slot: slotMap.get(`${entry.managerId}:${entry.playerId}`) ?? "BENCH",
     });
   }
@@ -169,7 +169,7 @@ export default async function ForecastPage() {
           title="Orlando forecast"
           description={`League simulation · ${simulation.iterations.toLocaleString("en-US")} seasons · ${simulation.scheduleSource === "SLEEPER" ? "Sleeper schedule" : "balanced fallback schedule"}.`}
         />
-        {mySim ? (
+        {mySim && weeklyForecastReady ? (
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
             <MetricCard
               label="Weekly projection"
@@ -200,7 +200,14 @@ export default async function ForecastPage() {
               detail={`${simulation.completedWeeks} completed weeks in model`}
             />
           </div>
-        ) : null}
+        ) : (
+          <div className="rounded-lg border border-amber-900/70 bg-amber-950/20 p-4 text-sm text-amber-200">
+            Weekly and season-outcome forecast cards are unavailable until the
+            current consensus pass classifies at least 75% of rostered skill
+            players. Current coverage is{" "}
+            {Math.round(simulation.weeklyProjectionCoverage * 100)}%.
+          </div>
+        )}
         <p className="mt-2 text-[9px] leading-4 text-neutral-600">
           Simulation probabilities are model outputs, not betting probabilities.
           The canonical weekly-consensus projection feed now drives lineup
@@ -212,6 +219,7 @@ export default async function ForecastPage() {
           system.
         </p>
       </section>
+      {weeklyForecastReady ? (
       <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3 sm:p-4">
         <SectionHeader
           title="Dynasty Boys title race"
@@ -265,6 +273,7 @@ export default async function ForecastPage() {
           </table>
         </div>
       </section>
+      ) : null}
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3">
           <SectionHeader

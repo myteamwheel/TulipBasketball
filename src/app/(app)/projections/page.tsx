@@ -1,12 +1,16 @@
 import MetricCard from "@/components/MetricCard";
 import SectionHeader from "@/components/SectionHeader";
 import WeeklyProjectionBoard from "@/components/WeeklyProjectionBoard";
+import { getLeague } from "@/lib/sleeper";
+import { SLEEPER_LEAGUE_ID } from "@/lib/config";
+import { unsupportedNonzeroScoring } from "@/lib/fantasyScoring";
 import { getProjectionDashboardData } from "@/lib/weeklyProjection";
 
 export const dynamic = "force-dynamic";
 
 export default async function ProjectionsPage() {
-  const data = await getProjectionDashboardData();
+  const [data, league] = await Promise.all([getProjectionDashboardData(), getLeague(SLEEPER_LEAGUE_ID)]);
+  const omittedScoring = unsupportedNonzeroScoring(league.scoring_settings);
   const graded = data.history.filter((row) => row.absoluteError !== null);
   const mae = graded.length
     ? graded.reduce((sum, row) => sum + (row.absoluteError ?? 0), 0) / graded.length
@@ -62,6 +66,8 @@ export default async function ProjectionsPage() {
           />
         </div>
       </section>
+
+      {omittedScoring.length > 0 && <p className="rounded-lg border border-amber-900 bg-amber-950/20 p-3 text-xs leading-5 text-amber-200">Projection totals apply the league’s core passing, rushing, receiving and lost-fumble scoring. The feeds do not consistently project these additional scoring events: {omittedScoring.map(row => row.key).join(", ")}. Totals and model accuracy therefore cover core scoring, and can differ from the final Sleeper score.</p>}
 
       <WeeklyProjectionBoard
         current={data.current}

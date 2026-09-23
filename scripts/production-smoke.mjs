@@ -1,5 +1,5 @@
 const base = process.env.DASHBOARD_URL || "https://dynasty-boys-dashboard.vercel.app";
-const pages = ["/", "/league", "/forecast", "/projections", "/trade-finder", "/waivers", "/transactions", "/players", "/settings", "/refresh-history", "/data-export"];
+const pages = ["/", "/league", "/forecast", "/projections", "/audit", "/audit/research", "/trade-finder", "/waivers", "/transactions", "/players", "/settings", "/refresh-history", "/data-export"];
 let failed = false;
 
 for (const path of pages) {

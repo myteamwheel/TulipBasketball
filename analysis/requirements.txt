@@ -1,0 +1,6 @@
+pandas>=2.2,<3
+numpy>=1.26,<3
+pyarrow>=18,<24
+scipy>=1.14,<2
+statsmodels>=0.14,<0.15
+reportlab>=4,<5

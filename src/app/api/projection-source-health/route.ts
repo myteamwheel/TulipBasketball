@@ -1,3 +1,4 @@
+import { getProjectionDashboardData } from "@/lib/weeklyProjection";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { SLEEPER_LEAGUE_ID } from "@/lib/config";
@@ -43,32 +44,18 @@ export async function GET() {
 
   const league = await getLeague(SLEEPER_LEAGUE_ID).catch(() => null);
   const scoring = scoringFromSleeperSettings(league?.scoring_settings);
-  const [bundle, storedProjectionRows, storedAvailabilityRows] = await Promise.all([
+  const [bundle, stored] = await Promise.all([
     fetchWeeklyProjectionSources(season, week, players, scoring),
-    prisma.$queryRaw<Array<{ playerId: string }>>`
-      SELECT DISTINCT ON ("playerId") "playerId"
-      FROM "WeeklyProjection"
-      WHERE season = ${season}
-        AND week = ${week}
-        AND "modelVersion" = 'weekly-consensus-v2.0'
-      ORDER BY "playerId", "asOfDate" DESC, "createdAt" DESC
-    `,
-    prisma.$queryRaw<Array<{ playerId: string; status: string }>>`
-      SELECT DISTINCT ON ("playerId") "playerId", status
-      FROM "ProjectionAvailability"
-      WHERE season = ${season}
-        AND week = ${week}
-      ORDER BY "playerId", "asOfDate" DESC, "createdAt" DESC
-    `,
+    getProjectionDashboardData(),
   ]);
   const playersWithAnySource = bundle.byPlayer.size;
-  const storedProjected = storedProjectionRows.length;
-  const storedWithheld = storedAvailabilityRows.filter(
+  const storedProjected = stored.current.length;
+  const storedWithheld = stored.unavailable.filter(
     (row) => row.status === "EXCLUDED",
   ).length;
   const storedClassified = new Set([
-    ...storedProjectionRows.map((row) => row.playerId),
-    ...storedAvailabilityRows.map((row) => row.playerId),
+    ...stored.current.map((row) => row.playerId),
+    ...stored.unavailable.map((row) => row.playerId),
   ]).size;
   const sourceCoverage = Object.fromEntries(
     bundle.statuses.map((status) => [

@@ -4,6 +4,7 @@ import {
   recordDailyExportSnapshot,
   refreshWeeklyProjections,
 } from "@/lib/weeklyProjection";
+import { recordAuditSnapshot } from "@/lib/audit";
 
 export const maxDuration = 180;
 export const dynamic = "force-dynamic";
@@ -78,12 +79,18 @@ export async function GET(
       );
     }
     const exportSnapshot = await recordDailyExportSnapshot(null);
+    const auditSnapshot = await recordAuditSnapshot(null);
     return NextResponse.json({
       ok: true,
       slot,
       scheduledFor: "12:00 America/New_York",
       projectionRefresh,
       exportSnapshot,
+      auditSnapshot: {
+        snapshotDate: auditSnapshot.snapshotDate,
+        generatedAt: auditSnapshot.generatedAt,
+        changeCount: auditSnapshot.changes.length,
+      },
     });
   } catch (error) {
     return NextResponse.json(

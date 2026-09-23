@@ -1,3 +1,4 @@
+import { getProjectionDashboardData } from "@/lib/weeklyProjection";
 import { prisma } from "@/lib/prisma";
 import { SLEEPER_LEAGUE_ID } from "@/lib/config";
 import { getAllCurrentRosterEntries, getAllManagers } from "@/lib/queries";
@@ -38,39 +39,6 @@ export interface LeagueSimulationResult {
   productionCoverage: number;
   weeklyProjectionCoverage: number;
   evidenceWeight: number;
-}
-
-type FootballFallbackRow = {
-  playerId: string;
-  position: string;
-  season: number;
-  games: bigint;
-  fantasyPpg: number;
-};
-
-const FOOTBALL_FALLBACK_BASELINE: Record<string, number> = {
-  QB: 8,
-  RB: 4,
-  WR: 4,
-  TE: 3.5,
-};
-
-function conservativeFootballFallbackPpg(row: FootballFallbackRow, currentSeason: number) {
-  const baseline = FOOTBALL_FALLBACK_BASELINE[row.position] ?? 3;
-  const games = Number(row.games);
-  if (!Number.isFinite(row.fantasyPpg) || games < 3) return baseline;
-
-  // A missing market value must not become fake negative evidence, but old or
-  // tiny football samples must not be accepted at face value either. Regress
-  // the latest-season PPG toward a conservative positional baseline according
-  // to sample size and recency.
-  const sampleWeight = Math.min(1, games / 12);
-  const seasonsOld = Math.max(0, currentSeason - row.season);
-  const recencyWeight = seasonsOld <= 1 ? 1 : seasonsOld === 2 ? 0.35 : 0.15;
-  const evidenceWeight = sampleWeight * recencyWeight;
-  const projected = baseline + (row.fantasyPpg - baseline) * evidenceWeight;
-  const ceiling = row.position === "QB" ? 24 : 20;
-  return Math.max(0.5, Math.min(ceiling, projected));
 }
 
 function fallbackWeeks(ids: string[], count: number): SimulationWeek[] {
@@ -130,66 +98,12 @@ export async function simulateDynastyBoys(iterations = 2500): Promise<LeagueSimu
 
   const playerIds = entries.map((entry) => entry.playerId);
   const predictions = await getPredictivePlayerModels(playerIds);
-  const missingPredictionIds = playerIds.filter((playerId) => !predictions.has(playerId));
   const currentSeason = Number(state?.season ?? league?.season) || new Date().getUTCFullYear();
-  const currentWeek = Math.max(1, Number(state?.week ?? 1));
-  const [weeklyProjectionRows, weeklyAvailabilityRows] = await Promise.all([
-    prisma.$queryRaw<Array<{ playerId: string; projectedFantasyPoints: number }>>`
-      SELECT DISTINCT ON ("playerId")
-        "playerId", "projectedFantasyPoints"
-      FROM "WeeklyProjection"
-      WHERE season = ${currentSeason}
-        AND week = ${currentWeek}
-        AND "modelVersion" = 'weekly-consensus-v2.0'
-      ORDER BY "playerId", "asOfDate" DESC, "createdAt" DESC
-    `.catch(() => []),
-    prisma.$queryRaw<Array<{ playerId: string; status: string }>>`
-      SELECT DISTINCT ON ("playerId")
-        "playerId", status
-      FROM "ProjectionAvailability"
-      WHERE season = ${currentSeason}
-        AND week = ${currentWeek}
-      ORDER BY "playerId", "asOfDate" DESC, "createdAt" DESC
-    `.catch(() => []),
-  ]);
-  const weeklyProjectionByPlayer = new Map(
-    weeklyProjectionRows.map((row) => [
-      row.playerId,
-      Number(row.projectedFantasyPoints) || 0,
-    ]),
-  );
-  const weeklyAvailabilityByPlayer = new Map(
-    weeklyAvailabilityRows.map((row) => [row.playerId, row.status]),
-  );
-  const footballFallbackRows = missingPredictionIds.length
-    ? await prisma.$queryRaw<FootballFallbackRow[]>`
-        WITH latest_season AS (
-          SELECT "playerId", MAX(season) AS season
-          FROM "PlayerGameStat"
-          WHERE "seasonType" = 'REG' AND "playerId" = ANY(${missingPredictionIds}::text[])
-          GROUP BY "playerId"
-        )
-        SELECT
-          s."playerId",
-          p.position,
-          s.season,
-          COUNT(*) AS games,
-          AVG(g."fantasyHalfPpr")::float8 AS "fantasyPpg"
-        FROM latest_season s
-        JOIN "PlayerGameStat" g
-          ON g."playerId" = s."playerId"
-         AND g.season = s.season
-         AND g."seasonType" = 'REG'
-        JOIN "Player" p ON p.id = s."playerId"
-        GROUP BY s."playerId", p.position, s.season
-      `
-    : [];
-  const footballFallbackPpg = new Map(
-    footballFallbackRows.map((row) => [
-      row.playerId,
-      conservativeFootballFallbackPpg(row, currentSeason),
-    ]),
-  );
+  const weekly = await getProjectionDashboardData();
+  const weeklyProjectionRows = weekly.current;
+  const weeklyAvailabilityRows = weekly.unavailable;
+  const weeklyProjectionByPlayer = new Map(weekly.current.map(row => [row.playerId, row.projectedFantasyPoints]));
+  const weeklyAvailabilityByPlayer = new Map(weekly.unavailable.map(row => [row.playerId, row.status]));
 
   const byManager = new Map<string, typeof entries>();
   for (const entry of entries) {
@@ -255,24 +169,13 @@ export async function simulateDynastyBoys(iterations = 2500): Promise<LeagueSimu
   const teamInputs = managers.map((manager) => {
     const roster = byManager.get(manager.id) ?? [];
     const lineupAssets = roster.map((entry) => {
-      const prediction = predictions.get(entry.playerId);
       return {
         id: entry.playerId,
         position: entry.player.position,
         projectedPpg:
           weeklyAvailabilityByPlayer.get(entry.playerId) === "EXCLUDED"
             ? 0
-            : weeklyProjectionByPlayer.get(entry.playerId) ??
-              (prediction &&
-              isDecisionGradeProductionSeason(
-                prediction.latestSeason,
-                prediction.games,
-                currentSeason,
-              )
-                ? prediction.projectedWeeklyPoints
-                : footballFallbackPpg.get(entry.playerId) ??
-                  FOOTBALL_FALLBACK_BASELINE[entry.player.position] ??
-                  3),
+            : weeklyProjectionByPlayer.get(entry.playerId) ?? 0,
         slot: slotMap.get(`${manager.id}:${entry.playerId}`) ?? "BENCH",
       };
     });
@@ -330,12 +233,9 @@ export async function simulateDynastyBoys(iterations = 2500): Promise<LeagueSimu
       ).length / predictions.size
     : 0;
 
-  const weeklyProjectionCoverage = playerIds.length
-    ? [...new Set([
-        ...weeklyProjectionRows.map((row) => row.playerId),
-        ...weeklyAvailabilityRows.map((row) => row.playerId),
-      ])].length / playerIds.length
-    : 0;
+  const skillIds = new Set(entries.filter(entry => ["QB", "RB", "WR", "TE"].includes(entry.player.position)).map(entry => entry.playerId));
+  const classifiedIds = new Set([...weeklyProjectionRows.map(row => row.playerId), ...weeklyAvailabilityRows.filter(row => row.status === "EXCLUDED").map(row => row.playerId)]);
+  const weeklyProjectionCoverage = skillIds.size ? [...skillIds].filter(id => classifiedIds.has(id)).length / skillIds.size : 0;
 
   // The weekly consensus feed is now the preferred lineup input. Until it has
   // classified most rostered players for the current week, keep season-outcome
@@ -356,7 +256,7 @@ export async function simulateDynastyBoys(iterations = 2500): Promise<LeagueSimu
   const neutralSeed = managers.length ? (managers.length + 1) / 2 : 1;
   const neutralRemainingWins = schedule.length * 0.5;
 
-  const rows: LeagueSimulationRow[] = teamInputs
+  const rows: LeagueSimulationRow[] = (weeklyProjectionCoverage >= 0.75 ? teamInputs : [])
     .map((team) => {
       const outcome = outcomeById.get(team.manager.id)!;
       const baseWinTotal = baseWins.get(team.manager.id) ?? 0;

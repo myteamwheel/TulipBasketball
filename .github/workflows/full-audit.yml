@@ -1,0 +1,75 @@
+name: Rebuild research for the existing Dynasty Bois website
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 12 * * *'
+    - cron: '0 13 * * *'
+
+# Publish only to the user's existing website. No releases, commits, public
+# artifacts or additional hosting destinations are created by this workflow.
+permissions:
+  contents: read
+concurrency:
+  group: dynasty-bois-research
+  cancel-in-progress: false
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select the 8 a.m. Eastern schedule
+        id: slot
+        env:
+          EVENT: ${{ github.event_name }}
+          SCHEDULE: ${{ github.event.schedule }}
+        run: |
+          python3 - <<'PY'
+          import datetime,os
+          from zoneinfo import ZoneInfo
+          offset=datetime.datetime.now(ZoneInfo('America/New_York')).utcoffset().total_seconds()/3600
+          expected=f'0 {int(8-offset)} * * *'
+          with open(os.environ['GITHUB_OUTPUT'],'a') as f:
+              f.write('run='+str(os.environ['EVENT']=='workflow_dispatch' or os.environ['SCHEDULE']==expected).lower()+'\n')
+          PY
+      - name: Check the website publication credential
+        if: steps.slot.outputs.run == 'true'
+        env:
+          AUDIT_INGEST_TOKEN: ${{ secrets.AUDIT_INGEST_TOKEN }}
+        run: |
+          python3 -c 'import os; assert len(os.environ.get("AUDIT_INGEST_TOKEN", "")) >= 32, "Configure the same dedicated AUDIT_INGEST_TOKEN on the website and this workflow"'
+      - uses: actions/setup-python@v5
+        if: steps.slot.outputs.run == 'true'
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        if: steps.slot.outputs.run == 'true'
+        with:
+          node-version: '22'
+      - uses: actions/cache@v4
+        if: steps.slot.outputs.run == 'true'
+        with:
+          path: |
+            ${{ runner.temp }}/portfolio/raw
+            ${{ runner.temp }}/portfolio/reference
+          key: full-audit-v1-${{ github.run_id }}
+          restore-keys: full-audit-v1-
+      - name: Install the original analysis dependencies
+        if: steps.slot.outputs.run == 'true'
+        run: |
+          pip install -r analysis/requirements.txt
+          npm ci --ignore-scripts --no-audit --no-fund
+      - name: Rebuild all research tables and both downloads
+        if: steps.slot.outputs.run == 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/previous"
+          curl --fail --location --retry 2 'https://dynasty-boys-dashboard.vercel.app/api/audit/research?file=tables.json.gz' -o "$RUNNER_TEMP/previous/tables.json.gz"
+          python analysis/run.py --work-dir "$RUNNER_TEMP/portfolio" --output-dir "$RUNNER_TEMP/audit" --previous "$RUNNER_TEMP/previous/tables.json.gz"
+      - name: Publish the validated pass to the existing website
+        if: steps.slot.outputs.run == 'true'
+        env:
+          AUDIT_INGEST_TOKEN: ${{ secrets.AUDIT_INGEST_TOKEN }}
+        run: python analysis/publish.py "$RUNNER_TEMP/audit"

@@ -12,3 +12,8 @@ next-env.d.ts
 src/generated/
 scripts/nba-career-games.json
 scripts/nba-player-index.json
+.vercel
+.env*
+
+# Python analysis runtime caches
+analysis/**/__pycache__/

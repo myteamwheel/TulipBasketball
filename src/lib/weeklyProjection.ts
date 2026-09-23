@@ -1,3 +1,4 @@
+import { getNflSchedule, scheduleTeam, type ScheduledGame } from "@/lib/nflSchedule";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { SLEEPER_LEAGUE_ID } from "@/lib/config";
@@ -112,7 +113,7 @@ type PlayerRow = {
   currentValue: number | null;
 };
 
-const MODEL_VERSION = "weekly-consensus-v2.0";
+export const MODEL_VERSION = "weekly-consensus-v2.0";
 
 const EMPTY_STATS: ProjectedStatLine = {
   completions: 0,
@@ -568,10 +569,14 @@ async function calibrationByPosition(season: number, week: number) {
   return map;
 }
 
-async function gradeExistingProjections(scoring: FantasyScoringSettings) {
+async function gradeExistingProjections(scoring: FantasyScoringSettings, schedule: ScheduledGame[]) {
   const rows = await prisma.$queryRawUnsafe<
     Array<{
       id: string;
+      season: number;
+      week: number;
+      team: string;
+      createdAt: Date;
       projectedFantasyPoints: number;
       fantasyHalfPpr: number;
       completions: number;
@@ -589,7 +594,7 @@ async function gradeExistingProjections(scoring: FantasyScoringSettings) {
       fumblesLost: number;
     }>
   >(`
-    SELECT wp.id, wp."projectedFantasyPoints", gs."fantasyHalfPpr",
+    SELECT wp.id, wp.season, wp.week, gs.team, wp."createdAt", wp."projectedFantasyPoints", gs."fantasyHalfPpr",
       gs.completions, gs.attempts, gs."passingYards", gs."passingTds",
       gs.interceptions, gs.carries, gs."rushingYards", gs."rushingTds",
       gs.targets, gs.receptions, gs."receivingYards", gs."receivingTds",
@@ -604,6 +609,8 @@ async function gradeExistingProjections(scoring: FantasyScoringSettings) {
   `);
   let graded = 0;
   for (const row of rows) {
+    const game = schedule.find(game => game.season === row.season && game.week === row.week && game.teams.includes(scheduleTeam(row.team)));
+    if (!game?.completed || new Date(row.createdAt).getTime() >= game.kickoff) continue;
     const actualStats: ProjectedStatLine = {
       completions: Number(row.completions) || 0,
       attempts: Number(row.attempts) || 0,
@@ -665,16 +672,16 @@ export async function refreshWeeklyProjections(
   refreshRunId: string | null,
 ): Promise<ProjectionRefreshResult> {
   await ensureAnalyticsStorage();
-  const state = await getNflState().catch(() => null);
-  const season = Number(state?.season ?? new Date().getUTCFullYear());
-  const week = Math.max(1, Number(state?.week ?? 1));
-  const [players, allGames, catalog, league] = await Promise.all([
+  const state = await getNflState();
+  const season = Number(state.season);
+  const week = Number(state.week);
+  if (!Number.isInteger(season) || !Number.isInteger(week) || week < 1 || week > 18 || !String(state.season_type).startsWith("reg")) throw new Error("Regular-season weekly projections are not currently available");
+  const [players, allGames, catalog, league, schedule] = await Promise.all([
     currentPlayers(),
     footballGames(season),
-    getPlayerCatalog().catch(
-      () => ({} as Awaited<ReturnType<typeof getPlayerCatalog>>),
-    ),
+    getPlayerCatalog(),
     getLeague(SLEEPER_LEAGUE_ID),
+    getNflSchedule(season),
   ]);
   const scoring = scoringFromSleeperSettings(league.scoring_settings);
   const sourceBundle = await fetchWeeklyProjectionSources(
@@ -688,7 +695,10 @@ export async function refreshWeeklyProjections(
     })),
     scoring,
   );
-  const graded = await gradeExistingProjections(scoring);
+  if (!sourceBundle.statuses.some(source => source.ok && source.rows >= 25)) {
+    throw new Error("No healthy weekly projection feed; preserving the previous pass.");
+  }
+  const graded = await gradeExistingProjections(scoring, schedule);
   const calibration = await calibrationByPosition(season, week);
   const gamesByPlayer = new Map<string, GameRow[]>();
   const playedThisWeek = new Set<string>();
@@ -709,7 +719,9 @@ export async function refreshWeeklyProjections(
   for (const player of players) {
     const external = sourceBundle.byPlayer.get(player.sleeperId) ?? [];
 
-    if (playedThisWeek.has(player.id)) {
+    const team = catalog[player.sleeperId]?.team ?? player.nflTeam;
+    const scheduledGame = team ? schedule.find(game => game.week === week && game.teams.includes(scheduleTeam(team))) : undefined;
+    if (playedThisWeek.has(player.id) || (scheduledGame && scheduledGame.kickoff <= Date.now())) {
       skippedAlreadyPlayed++;
       await upsertAvailability(
         player,
@@ -718,7 +730,7 @@ export async function refreshWeeklyProjections(
         asOfDate,
         refreshRunId,
         "ALREADY_PLAYED",
-        "Game already completed; pregame projection preserved for grading",
+        "Game has started; pregame forecast is locked and grading waits for completed results",
         external,
       );
       continue;
@@ -937,17 +949,11 @@ function normalizeProjectionRow(row: Record<string, unknown>): WeeklyProjectionR
 
 export async function getProjectionDashboardData() {
   await ensureAnalyticsStorage();
-  const latest = await prisma.$queryRawUnsafe<Array<{ season: number; week: number }>>(`
-    SELECT season, week
-    FROM "WeeklyProjection"
-    ORDER BY season DESC, week DESC, "asOfDate" DESC
-    LIMIT 1
-  `);
-  const state = latest[0] ? null : await getNflState().catch(() => null);
-  const season = Number(
-    latest[0]?.season ?? state?.season ?? new Date().getUTCFullYear(),
-  );
-  const week = Math.max(1, Number(latest[0]?.week ?? state?.week ?? 1));
+  const state = await getNflState();
+  const season = Number(state.season);
+  const week = Number(state.week);
+  if (!Number.isInteger(season) || !Number.isInteger(week)) throw new Error("Invalid NFL season/week");
+  const rosteredIds = new Set((await currentPlayers()).map(player => player.id));
   const currentRaw = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(`
     SELECT DISTINCT ON ("playerId") *
     FROM "WeeklyProjection"
@@ -966,10 +972,11 @@ export async function getProjectionDashboardData() {
     SELECT DISTINCT ON ("playerId") *
     FROM "ProjectionAvailability"
     WHERE season = ${season} AND week = ${week}
+      AND "createdAt" >= now() - interval '36 hours'
     ORDER BY "playerId", "asOfDate" DESC, "createdAt" DESC
   `);
   const unavailable: ProjectionAvailabilityRow[] = availabilityRaw
-    .filter((row) => String(row.status) !== "PROJECTED")
+    .filter((row) => rosteredIds.has(String(row.playerId)) && String(row.status) !== "PROJECTED")
     .map((row) => {
       let inputs: unknown = row.sourceInputs;
       if (typeof inputs === "string") {
@@ -1006,7 +1013,10 @@ export async function getProjectionDashboardData() {
   return {
     season,
     week,
-    current: currentRaw.map(normalizeProjectionRow),
+    current: currentRaw.filter(row => rosteredIds.has(String(row.playerId)) && availabilityRaw.some(availability =>
+      availability.playerId === row.playerId &&
+      (availability.status === "ALREADY_PLAYED" || (availability.status === "PROJECTED" && new Date(String(row.createdAt)).getTime() >= Date.now() - 36 * 3600000))
+    )).map(normalizeProjectionRow),
     history: historyRaw.map(normalizeProjectionRow),
     unavailable,
   };

@@ -11,7 +11,10 @@ const globalForPrisma = globalThis as unknown as {
 const BRIDGE_CONTEXT = "dynasty-boys-dashboard:neon-runtime-bridge:v1";
 const ENVELOPE_CONTEXT = "dynasty-boys-dashboard:neon-owner-envelope:v1";
 const RECOVERY_ENVELOPE_CONTEXT = "dynasty-boys-dashboard:neon-recovery-envelope:v1";
-const EMBEDDED_RECOVERY_ACTIVE = true;
+// Recovery remains available for a deliberate emergency failover, but it must
+// be opted into explicitly. Leaving an old recovery URL configured must never
+// silently take the dashboard away from its primary, current database.
+const EMBEDDED_RECOVERY_ACTIVE = process.env.USE_RECOVERY_DATABASE === "true";
 
 const NEON_ENVELOPE = {
   v: 1,
@@ -83,7 +86,7 @@ function decryptNeonDatabaseUrl(configuredUrl: string) {
   return normalizePostgresSslMode(plaintext);
 }
 
-function resolvePrimaryDatabaseUrl() {
+export function resolvePrimaryDatabaseUrl() {
   const configured = process.env.DATABASE_URL?.trim();
   if (!configured) throw new Error("Database connection is not configured.");
 
@@ -125,9 +128,9 @@ function decryptRecoveryDatabaseUrl(primaryUrl: string) {
   return normalizePostgresSslMode(plaintext);
 }
 
-function resolveDatabaseUrl() {
+export function resolveDatabaseUrl() {
   const explicitRecovery = process.env.RECOVERY_DATABASE_URL?.trim();
-  if (explicitRecovery) return normalizePostgresSslMode(explicitRecovery);
+  if (EMBEDDED_RECOVERY_ACTIVE && explicitRecovery) return normalizePostgresSslMode(explicitRecovery);
 
   const primary = resolvePrimaryDatabaseUrl();
   return EMBEDDED_RECOVERY_ACTIVE ? decryptRecoveryDatabaseUrl(primary) : primary;
