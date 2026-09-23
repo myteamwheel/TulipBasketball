@@ -28,7 +28,7 @@ test("halfPprPoints scores a passing line correctly", async () => {
   stats.passingTds = 2;
   stats.interceptions = 1;
   stats.rushingYards = 20;
-  assert.equal(halfPprPoints(stats), 20);
+  assert.equal(halfPprPoints(stats), 21);
 });
 
 test("halfPprPoints scores receiving and rushing correctly", async () => {
@@ -100,4 +100,24 @@ test("externalRoleSupported rejects tiny contingency backup projections", async 
     externalRoleSupported("TE", [make("TE", 4, { targets: 3 })]),
     true,
   );
+});
+
+
+test("verified Dynasty Bois scoring uses minus one per interception", async () => {
+  const { scoreFantasyStats, VERIFIED_DYNASTY_BOIS_SCORING } = await import("./fantasyScoring");
+  const points = scoreFantasyStats(
+    {
+      passingYards: 300,
+      passingTds: 2,
+      interceptions: 1,
+      rushingYards: 20,
+      rushingTds: 0,
+      receptions: 0,
+      receivingYards: 0,
+      receivingTds: 0,
+      fumblesLost: 0,
+    },
+    VERIFIED_DYNASTY_BOIS_SCORING,
+  );
+  assert.equal(points, 21);
 });
