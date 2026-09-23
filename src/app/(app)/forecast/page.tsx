@@ -100,17 +100,26 @@ export default async function ForecastPage() {
               Prediction Center
             </h1>
             <p className="mt-1 max-w-3xl text-sm leading-5 text-neutral-500">
-              Market value answers what dynasty players believe today. This
-              layer asks what the underlying football, age curve, draft capital,
-              opportunity and league context imply next.
+              A grounded dynasty decision view: live market value, recent NFL
+              production, opportunity, age and draft context are separated so
+              you can see exactly why the model differs from KTC. Weekly stat
+              forecasting now lives in its own Projected Points tab.
             </p>
           </div>
-          <Link
-            href="/trade-finder"
-            className="w-fit rounded-md border border-emerald-800 bg-emerald-950/30 px-3 py-1.5 text-xs text-emerald-300"
-          >
-            Open Trade Lab →
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/projections"
+              className="w-fit rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs text-neutral-300"
+            >
+              Weekly projections →
+            </Link>
+            <Link
+              href="/trade-finder"
+              className="w-fit rounded-md border border-emerald-800 bg-emerald-950/30 px-3 py-1.5 text-xs text-emerald-300"
+            >
+              Open Trade Lab →
+            </Link>
+          </div>
         </div>
       </section>
       {productionCovered < rows.length * 0.6 ? (
@@ -150,7 +159,7 @@ export default async function ForecastPage() {
               value={formatProbability(mySim.championshipProbability)}
             />
             <MetricCard
-              label="Model capital"
+              label="Player model capital"
               value={formatPoints(mySim.modelCapital)}
               detail={`market ${formatPoints(mySim.marketCapital)}`}
             />
@@ -294,7 +303,7 @@ export default async function ForecastPage() {
       <section>
         <SectionHeader
           title="Predictive player board"
-          description="TDV/model fair value blends current market data with independent football evidence only when that evidence exists. Missing player profiles are neutral rather than penalized; low-confidence probabilities are withheld until coverage improves."
+          description="An evidence-first dynasty board. KTC and trusted market values stay visible beside recent NFL production, opportunity, model fair value and weekly role. Missing football data remains unknown rather than negative evidence."
         />
         <PredictiveBoard rows={rows} />
       </section>
@@ -313,7 +322,7 @@ export default async function ForecastPage() {
       </section>
       <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3 text-[10px] leading-5 text-neutral-500">
         <div className="font-semibold text-neutral-300">
-          How to read this model
+          How to read the dynasty model
         </div>
         <p className="mt-1">
           When usable football/profile evidence exists, independent value scores
