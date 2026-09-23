@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import type { WeeklyProjectionRow, ProjectedStatLine } from "@/lib/weeklyProjection";
 
 type SortKey =
@@ -65,30 +65,21 @@ export default function WeeklyProjectionBoard({
         return b.projectedFantasyPoints - a.projectedFantasyPoints;
       });
 
-  const currentRows = useMemo(
-    () => filterRows(current, sort),
-    [current, query, position, sort],
-  );
+  const currentRows = filterRows(current, sort);
 
-  const historyRows = useMemo(() => {
-    const rows =
-      historyWeek === "ALL"
-        ? history
-        : history.filter((row) => `${row.season}-${row.week}` === historyWeek);
-    return filterRows(rows, historySort);
-  }, [history, historyWeek, historySort, query, position]);
+  const filteredHistory =
+    historyWeek === "ALL"
+      ? history
+      : history.filter((row) => `${row.season}-${row.week}` === historyWeek);
+  const historyRows = filterRows(filteredHistory, historySort);
 
-  const weekOptions = useMemo(
-    () =>
-      [...new Set(history.map((row) => `${row.season}-${row.week}`))].sort(
-        (a, b) => {
-          const [as, aw] = a.split("-").map(Number);
-          const [bs, bw] = b.split("-").map(Number);
-          return bs - as || bw - aw;
-        },
-      ),
-    [history],
-  );
+  const weekOptions = [
+    ...new Set(history.map((row) => `${row.season}-${row.week}`)),
+  ].sort((a, b) => {
+    const [as, aw] = a.split("-").map(Number);
+    const [bs, bw] = b.split("-").map(Number);
+    return bs - as || bw - aw;
+  });
 
   const graded = history.filter((row) => row.absoluteError !== null);
   const mae = graded.length
@@ -148,6 +139,7 @@ export default function WeeklyProjectionBoard({
               <tr className="bg-neutral-950 text-[9px] uppercase tracking-wide text-neutral-600">
                 <th className="px-2.5 py-2 text-left">Player</th>
                 <th className="px-2 py-2 text-right">Proj FP</th>
+                <th className="px-2 py-2 text-right">Actual FP</th>
                 <th className="px-2 py-2 text-left">Projected NFL stat line</th>
                 <th className="px-2 py-2 text-right">Sample</th>
                 <th className="px-2 py-2 text-right">Calibration</th>
@@ -166,6 +158,9 @@ export default function WeeklyProjectionBoard({
                   </td>
                   <td className="px-2 py-2 text-right text-base font-semibold tabular-nums text-emerald-300">
                     {row.projectedFantasyPoints.toFixed(1)}
+                  </td>
+                  <td className="px-2 py-2 text-right tabular-nums text-neutral-300">
+                    {number(row.actualFantasyPoints)}
                   </td>
                   <td className="max-w-[520px] px-2 py-2 text-[10px] leading-4 text-neutral-300">
                     {statLine(row.position, row.projectedStats)}
