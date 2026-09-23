@@ -659,7 +659,9 @@ export async function refreshWeeklyProjections(
   const [players, allGames, catalog] = await Promise.all([
     currentPlayers(),
     footballGames(season),
-    getPlayerCatalog().catch(() => ({})),
+    getPlayerCatalog().catch(
+      () => ({} as Awaited<ReturnType<typeof getPlayerCatalog>>),
+    ),
   ]);
   const sourceBundle = await fetchWeeklyProjectionSources(
     season,
