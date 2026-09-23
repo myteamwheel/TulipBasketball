@@ -653,8 +653,11 @@ export async function getProjectionDashboardData() {
     ORDER BY season DESC, week DESC, "asOfDate" DESC
     LIMIT 1
   `);
-  const season = Number(latest[0]?.season ?? new Date().getUTCFullYear());
-  const week = Number(latest[0]?.week ?? 1);
+  const state = latest[0] ? null : await getNflState().catch(() => null);
+  const season = Number(
+    latest[0]?.season ?? state?.season ?? new Date().getUTCFullYear(),
+  );
+  const week = Math.max(1, Number(latest[0]?.week ?? state?.week ?? 1));
   const currentRaw = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(`
     SELECT DISTINCT ON ("playerId") *
     FROM "WeeklyProjection"
