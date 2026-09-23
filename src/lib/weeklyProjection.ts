@@ -418,10 +418,16 @@ function externalRoleSupported(
 ) {
   if (!external.length) return false;
   return external.some((row) => {
-    if (row.fantasyPointsHalfPpr >= 1) return true;
-    if (position === "QB") return row.stats.attempts >= 5;
-    if (position === "RB") return row.stats.carries + row.stats.targets >= 2;
-    return row.stats.targets >= 1.5;
+    if (position === "QB") {
+      return row.stats.attempts >= 10 || row.fantasyPointsHalfPpr >= 6;
+    }
+    if (position === "RB") {
+      return (
+        row.stats.carries + row.stats.targets >= 3 ||
+        row.fantasyPointsHalfPpr >= 3
+      );
+    }
+    return row.stats.targets >= 2 || row.fantasyPointsHalfPpr >= 3;
   });
 }
 
