@@ -499,12 +499,12 @@ export async function refreshWeeklyProjections(
   const state = await getNflState().catch(() => null);
   const season = Number(state?.season ?? new Date().getUTCFullYear());
   const week = Math.max(1, Number(state?.week ?? 1));
-  const [players, allGames, calibration] = await Promise.all([
+  const [players, allGames] = await Promise.all([
     currentPlayers(),
     footballGames(season),
-    calibrationByPosition(season, week),
   ]);
   const graded = await gradeExistingProjections();
+  const calibration = await calibrationByPosition(season, week);
   const gamesByPlayer = new Map<string, GameRow[]>();
   const playedThisWeek = new Set<string>();
   for (const game of allGames) {
@@ -613,7 +613,10 @@ function normalizeProjectionRow(row: Record<string, unknown>): WeeklyProjectionR
     nflTeam: row.nflTeam ? String(row.nflTeam) : null,
     season: Number(row.season),
     week: Number(row.week),
-    asOfDate: String(row.asOfDate).slice(0, 10),
+    asOfDate:
+      row.asOfDate instanceof Date
+        ? row.asOfDate.toISOString().slice(0, 10)
+        : String(row.asOfDate).slice(0, 10),
     refreshRunId: row.refreshRunId ? String(row.refreshRunId) : null,
     projectedFantasyPoints: Number(row.projectedFantasyPoints),
     projectedStats: parsedStats(row.projectedStats) ?? { ...EMPTY_STATS },
