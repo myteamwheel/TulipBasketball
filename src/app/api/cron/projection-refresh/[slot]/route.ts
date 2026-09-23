@@ -56,6 +56,27 @@ export async function GET(
 
   try {
     const projectionRefresh = await refreshWeeklyProjections(null);
+    const healthySource = projectionRefresh.sourceStatuses.some(
+      (source) => source.ok && source.rows >= 25,
+    );
+    const classified =
+      projectionRefresh.projected +
+      projectionRefresh.excluded +
+      projectionRefresh.skippedAlreadyPlayed;
+    if (!healthySource || classified === 0) {
+      return NextResponse.json(
+        {
+          ok: false,
+          slot,
+          scheduledFor: "12:00 America/New_York",
+          error: !healthySource
+            ? "No healthy external weekly projection source."
+            : "Projection refresh classified zero rostered skill players.",
+          projectionRefresh,
+        },
+        { status: 503 },
+      );
+    }
     const exportSnapshot = await recordDailyExportSnapshot(null);
     return NextResponse.json({
       ok: true,
