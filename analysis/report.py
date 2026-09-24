@@ -16,9 +16,9 @@ def public_text(value):
     PDF so it uses the same names as the live dashboard.
     """
     text = str(value)
-    text = re.sub(r"BrettTulip", "Orlando Oswald", text, flags=re.IGNORECASE)
-    text = re.sub(r"(?<![A-Za-z0-9])brett's(?![A-Za-z0-9])", "Orlando Oswald's", text, flags=re.IGNORECASE)
-    text = re.sub(r"(?<![A-Za-z0-9])brett(?![A-Za-z0-9])", "Orlando Oswald", text, flags=re.IGNORECASE)
+    text = re.sub(r"BrettTulip", "Orlando Oswalds", text, flags=re.IGNORECASE)
+    text = re.sub(r"(?<![A-Za-z0-9])brett's(?![A-Za-z0-9])", "Orlando Oswalds'", text, flags=re.IGNORECASE)
+    text = re.sub(r"(?<![A-Za-z0-9])brett(?![A-Za-z0-9])", "Orlando Oswalds", text, flags=re.IGNORECASE)
     return re.sub(r"jeffsharpington", "Jeff", text, flags=re.IGNORECASE)
 
 

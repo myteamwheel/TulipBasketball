@@ -4,7 +4,7 @@ import AuditAutoRefresh from "@/components/AuditAutoRefresh";
 import { formatDateTimeEastern } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
-const displayText = (value: unknown) => String(value).replaceAll(/BrettTulip/gi, "Orlando Oswald").replaceAll(/Brett's/gi, "Orlando Oswald's").replaceAll(/\bBrett\b/gi, "Orlando Oswald").replaceAll(/jeffsharpington/gi, "Jeff");
+const displayText = (value: unknown) => String(value).replaceAll(/BrettTulip/gi, "Orlando Oswalds").replaceAll(/Brett's/gi, "Orlando Oswalds'").replaceAll(/\bBrett\b/gi, "Orlando Oswalds").replaceAll(/jeffsharpington/gi, "Jeff");
 export default async function ResearchPage({ searchParams }: { searchParams: Promise<{ table?: string; q?: string; page?: string }> }) {
   const query = await searchParams;
   const audit = await getFullAudit();

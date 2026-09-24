@@ -11,9 +11,9 @@ const data = JSON.parse(gunzipSync(await fs.readFile(path.join(directory, 'table
 function publicText(value) {
   if (typeof value !== 'string') return value;
   return value
-    .replace(/BrettTulip/gi, 'Orlando Oswald')
-    .replace(/(?<![A-Za-z0-9])brett's(?![A-Za-z0-9])/gi, "Orlando Oswald's")
-    .replace(/(?<![A-Za-z0-9])brett(?![A-Za-z0-9])/gi, 'Orlando Oswald')
+    .replace(/BrettTulip/gi, 'Orlando Oswalds')
+    .replace(/(?<![A-Za-z0-9])brett's(?![A-Za-z0-9])/gi, "Orlando Oswalds'")
+    .replace(/(?<![A-Za-z0-9])brett(?![A-Za-z0-9])/gi, 'Orlando Oswalds')
     .replace(/jeffsharpington/gi, 'Jeff');
 }
 

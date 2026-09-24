@@ -53,7 +53,12 @@ export default async function ForecastPage() {
     mySim = simulation.rows.find((r) => r.managerId === primary.id),
     weeklyForecastReady = simulation.weeklyProjectionCoverage >= 0.75,
     managerById = new Map(managers.map((m) => [m.id, m])),
-    modelGaps = rows
+    liveWeeklyRows = rows.filter(
+      (row) =>
+        weeklyProjectionByPlayer.has(row.playerId) &&
+        !weeklyWithheld.has(row.playerId),
+    ),
+    modelGaps = liveWeeklyRows
       .filter(
         (r) =>
           r.currentValue >= 1000 &&
@@ -65,7 +70,7 @@ export default async function ForecastPage() {
           Math.abs(b.modelEdgePercent) - Math.abs(a.modelEdgePercent),
       )
       .slice(0, 8),
-    productionLeaders = rows
+    productionLeaders = liveWeeklyRows
       .filter(
         (r) =>
           r.confidence !== "LOW" &&
@@ -166,7 +171,7 @@ export default async function ForecastPage() {
       ) : null}
       <section>
         <SectionHeader
-          title="Orlando forecast"
+          title="Orlando Oswalds forecast"
           description={`League simulation · ${simulation.iterations.toLocaleString("en-US")} seasons · ${simulation.scheduleSource === "SLEEPER" ? "Sleeper schedule" : "balanced fallback schedule"}.`}
         />
         {mySim && weeklyForecastReady ? (
@@ -277,8 +282,8 @@ export default async function ForecastPage() {
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3">
           <SectionHeader
-            title="Largest model disagreements"
-            description="Decision-grade review flags where recent football evidence and the current dynasty market disagree most. These are not automatic buy or sell signals."
+            title="Largest live-role model disagreements"
+            description="Decision-grade review flags where recent football evidence and the current dynasty market disagree most among players with a current role-supported weekly projection. These are not automatic buy or sell signals."
           />
           <div className="space-y-2">
             {modelGaps.length ? (
@@ -314,8 +319,8 @@ export default async function ForecastPage() {
         </section>
         <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3">
           <SectionHeader
-            title="Recent production leaders"
-            description="The strongest recent regular-season fantasy production among players with decision-grade samples. This is descriptive football evidence, not a dynasty ranking."
+            title="Recent production leaders with live weekly roles"
+            description="The strongest recent regular-season fantasy production among players with a decision-grade sample and a current role-supported weekly projection. This is descriptive football evidence, not a dynasty ranking."
           />
           <div className="space-y-2">
             {productionLeaders.length ? (
@@ -338,9 +343,7 @@ export default async function ForecastPage() {
                     {r.opportunityPerGame === null
                       ? "opportunity unavailable"
                       : `${r.opportunityPerGame.toFixed(1)} opportunities/game`} ·{" "}
-                    {weeklyProjectionByPlayer.has(r.playerId)
-                      ? `${weeklyProjectionByPlayer.get(r.playerId)?.toFixed(1)} consensus weekly pts`
-                      : "weekly projection unavailable"}
+                    {`${weeklyProjectionByPlayer.get(r.playerId)?.toFixed(1)} consensus weekly pts`}
                   </div>
                 </Link>
               ))
