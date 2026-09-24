@@ -936,7 +936,9 @@ function normalizeProjectionRow(row: Record<string, unknown>): WeeklyProjectionR
     return Number.isFinite(value) ? value : null;
   };
   const inputNumber = (key: string) => {
-    const value = Number(inputObject?.[key]);
+    const raw = inputObject?.[key];
+    if (raw === null || raw === undefined) return null;
+    const value = Number(raw);
     return Number.isFinite(value) ? value : null;
   };
   return {
