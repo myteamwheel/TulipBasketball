@@ -2,11 +2,32 @@
 import gzip
 import json
 from pathlib import Path
+import re
 import sys
 from xml.sax.saxutils import escape
 import unicodedata
+
+
+def public_text(value):
+    """Apply the dashboard's public team naming to published audit exports.
+
+    The analytical source tables retain stable internal owner IDs, but an export
+    is a reader-facing artifact.  Keep those internal identifiers out of the
+    PDF so it uses the same names as the live dashboard.
+    """
+    text = str(value)
+    text = re.sub(r"BrettTulip", "Orlando Oswald", text, flags=re.IGNORECASE)
+    text = re.sub(r"(?<![A-Za-z0-9])brett's(?![A-Za-z0-9])", "Orlando Oswald's", text, flags=re.IGNORECASE)
+    text = re.sub(r"(?<![A-Za-z0-9])brett(?![A-Za-z0-9])", "Orlando Oswald", text, flags=re.IGNORECASE)
+    return re.sub(r"jeffsharpington", "Jeff", text, flags=re.IGNORECASE)
+
+
+def public_header(value):
+    return public_text(value).replace("_", " ")
+
+
 def printable(value):
-    text = str(value).replace("™", "(TM)").replace("—", "-").replace("–", "-")
+    text = public_text(value).replace("™", "(TM)").replace("—", "-").replace("–", "-")
     return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import landscape, letter
@@ -25,7 +46,7 @@ story.append(Paragraph('Baseline snapshot; no prior comparison.' if not data['co
 for table in data['tables']:
     if table['kind'] != 'result' and table['name'] not in ('recommendations', 'traders_dynasty_bois', 'future_picks'):
         continue
-    story.extend([PageBreak(), Paragraph(escape(table['name'].replace('_', ' ').title()), styles['Heading1']), Paragraph(f"{escape(table['report'])}. {len(table['rows'])} rows.", styles['Normal']), Spacer(1, 10)])
+    story.extend([PageBreak(), Paragraph(escape(public_header(table['name']).title()), styles['Heading1']), Paragraph(f"{escape(public_text(table['report']))}. {len(table['rows'])} rows.", styles['Normal']), Spacer(1, 10)])
     rows = table['rows']
     keys = list(dict.fromkeys(key for row in rows for key in row))
     # Repeat a stable row number so wide column groups remain traceable.
@@ -38,7 +59,7 @@ for table in data['tables']:
             if value is None: value = '—'
             if isinstance(value, float): value = f'{value:,.3f}'.rstrip('0').rstrip('.')
             return Paragraph(escape(printable(value)), styles['Cell'])
-        body = [[cell("Row"), *[cell(key) for key in group]]] + [[cell(index + 1), *[cell(row.get(key)) for key in group]] for index, row in enumerate(rows)]
+        body = [[cell("Row"), *[cell(public_header(key)) for key in group]]] + [[cell(index + 1), *[cell(row.get(key)) for key in group]] for index, row in enumerate(rows)]
         table_view = LongTable(body, repeatRows=1, colWidths=[30, *([660 / max(1, len(group))] * len(group))], hAlign='LEFT')
         table_view.setStyle(TableStyle([('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#d8e9e4')), ('VALIGN', (0, 0), (-1, -1), 'TOP'), ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f3f5f5')]), ('BOTTOMPADDING', (0, 0), (-1, -1), 6)]))
         story.extend([table_view, Spacer(1, 14)])
