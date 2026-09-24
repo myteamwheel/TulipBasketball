@@ -49,6 +49,14 @@ export type WeeklyProjectionRow = {
   expectedFantasyPoints: number | null;
   sourceNames: string[];
   sourceCount: number;
+  sourceBreakdown: {
+    sleeperPoints: number | null;
+    cbsPoints: number | null;
+    localModelPoints: number | null;
+    playerSourceConsensusPoints: number | null;
+    teamImpliedPoints: number | null;
+    oddsFactor: number | null;
+  };
   actualFantasyPoints: number | null;
   actualStats: ProjectedStatLine | null;
   absoluteError: number | null;
@@ -677,6 +685,22 @@ function bettingMarketFactor(team: string | null, teamImpliedPoints: Map<string,
   return clamp(1 + ((implied - 22.5) / 22.5) * 0.12, 0.94, 1.06);
 }
 
+function storedProjectionInputs(
+  external: ExternalWeeklyProjection[],
+  localModelPoints: number,
+  playerSourceConsensusPoints: number | null,
+  teamImpliedPoints: number | null,
+  oddsFactor: number,
+) {
+  return {
+    playerSources: external,
+    localModelPoints: round1(localModelPoints),
+    playerSourceConsensusPoints: playerSourceConsensusPoints === null ? null : round1(playerSourceConsensusPoints),
+    teamImpliedPoints: teamImpliedPoints === null ? null : round1(teamImpliedPoints),
+    oddsFactor: teamImpliedPoints === null ? null : round2(oddsFactor),
+  };
+}
+
 export async function refreshWeeklyProjections(
   refreshRunId: string | null,
 ): Promise<ProjectionRefreshResult> {
@@ -795,7 +819,9 @@ export async function refreshWeeklyProjections(
     let targetPoints =
       externalTarget * (external.length >= 2 ? 0.82 : 0.74) +
       ownTarget * (external.length >= 2 ? 0.18 : 0.26);
-    targetPoints *= bettingMarketFactor(team ?? null, sourceBundle.betting.teamImpliedPoints);
+    const teamImpliedPoints = sourceBundle.betting.teamImpliedPoints.get((team ?? "").toUpperCase()) ?? null;
+    const oddsFactor = bettingMarketFactor(team ?? null, sourceBundle.betting.teamImpliedPoints);
+    targetPoints *= oddsFactor;
     const positionCalibration = calibration.get(player.position) ?? 1;
     targetPoints *= positionCalibration;
 
@@ -852,7 +878,7 @@ export async function refreshWeeklyProjections(
       positionCalibration,
       MODEL_VERSION,
       expectedFantasyPoints,
-      JSON.stringify(external),
+      JSON.stringify(storedProjectionInputs(external, ownTarget, external.length ? externalTarget : null, teamImpliedPoints, oddsFactor)),
       external.length,
     );
 
@@ -893,6 +919,26 @@ function normalizeProjectionRow(row: Record<string, unknown>): WeeklyProjectionR
       return null;
     }
   };
+  const rawInputs = row.sourceInputs;
+  let inputs: unknown = rawInputs;
+  if (typeof inputs === "string") {
+    try { inputs = JSON.parse(inputs); } catch { inputs = []; }
+  }
+  const playerSources = Array.isArray(inputs)
+    ? inputs
+    : inputs && typeof inputs === "object" && Array.isArray((inputs as { playerSources?: unknown }).playerSources)
+      ? (inputs as { playerSources: unknown[] }).playerSources
+      : [];
+  const inputObject = inputs && !Array.isArray(inputs) && typeof inputs === "object" ? inputs as Record<string, unknown> : null;
+  const sourcePoints = (source: string) => {
+    const match = playerSources.find((entry) => entry && typeof entry === "object" && (entry as { source?: unknown }).source === source) as { fantasyPointsHalfPpr?: unknown } | undefined;
+    const value = Number(match?.fantasyPointsHalfPpr);
+    return Number.isFinite(value) ? value : null;
+  };
+  const inputNumber = (key: string) => {
+    const value = Number(inputObject?.[key]);
+    return Number.isFinite(value) ? value : null;
+  };
   return {
     id: String(row.id),
     playerId: String(row.playerId),
@@ -915,26 +961,16 @@ function normalizeProjectionRow(row: Record<string, unknown>): WeeklyProjectionR
       row.expectedFantasyPoints === null || row.expectedFantasyPoints === undefined
         ? null
         : Number(row.expectedFantasyPoints),
-    sourceNames: (() => {
-      const value = row.sourceInputs;
-      let parsed: unknown = value;
-      if (typeof value === "string") {
-        try { parsed = JSON.parse(value); } catch { parsed = []; }
-      }
-      if (!Array.isArray(parsed)) return [];
-      return [
-        ...new Set(
-          parsed
-            .map((entry) =>
-              entry && typeof entry === "object" && "source" in entry
-                ? String((entry as { source: unknown }).source)
-                : "",
-            )
-            .filter(Boolean),
-        ),
-      ];
-    })(),
+    sourceNames: [...new Set(playerSources.map((entry) => entry && typeof entry === "object" && "source" in entry ? String((entry as { source: unknown }).source) : "").filter(Boolean))],
     sourceCount: Number(row.sourceCount ?? 0),
+    sourceBreakdown: {
+      sleeperPoints: sourcePoints("SLEEPER"),
+      cbsPoints: sourcePoints("CBS"),
+      localModelPoints: inputNumber("localModelPoints"),
+      playerSourceConsensusPoints: inputNumber("playerSourceConsensusPoints"),
+      teamImpliedPoints: inputNumber("teamImpliedPoints"),
+      oddsFactor: inputNumber("oddsFactor"),
+    },
     actualFantasyPoints:
       row.actualFantasyPoints === null || row.actualFantasyPoints === undefined
         ? null

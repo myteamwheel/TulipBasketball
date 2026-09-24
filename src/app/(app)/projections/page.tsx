@@ -38,7 +38,7 @@ export default async function ProjectionsPage() {
       <section>
         <SectionHeader
           title={`${data.season} Week ${data.week}`}
-          description="Current projections blend Sleeper, CBS, DraftKings game-market context through ESPN, and the local recency model. Players without a current team, players marked unavailable, and players without a meaningful projected weekly role are withheld rather than assigned fake volume."
+          description="Every row shows the Sleeper and CBS player projections, the local recency model, their player-level blend, DraftKings game-market context through ESPN, and the final scoring-adjusted fantasy projection. Game odds are a bounded team-environment adjustment, not an invented individual player projection."
         />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
           <MetricCard

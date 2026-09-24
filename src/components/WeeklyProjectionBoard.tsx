@@ -30,6 +30,12 @@ function confidenceWeight(value: WeeklyProjectionRow["confidence"]) {
   return value === "HIGH" ? 3 : value === "MEDIUM" ? 2 : 1;
 }
 
+function oddsContext(row: WeeklyProjectionRow) {
+  const { teamImpliedPoints, oddsFactor } = row.sourceBreakdown;
+  if (teamImpliedPoints === null || oddsFactor === null) return "—";
+  return `${teamImpliedPoints.toFixed(1)} implied · ×${oddsFactor.toFixed(2)}`;
+}
+
 export default function WeeklyProjectionBoard({
   current,
   history,
@@ -154,11 +160,16 @@ export default function WeeklyProjectionBoard({
           </select>
         </div>
         <div className="overflow-x-auto rounded-lg border border-neutral-800">
-          <table className="w-full min-w-[1080px] text-xs">
+          <table className="w-full min-w-[1520px] text-xs">
             <thead>
               <tr className="bg-neutral-950 text-[9px] uppercase tracking-wide text-neutral-600">
                 <th className="px-2.5 py-2 text-left">Player</th>
-                <th className="px-2 py-2 text-right">Proj FP</th>
+                <th className="px-2 py-2 text-right">Sleeper</th>
+                <th className="px-2 py-2 text-right">CBS</th>
+                <th className="px-2 py-2 text-right">Local model</th>
+                <th className="px-2 py-2 text-right">Player consensus</th>
+                <th className="px-2 py-2 text-right">Odds context</th>
+                <th className="px-2 py-2 text-right">Final FP</th>
                 <th className="px-2 py-2 text-left">Predicted NFL stat line</th>
                 <th className="px-2 py-2 text-left">Sources</th>
                 <th className="px-2 py-2 text-right">Sample</th>
@@ -175,6 +186,11 @@ export default function WeeklyProjectionBoard({
                       {row.position}{row.nflTeam ? ` · ${row.nflTeam}` : ""}
                     </div>
                   </td>
+                  <td className="px-2 py-2 text-right tabular-nums text-neutral-300">{number(row.sourceBreakdown.sleeperPoints)}</td>
+                  <td className="px-2 py-2 text-right tabular-nums text-neutral-300">{number(row.sourceBreakdown.cbsPoints)}</td>
+                  <td className="px-2 py-2 text-right tabular-nums text-neutral-300">{number(row.sourceBreakdown.localModelPoints)}</td>
+                  <td className="px-2 py-2 text-right tabular-nums text-emerald-200">{number(row.sourceBreakdown.playerSourceConsensusPoints)}</td>
+                  <td className="whitespace-nowrap px-2 py-2 text-right text-[10px] text-sky-300">{oddsContext(row)}</td>
                   <td className="px-2 py-2 text-right text-base font-semibold tabular-nums text-emerald-300">
                     {row.projectedFantasyPoints.toFixed(1)}
                   </td>
@@ -191,7 +207,7 @@ export default function WeeklyProjectionBoard({
               ))}
               {!currentRows.length ? (
                 <tr>
-                  <td colSpan={7} className="px-3 py-8 text-center text-xs text-neutral-600">
+                  <td colSpan={12} className="px-3 py-8 text-center text-xs text-neutral-600">
                     No supported projections match these filters.
                   </td>
                 </tr>
