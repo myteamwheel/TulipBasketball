@@ -7,7 +7,7 @@ export const fullAuditManifest = z.object({
   leagueId: z.literal("1312155271526625280"),
   generatedAt: z.string().datetime({ offset: true }),
   freshInputs: z.literal(true),
-  tableCount: z.number().int().min(70).max(120),
+  tableCount: z.literal(80),
   files: z.record(z.string(), z.object({ bytes: z.number().int().positive().max(16 * 1024 * 1024), sha256: z.string().regex(/^[a-f0-9]{64}$/) })),
 }).passthrough();
 
@@ -27,12 +27,12 @@ const fullAuditDataSchema = z.object({
   generatedAt: z.string().datetime({ offset: true }), freshInputs: z.boolean(),
   collegeBaseline: z.string(), comparedWith: z.string().datetime({ offset: true }).nullable(),
   changes: z.array(z.object({ table: z.string(), previousRows: z.number().int().nonnegative().nullable(), currentRows: z.number().int().nonnegative(), addedOrChanged: z.number().int().nonnegative(), removedOrChanged: z.number().int().nonnegative() })),
-  tables: z.array(z.object({ name: z.string().min(1), report: z.string(), kind: z.string(), description: z.string(), rows: z.array(z.record(z.string(), z.unknown())) })).min(70).max(120),
+  tables: z.array(z.object({ name: z.string().min(1), report: z.string(), kind: z.string(), description: z.string(), rows: z.array(z.record(z.string(), z.unknown())) })).length(80),
 });
 
 export function decodeFullAudit(bytes: Buffer): FullAuditData {
   const value = fullAuditDataSchema.parse(JSON.parse(gunzipSync(bytes, { maxOutputLength: 48 * 1024 * 1024 }).toString()));
-  if (value.leagueId !== "1312155271526625280" || !Array.isArray(value.tables) || value.tables.length < 70 || value.tables.length > 120) throw new Error("Invalid Dynasty Bois research bundle");
+  if (value.leagueId !== "1312155271526625280" || !Array.isArray(value.tables) || value.tables.length !== 80) throw new Error("Invalid Dynasty Bois research bundle");
   const names = new Set<string>();
   for (const table of value.tables) {
     if (typeof table.name !== "string" || names.has(table.name) || !Array.isArray(table.rows)) throw new Error("Invalid research table");

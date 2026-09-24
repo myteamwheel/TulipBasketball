@@ -6,7 +6,7 @@ import { decodeFullAudit, validateFullAuditFiles } from "./fullAuditFormat";
 import { isAuditSelector } from "./auditSelection";
 
 function fixture() {
-  const data = { version: 1, leagueId: "1312155271526625280", generatedAt: "2026-09-23T12:00:00Z", freshInputs: true, collegeBaseline: "2026-08-19", comparedWith: null, changes: [], tables: Array.from({ length: 70 }, (_, i) => ({ name: `table_${i}`, report: "Test", kind: "result", description: "Test", rows: [{ league: "Dynasty Bois", value: 10 }] })) };
+  const data = { version: 1, leagueId: "1312155271526625280", generatedAt: "2026-09-23T12:00:00Z", freshInputs: true, collegeBaseline: "2026-08-19", comparedWith: null, changes: [], tables: Array.from({ length: 80 }, (_, i) => ({ name: `table_${i}`, report: "Test", kind: "result", description: "Test", rows: [{ league: "Dynasty Bois", value: 10 }] })) };
   const files = new Map<string, Buffer>([["tables.json.gz", gzipSync(JSON.stringify(data))], ["Dynasty-Bois-Data.xlsx", Buffer.from("PK-workbook")], ["Dynasty-Bois-Report.pdf", Buffer.from("%PDF-report")]]);
   const manifest = { leagueId: data.leagueId, generatedAt: data.generatedAt, freshInputs: true, tableCount: data.tables.length, files: Object.fromEntries([...files].map(([name, body]) => [name, { bytes: body.length, sha256: createHash("sha256").update(body).digest("hex") }])) };
   return { data, files, manifest };
@@ -14,7 +14,7 @@ function fixture() {
 
 test("publication requires every file and exact matching checksums", () => {
   const { files, manifest } = fixture();
-  assert.equal(validateFullAuditFiles(manifest, files).data.tables.length, 70);
+  assert.equal(validateFullAuditFiles(manifest, files).data.tables.length, 80);
   files.set("Dynasty-Bois-Report.pdf", Buffer.from("%PDF-altered"));
   assert.throws(() => validateFullAuditFiles(manifest, files), /checksum/);
   files.delete("tables.json.gz");
