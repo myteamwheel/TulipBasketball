@@ -63,6 +63,21 @@ test("discreteStatLine never emits fractional football events", async () => {
   assert.equal(line.receptions <= line.targets, true);
 });
 
+test("final projected points preserve the unrounded model calculation", async () => {
+  const { discreteStatLine, finalProjectedFantasyPoints, halfPprPoints } = await import("./weeklyProjection");
+  const stats = empty();
+  stats.carries = 18.4;
+  stats.rushingYards = 86.6;
+  stats.rushingTds = 0.42;
+  stats.targets = 3.7;
+  stats.receptions = 2.8;
+  stats.receivingYards = 20.2;
+
+  const displayLineScore = halfPprPoints(discreteStatLine(stats));
+  assert.notEqual(displayLineScore, 15.7);
+  assert.equal(finalProjectedFantasyPoints(15.7), 15.7);
+});
+
 test("externalRoleSupported rejects tiny contingency backup projections", async () => {
   const { externalRoleSupported } = await import("./weeklyProjection");
   const make = (

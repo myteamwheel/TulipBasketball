@@ -408,6 +408,15 @@ export function discreteStatLine(stats: ProjectedStatLine): ProjectedStatLine {
   };
 }
 
+/**
+ * Keep the model's fantasy-point estimate separate from the readable NFL stat
+ * line.  A stat line has to use whole football events (there is no 0.4 TD),
+ * but rounding those events must not change the underlying projection.
+ */
+export function finalProjectedFantasyPoints(targetPoints: number) {
+  return round1(targetPoints);
+}
+
 function blendExternalStats(
   external: ExternalWeeklyProjection[],
   own: ProjectedStatLine,
@@ -832,10 +841,11 @@ export async function refreshWeeklyProjections(
       scoring,
     );
     const projectedStats = discreteStatLine(expectedStats);
-    const projectedFantasyPoints = round1(
-      scoreFantasyStats(projectedStats, scoring),
-    );
-    const expectedFantasyPoints = round1(targetPoints);
+    // The stat line is deliberately rounded only for legibility.  Do not score
+    // the rounded line: doing so turns a continuous forecast into a different
+    // projection, especially for TD-dependent player lines.
+    const projectedFantasyPoints = finalProjectedFantasyPoints(targetPoints);
+    const expectedFantasyPoints = projectedFantasyPoints;
 
     await prisma.$executeRawUnsafe(
       `INSERT INTO "WeeklyProjection"

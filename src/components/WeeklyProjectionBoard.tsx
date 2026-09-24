@@ -110,10 +110,11 @@ export default function WeeklyProjectionBoard({
         <span className="font-semibold text-neutral-300">Projection rules: </span>
         a player must have a current NFL team, not be marked unavailable, and
         have a meaningful weekly role supported by Sleeper and/or CBS. The
-        displayed NFL stat line is a concrete whole-number prediction; fantasy
-        points are calculated from that stat line. External expected-value inputs
-        can contain decimals internally, but fractional touchdowns are never
-        shown as the predicted real-life result.
+        final fantasy points come from the unrounded model calculation. The
+        displayed NFL stat line is a readable whole-number illustration of that
+        forecast; it does not re-score or replace the final points. Fractional
+        touchdowns remain in the internal expected-value calculation and are
+        never shown as a real-life outcome.
       </div>
 
       <div className="grid gap-2 sm:grid-cols-[1fr_auto]">

@@ -84,9 +84,9 @@ export default async function ProjectionsPage() {
           role expectations. DraftKings game totals and spreads, supplied through
           ESPN, make a bounded team-environment adjustment. Those inputs are
           blended with a recency-weighted local NFL stat model and then adjusted
-          by position-level error learned from prior graded forecasts. The visible
-          stat line is converted to whole-number football events before fantasy
-          points are calculated.
+          by position-level error learned from prior graded forecasts. Final
+          fantasy points remain the unrounded model output; the visible stat line
+          is rounded separately into whole-number football events for readability.
           Actual results come from nflverse. Accuracy is descriptive model error,
           not a betting edge.
         </p>
