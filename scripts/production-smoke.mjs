@@ -60,7 +60,7 @@ try {
 
 try {
   const response = await get("/audit/report"), html = await response.text();
-  const sections = ["League snapshot", "Orlando Oswald trade review", "Strategy and recommendations", "League history and trends", "Download Excel", "Download PDF"];
+  const sections = ["League snapshot", "Orlando Oswalds trade review", "Strategy and recommendations", "League history and trends", "Download Excel", "Download PDF"];
   const missing = sections.filter((section) => !html.includes(section));
   if (!response.ok || missing.length) fail(`organized report: missing ${missing.join(", ")}`);
   else console.log("PASS organized native audit report");
