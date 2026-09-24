@@ -11,7 +11,7 @@ export async function POST(request:Request){
   const status=rawStatus===null||rawStatus===""?null:typeof rawStatus==="string"&&STRATEGY_STATUSES.includes(rawStatus as StrategyStatus)?rawStatus as StrategyStatus:undefined;
   if(!playerId||status===undefined)return Response.json({error:"Invalid player or strategy status."},{status:400});
   const owned=await prisma.ownershipInterval.findFirst({where:{playerId,validTo:null,manager:{isPrimaryTeam:true,league:{sleeperId:SLEEPER_LEAGUE_ID}}},select:{id:true}});
-  if(!owned)return Response.json({error:"Player is not currently on Orlando."},{status:400});
+  if(!owned)return Response.json({error:"Player is not currently on Orlando Oswalds."},{status:400});
   await setPlayerStrategy(playerId,status);
   return Response.json({ok:true,playerId,status});
 }

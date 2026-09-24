@@ -168,7 +168,7 @@ export default function PlayerTable({
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <input
             aria-label={
-              showOwner ? "Search league players" : "Search Orlando roster"
+              showOwner ? "Search league players" : "Search Orlando Oswalds roster"
             }
             value={search}
             onChange={(event) => setSearch(event.target.value)}
@@ -341,7 +341,7 @@ export default function PlayerTable({
           <caption className="sr-only">
             {showOwner
               ? "All rostered league players"
-              : "Orlando roster players"}
+              : "Orlando Oswalds roster players"}
           </caption>
           <thead>
             <tr className="border-b border-neutral-800 text-[10px] uppercase tracking-wide text-neutral-500">

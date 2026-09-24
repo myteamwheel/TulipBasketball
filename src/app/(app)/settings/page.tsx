@@ -365,7 +365,7 @@ export default async function SettingsPage() {
               {formatDateEastern(ORLANDO_BASELINE_DATE)}
             </div>
             <p className="mt-1 text-[10px] text-neutral-600">
-              First complete verified Orlando checkpoint.
+              First complete verified Orlando Oswalds checkpoint.
             </p>
           </div>
           <div className="rounded-md bg-neutral-950 p-3">

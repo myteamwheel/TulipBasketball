@@ -242,7 +242,7 @@ function auditChanges(
         category: "HEALTH",
         tone: "NEUTRAL",
         title: "Baseline audit snapshot created",
-        detail: `Orlando and all ${current.league.length} league teams are now tracked from this date forward.`,
+        detail: `Orlando Oswalds and all ${current.league.length} league teams are now tracked from this date forward.`,
         magnitude: 0,
       },
     ];
@@ -265,7 +265,7 @@ function auditChanges(
       category: "RANK",
       tone: improved ? "POSITIVE" : "NEGATIVE",
       title: `League capital rank ${improved ? "improved" : "fell"}`,
-      detail: `Orlando moved from #${previous.team.totalRank} to #${current.team.totalRank}.`,
+      detail: `Orlando Oswalds moved from #${previous.team.totalRank} to #${current.team.totalRank}.`,
       magnitude: Math.abs(current.team.totalRank - previous.team.totalRank),
     });
   }
@@ -340,8 +340,8 @@ function recommendations(team: AuditTeam) {
   })).sort((a, b) => a.rank - b.rank)[0];
   rows.push({
     kind: "WATCH",
-    title: `Monitor ${weakest.position} depth`,
-    detail: `Orlando ranks #${weakest.rank} in start-eligible ${weakest.position} market strength. Use waivers and trade offers only when they improve the actual lineup or preserve value.`,
+      title: `Monitor ${weakest.position} depth`,
+      detail: `Orlando Oswalds rank #${weakest.rank} in start-eligible ${weakest.position} market strength. Use waivers and trade offers only when they improve the actual lineup or preserve value.`,
   });
   rows.push({
     kind: "KEEP",
@@ -365,13 +365,13 @@ function recommendations(team: AuditTeam) {
     kind: "CHANGE",
     title: "Use a higher bar for consolidation trades",
     detail:
-      "The historical Orlando audit found that consolidation worked poorly when Orlando failed to receive the best asset. Require a clear best-player outcome before paying multiple useful pieces.",
+      "The historical Orlando Oswalds audit found that consolidation worked poorly when Orlando Oswalds failed to receive the best asset. Require a clear best-player outcome before paying multiple useful pieces.",
   });
   rows.push({
     kind: "KEEP",
     title: "Continue targeting young players and quarterbacks",
     detail:
-      "Those were Orlando's strongest historical trade patterns in this Superflex league. Recheck price, role and roster fit against the live market before acting.",
+      "Those were Orlando Oswalds' strongest historical trade patterns in this Superflex league. Recheck price, role and roster fit against the live market before acting.",
   });
   return rows;
 }
@@ -474,16 +474,16 @@ export async function buildLiveAuditData(
         select: { name: true, season: true },
       }),
     ]);
-  if (!primary) throw new Error("Primary Orlando manager is unavailable.");
+  if (!primary) throw new Error("Primary Orlando Oswalds manager is unavailable.");
   if (managers.length < 2) throw new Error("League manager coverage is incomplete.");
 
   const leagueRows = teamRows(valuationRows);
   const team = leagueRows.find((row) => row.managerId === primary.id);
   const valuation = valuationRows.find((row) => row.managerId === primary.id);
-  if (!team || !valuation) throw new Error("Orlando valuation is unavailable.");
+  if (!team || !valuation) throw new Error("Orlando Oswalds valuation is unavailable.");
 
   const ownEntries = entries.filter((entry) => entry.managerId === primary.id);
-  if (!ownEntries.length) throw new Error("Orlando roster is empty.");
+  if (!ownEntries.length) throw new Error("Orlando Oswalds roster is empty.");
   const market = await computeMarketDataForPlayers(
     ownEntries.map((entry) => entry.playerId),
   );

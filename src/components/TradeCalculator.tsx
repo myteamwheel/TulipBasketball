@@ -183,7 +183,7 @@ export default function TradeCalculator({
           Manual Trade Calculator
         </h2>
         <p className="mt-1 max-w-3xl text-[11px] leading-4 text-neutral-500">
-          Search current assets with package adjustment and Orlando roster
+          Search current assets with package adjustment and Orlando Oswalds roster
           impact. Player values are KTC; pick values are verified current
           pick-market values normalized to the same comparison scale. Value
           balance is not an acceptance probability.
@@ -247,8 +247,8 @@ export default function TradeCalculator({
           <>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {[
-                ["Orlando raw", balance.give.rawValue],
-                ["Orlando adjusted", balance.give.adjustedValue],
+                ["Orlando Oswalds raw", balance.give.rawValue],
+                ["Orlando Oswalds adjusted", balance.give.adjustedValue],
                 [`${otherName} raw`, balance.get.rawValue],
                 [`${otherName} adjusted`, balance.get.adjustedValue],
               ].map(([label, value]) => (
@@ -273,14 +273,14 @@ export default function TradeCalculator({
                 {verdictLabel(balance.verdict, primaryManagerName, otherName)}
               </div>
               <div className="mt-1 text-[10px] text-neutral-600">
-                Value balance {balance.fairnessPercent.toFixed(1)}% · Orlando
+                Value balance {balance.fairnessPercent.toFixed(1)}% · Orlando Oswalds
                 adjusted edge {balance.adjustedEdge > 0 ? "+" : ""}
                 {points(balance.adjustedEdge)}
               </div>
             </div>
             <div className="mt-3 rounded-md border border-neutral-800 bg-neutral-950 p-3">
               <div className="text-[9px] uppercase tracking-wide text-neutral-600">
-                Orlando roster impact
+                Orlando Oswalds roster impact
               </div>
               <div className="mt-2 flex flex-wrap gap-2">
                 {positionImpact.map((r) => (

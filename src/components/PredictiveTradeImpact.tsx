@@ -235,7 +235,7 @@ export default function PredictiveTradeImpact({
         </h2>
         <p className="mt-1 text-[10px] leading-4 text-neutral-500">
           This answers a different question than value balance: what does the
-          trade do to Orlando&apos;s modeled lineup, fair-value portfolio and
+          trade do to Orlando Oswalds&apos; modeled lineup, fair-value portfolio and
           simulated title path?
         </p>
         <label className="mt-3 block max-w-sm text-[9px] uppercase tracking-wide text-neutral-600">

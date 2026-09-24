@@ -220,7 +220,7 @@ export default async function HomePage() {
         <div className="rounded-lg border border-amber-900/70 bg-amber-950/20 p-3 text-[11px] leading-5 text-amber-200">
           League capital ranks are <strong>provisional</strong>:{" "}
           {valuations.reduce((s, v) => s + v.missingValueCount, 0)} rostered
-          player values are unknown on other rosters. Orlando is{" "}
+          player values are unknown on other rosters. Orlando Oswalds is{" "}
           {my.lastKnownPlayerCount}/{my.playerCount} covered; unknown opposing
           assets are not treated as zero.
         </div>
@@ -239,7 +239,7 @@ export default async function HomePage() {
               Current data health
             </div>
             <div className="text-[10px] text-neutral-600">
-              Fresh provider status and Orlando coverage are separate checks.
+              Fresh provider status and Orlando Oswalds coverage are separate checks.
             </div>
           </div>
           <Link href="/settings" className="text-[10px] text-neutral-500">
@@ -267,7 +267,7 @@ export default async function HomePage() {
           <DataBadge
             label="KTC"
             state={sourceStatuses.KTC.stale ? "warn" : "good"}
-            detail={`${my.lastKnownPlayerCount}/${my.playerCount} Orlando`}
+            detail={`${my.lastKnownPlayerCount}/${my.playerCount} Orlando Oswalds`}
           />
           <DataBadge
             label="Tradyr"
@@ -435,13 +435,13 @@ export default async function HomePage() {
       </div>
       {consensusCovered < roster.length ? (
         <div className="text-[10px] text-neutral-700">
-          Trusted-market coverage: {consensusCovered}/{roster.length} Orlando
+          Trusted-market coverage: {consensusCovered}/{roster.length} Orlando Oswalds
           players.
         </div>
       ) : null}
       <section>
         <SectionHeader
-          title="Orlando roster"
+          title="Orlando Oswalds roster"
           description="Current Sleeper ownership with fresh decision metrics only."
         />
         <PlayerTable rows={rows} />

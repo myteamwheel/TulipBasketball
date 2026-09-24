@@ -174,19 +174,19 @@ export async function buildCompleteDataWorkbook(options?: {
     );
     addRows(
       workbook,
-      "Orlando Roster",
+      "Orlando Oswalds Roster",
       audit.data.roster.map((player) => ({ ...player })),
       "Current Orlando Oswalds roster with current values and recent changes",
     );
     addRows(
       workbook,
-      "Orlando Picks",
+      "Orlando Oswalds Picks",
       audit.data.picks.map((pick) => ({ ...pick })),
       "Current future-pick inventory and modeled values",
     );
     addRows(
       workbook,
-      "Orlando Activity",
+      "Orlando Oswalds Activity",
       audit.data.activity.map((row) => ({ ...row })),
       "Trades, waivers, free-agent additions and drops by season",
     );
@@ -200,7 +200,7 @@ export async function buildCompleteDataWorkbook(options?: {
       workbook,
       "Audit Trends",
       [...audit.snapshots].reverse().map((snapshot) => ({ ...snapshot })),
-      "Validated Orlando audit snapshots over time",
+      "Validated Orlando Oswalds audit snapshots over time",
     );
 
     await workbook.commit();

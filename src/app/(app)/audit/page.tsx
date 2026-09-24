@@ -60,7 +60,7 @@ function AuditTrend({
         viewBox="0 0 700 215"
         className="min-w-[620px]"
         role="img"
-        aria-label="Orlando total dynasty capital by audit snapshot"
+        aria-label="Orlando Oswalds total dynasty capital by audit snapshot"
       >
         {[38, 73, 108, 143, 178].map((y) => (
           <line key={y} x1="18" x2="682" y1={y} y2={y} stroke="#262626" />
@@ -123,25 +123,25 @@ export default async function AuditPage({
       kind: "CHANGE",
       title: "Raise the bar when consolidating",
       detail:
-        "The deep historical audit found Orlando received the best single asset in only 34% of Dynasty Bois trades. Consolidation should produce a clear best-player outcome.",
+        "The deep historical audit found Orlando Oswalds received the best single asset in only 34% of Dynasty Bois trades. Consolidation should produce a clear best-player outcome.",
     },
     {
       kind: "CHANGE",
       title: "Avoid paying for last season's production",
       detail:
-        "Trades led by prior-season starters and aging veterans were among Orlando's weakest historical groups. Current role and price matter more than the old headline.",
+        "Trades led by prior-season starters and aging veterans were among Orlando Oswalds' weakest historical groups. Current role and price matter more than the old headline.",
     },
     {
       kind: "KEEP",
       title: "Keep targeting young players and quarterbacks",
       detail:
-        "Those were Orlando's strongest historical trade patterns in this Superflex league, especially when the incoming asset was already rising.",
+        "Those were Orlando Oswalds' strongest historical trade patterns in this Superflex league, especially when the incoming asset was already rising.",
     },
     {
       kind: "KEEP",
       title: "Keep the strong roster discipline",
       detail:
-        "Orlando's Dynasty Bois drops became top-150 assets less often than the league average in the source audit.",
+        "Orlando Oswalds' Dynasty Bois drops became top-150 assets less often than the league average in the source audit.",
     },
   ];
 
@@ -157,7 +157,7 @@ export default async function AuditPage({
             Dynasty Bois Audit
           </h1>
           <p className="mt-1 max-w-3xl text-sm leading-5 text-neutral-500">
-            A saved daily view of Orlando, every league team, roster construction,
+            A saved daily view of Orlando Oswalds, every league team, roster construction,
             future picks, activity, changes and long-term trends. The page and both
             downloads use the same validated snapshot.
           </p>
@@ -371,7 +371,7 @@ export default async function AuditPage({
 
       <section>
         <SectionHeader
-          title="Orlando roster"
+          title="Orlando Oswalds roster"
           description="Current ownership, roster slot, KTC value and comparable 7-day and 30-day changes."
         />
         <div className="overflow-x-auto rounded-lg border border-neutral-800 bg-neutral-900">
@@ -483,7 +483,7 @@ export default async function AuditPage({
 
       <section>
         <SectionHeader
-          title="Historical Orlando findings"
+          title="Historical Orlando Oswalds findings"
           description="Durable findings carried forward from the 81-sheet Dynasty Bois source audit generated on September 23, 2026."
         />
         <div className="grid gap-2 lg:grid-cols-2">

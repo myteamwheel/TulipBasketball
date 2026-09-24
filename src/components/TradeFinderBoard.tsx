@@ -50,7 +50,7 @@ function Offer({ offer }: { offer: TradeFinderOffer }) {
       <div className="grid gap-3 lg:grid-cols-[1fr_32px_1fr_180px] lg:items-center">
         <div>
           <div className="mb-1 text-[9px] uppercase tracking-wide text-red-300/70">
-            Orlando gives
+            Orlando Oswalds give
           </div>
           <div className="flex flex-wrap gap-1.5">
             {offer.give.map((a) => (
@@ -61,7 +61,7 @@ function Offer({ offer }: { offer: TradeFinderOffer }) {
         <div className="hidden text-center text-neutral-700 lg:block">→</div>
         <div>
           <div className="mb-1 text-[9px] uppercase tracking-wide text-emerald-300/70">
-            Orlando gets
+            Orlando Oswalds get
           </div>
           <div className="flex flex-wrap gap-1.5">
             {offer.get.map((a) => (
@@ -81,7 +81,7 @@ function Offer({ offer }: { offer: TradeFinderOffer }) {
           <div
             className={`mt-1 text-xs font-semibold tabular-nums ${edgeClass}`}
           >
-            Orlando edge {signed(offer.adjustedEdge)}
+            Orlando Oswalds edge {signed(offer.adjustedEdge)}
           </div>
         </div>
       </div>
@@ -307,9 +307,10 @@ export default function TradeFinderBoard({ data }: { data: TradeFinderData }) {
           ) : null}
           <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-3 text-[10px] leading-4 text-neutral-500">
             <span className="font-medium text-neutral-300">Offer pool:</span>{" "}
-            {data.playerTradeChipCount} eligible Orlando players and{" "}
+            {data.playerTradeChipCount} eligible Orlando Oswalds players and{" "}
             {data.pickTradeChipCount} verified owned picks. Generated packages
-            can now return multiple opposing assets and use up to three Orlando
+            can now return multiple opposing assets and use up to three Orlando Oswalds
+            players
             pieces.
           </div>
           <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto]">

@@ -445,7 +445,7 @@ export async function buildTradeFinderData(): Promise<TradeFinderData | null> {
           const rank = managerPositionRank(primary.id, position, valuations);
           let score = 35 + targetAdjustment(strategies.get(target.id));
           score += Math.max(0, Math.min(24, (rank - 3) * 3));
-          if (rank >= 8) tags.push(`Orlando #${rank} ${position}`);
+          if (rank >= 8) tags.push(`Orlando Oswalds #${rank} ${position}`);
           if (target.value >= 2500 && target.value <= 6500) score += 8;
           else if (target.value <= 7600) score += 4;
           if (target.change30dPercent !== null && target.change30dPercent < 0) {
@@ -505,7 +505,7 @@ export async function buildTradeFinderData(): Promise<TradeFinderData | null> {
             confidence,
             tags: [...new Set(tags)].slice(0, 5),
             ownerNeeds,
-            why: `${position} is a market weakness for Orlando at #${rank} by start-eligible dynasty capital${rankingComplete ? "" : " (provisional)"}. ${target.managerName}'s weakest market-capital groups include ${ownerNeeds.join(" / ")}. ${movementText}.`,
+            why: `${position} is a market weakness for Orlando Oswalds at #${rank} by start-eligible dynasty capital${rankingComplete ? "" : " (provisional)"}. ${target.managerName}'s weakest market-capital groups include ${ownerNeeds.join(" / ")}. ${movementText}.`,
             offers,
           } satisfies TradeFinderTarget;
         })

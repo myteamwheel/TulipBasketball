@@ -126,7 +126,7 @@ async function canonicalizeObservation(args: {
       where: { id: duplicate.id },
       data: {
         validationStatus: "REJECTED",
-        validationNote: `Superseded duplicate of canonical Orlando checkpoint ${args.observedAt.toISOString()}.`,
+        validationNote: `Superseded duplicate of canonical Orlando Oswalds checkpoint ${args.observedAt.toISOString()}.`,
       },
     });
     duplicatesRejected++;
@@ -182,10 +182,10 @@ export async function ensureOrlandoHistoryBackfill(): Promise<BackfillResult> {
 
     const sourceUrl =
       label === "June 7"
-        ? "Verified Orlando tracker checkpoint: 2026-06-07 (partial pre-baseline history)"
+        ? "Verified Orlando Oswalds tracker checkpoint: 2026-06-07 (partial pre-baseline history)"
         : label === "June 21"
-          ? "Authoritative Orlando baseline checkpoint: 2026-06-21"
-          : "Verified Orlando tracker checkpoint: 2026-08-13 02:58 ET";
+          ? "Authoritative Orlando Oswalds baseline checkpoint: 2026-06-21"
+          : "Verified Orlando Oswalds tracker checkpoint: 2026-08-13 02:58 ET";
     const validationNote =
       label === "June 7"
         ? "Exact June 7 value where supplied; retained only as partial pre-baseline history."
