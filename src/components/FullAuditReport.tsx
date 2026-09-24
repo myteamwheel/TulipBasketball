@@ -9,10 +9,10 @@ const SECTIONS = [
   { title: "League history and trends", description: "Manager history, activity, results, and long-term league patterns.", tables: ["trends_manager_season", "history_activity_by_league", "history_trade_mgr_rank", "history_partners"] },
 ] as const;
 
-const TABLE_TITLES: Record<string, string> = { current_brett_players: "Orlando Oswald roster", future_picks: "Future rookie picks", audit_core_per_league: "League overview", playbook_bois_best: "Best Dynasty Bois trades", playbook_bois_worst: "Costliest Dynasty Bois trades", history_best_trades: "Best trades in league history", history_worst_trades: "Costliest trades in league history", recommendations: "Strategy recommendations", trends_manager_season: "Manager season trends" };
+const TABLE_TITLES: Record<string, string> = { current_brett_players: "Orlando Oswald roster", future_picks: "Future rookie picks", audit_core_per_league: "League overview", playbook_bois_best: "Best Dynasty Bois trades", playbook_bois_worst: "Costliest Dynasty Bois trades", history_best_trades: "Best trades in league history", history_worst_trades: "Costliest trades in league history", recommendations: "Strategy recommendations", trends_manager_season: "Manager season trends", history_activity_by_league: "League activity by season", history_trade_mgr_rank: "Manager trade rankings", history_partners: "Trade partners", playbook_bois_month: "Trade outcomes by month", playbook_bois_phase: "Trade outcomes by career phase", playbook_formula_bois: "Trade-pattern model", ledger_brett_partners: "Orlando Oswald trade partners", ledger_brett_rank_by_league: "Orlando Oswald standing by season", brett_trades_ranked: "Orlando Oswald trades ranked", playbook_brett_best: "Orlando Oswald best trades", playbook_brett_worst: "Orlando Oswald costliest trades" };
 
 function displayText(value: unknown) { return String(value).replaceAll(/BrettTulip/gi, "Orlando Oswald").replaceAll(/Brett's/gi, "Orlando Oswald's").replaceAll(/\bBrett\b/gi, "Orlando Oswald").replaceAll(/jeffsharpington/gi, "Jeff"); }
-function tableTitle(name: string) { return TABLE_TITLES[name] ?? displayText(name.replaceAll("_", " ")); }
+function tableTitle(name: string) { return TABLE_TITLES[name] ?? displayText(name.replaceAll("_", " ")).replace(/\b\w/g, letter => letter.toUpperCase()); }
 type AuditTable = Awaited<ReturnType<typeof getFullAudit>>["data"]["tables"][number];
 
 function NativeTable({ table, expanded = false }: { table: AuditTable; expanded?: boolean }) {
