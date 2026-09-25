@@ -1,4 +1,5 @@
 import AuditAutoRefresh from "@/components/AuditAutoRefresh";
+import AuditSnapshotPicker from "@/components/AuditSnapshotPicker";
 import { notFound } from "next/navigation";
 import { AuditNotFoundError, isAuditSelector } from "@/lib/auditSelection";
 import Link from "next/link";
@@ -522,21 +523,18 @@ export default async function AuditPage({
           title="Snapshot history"
           description="Open an earlier date to view and download the exact audit saved after that refresh."
         />
-        <div className="flex flex-wrap gap-2">
-          {snapshots.length ? (
-            snapshots.map((snapshot) => (
-              <Link
-                key={snapshot.snapshotId ?? snapshot.generatedAt}
-                href={`/audit?date=${snapshot.snapshotId ?? snapshot.snapshotDate}`}
-                className={`rounded-md border px-3 py-2 text-[10px] ${snapshot.snapshotId === data.snapshotId ? "border-emerald-700 bg-emerald-950/30 text-emerald-300" : "border-neutral-800 bg-neutral-900 text-neutral-500 hover:text-neutral-200"}`}
-              >
-                {formatDateTimeEastern(snapshot.generatedAt)} · #{snapshot.teamRank} · {formatPoints(snapshot.teamValue)}
-              </Link>
-            ))
-          ) : (
-            <div className="text-xs text-neutral-600">The first validated snapshot will be saved after a healthy refresh.</div>
-          )}
-        </div>
+        {snapshots.length ? (
+          <AuditSnapshotPicker
+            selectedId={data.snapshotId ?? null}
+            options={snapshots.map((snapshot) => ({
+              id: snapshot.snapshotId ?? snapshot.snapshotDate,
+              date: snapshot.snapshotDate,
+              label: `${formatDateTimeEastern(snapshot.generatedAt)} · #${snapshot.teamRank} · ${formatPoints(snapshot.teamValue)}`,
+            }))}
+          />
+        ) : (
+          <div className="text-xs text-neutral-600">The first validated snapshot will be saved after a healthy refresh.</div>
+        )}
       </section>
 
       <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3 text-[10px] leading-5 text-neutral-500">
