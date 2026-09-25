@@ -83,6 +83,9 @@ export default async function SettingsPage() {
   const dealerCovered = entries.filter(
     (entry) => mix.get(entry.playerId)?.dynastyDealerValue !== null,
   ).length;
+  const statsGuyCovered = entries.filter(
+    (entry) => mix.get(entry.playerId)?.statsGuyValue !== null,
+  ).length;
   const consensusCovered = entries.filter(
     (entry) => mix.get(entry.playerId)?.consensusValue !== null,
   ).length;
@@ -103,6 +106,16 @@ export default async function SettingsPage() {
         "Player market calibrated onto the KTC scale; draft picks are modeled separately.",
       status: statuses.DYNASTY_DEALER,
       covered: dealerCovered,
+    },
+    {
+      key: "STATSGUY",
+      label: "Stats Guy Fantasy",
+      role: "Trusted secondary",
+      detail:
+        "Daily public Superflex dynasty values derived from real trades; values are calibrated onto the KTC scale.",
+      attributionUrl: "https://statsguyfantasy.com/",
+      status: statuses.STATSGUY,
+      covered: statsGuyCovered,
     },
   ] as const;
   const latestSourceStatus = new Map(
@@ -394,9 +407,20 @@ export default async function SettingsPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-xs font-semibold text-neutral-200">
-                        {source.label}
-                      </span>
+                      {"attributionUrl" in source ? (
+                        <a
+                          href={source.attributionUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs font-semibold text-emerald-300 hover:text-emerald-200"
+                        >
+                          {source.label}
+                        </a>
+                      ) : (
+                        <span className="text-xs font-semibold text-neutral-200">
+                          {source.label}
+                        </span>
+                      )}
                       <span className="rounded bg-neutral-800 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-neutral-500">
                         {source.role}
                       </span>
@@ -447,9 +471,10 @@ export default async function SettingsPage() {
           })}
         </div>
         <p className="mt-3 text-[10px] text-neutral-600">
-          Trusted consensus uses KTC 70% and Dynasty Dealer 30%, renormalized
-          across the sources that are actually fresh and within the player-level
-          consensus guard.
+          When all trusted sources qualify: KTC 55% · Dynasty Dealer 25% ·
+          Stats Guy Fantasy 20%, renormalized across the sources that are
+          actually fresh and within the player-level consensus guard. Stats Guy
+          Fantasy values are credited to their provider.
         </p>
       </section>
 

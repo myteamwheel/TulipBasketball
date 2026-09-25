@@ -8,6 +8,7 @@ import {
   MARKET_SOURCE_MAX_AGE_MS,
   SECONDARY_KTC_DIVERGENCE_LIMIT,
   SLEEPER_LEAGUE_ID,
+  STATSGUY_REFRESH_ENABLED,
   TRADYR_API_KEY,
 } from "@/lib/config";
 import { commitKtcImport, type KtcImportRow } from "@/lib/ktcImport";
@@ -23,7 +24,7 @@ export type MarketSourceKey =
   | "DYNASTY_DEALER"
   | "FANTASYCALC"
   | "STATSGUY";
-export type TrustedMarketSourceKey = "KTC" | "DYNASTY_DEALER";
+export type TrustedMarketSourceKey = "KTC" | "DYNASTY_DEALER" | "STATSGUY";
 const marketDb = prisma;
 
 export interface MarketSourceStatus {
@@ -76,7 +77,7 @@ const FANTASYCALC_URL =
   "https://api.fantasycalc.com/values/current?isDynasty=true&numQbs=2&numTeams=12&ppr=0.5";
 const FANTASYCALC_CADENCE_URL = "https://fantasycalc.com/trade-value-chart";
 const FANTASYCALC_HOME_URL = "https://fantasycalc.com/";
-const STATSGUY_URL = "https://api.statsguyfantasy.com/api/v1/players";
+const STATSGUY_URL = "https://api.statsguyfantasy.com/api/v1/rankings?format=sf_dynasty&limit=1000";
 const MIN_PROVIDER_ROWS = 200;
 
 function sourceAge(sourceUpdatedAt: Date, now = new Date()): number {
@@ -845,15 +846,14 @@ interface StatsGuyPlayer {
   name?: string;
   team?: string;
   position?: string;
-  value?: Record<string, number | undefined>;
-  rank?: Record<string, number | undefined>;
-  positionRank?: Record<string, number | undefined>;
-  valueChange?: Record<string, { days7?: number; days30?: number } | undefined>;
+  value?: number;
+  rank?: number;
+  positionRank?: number;
 }
 interface StatsGuyResponse {
   total?: number;
-  valuesAsOf?: Record<string, string | undefined>;
-  players?: StatsGuyPlayer[];
+  asOf?: string;
+  rankings?: StatsGuyPlayer[];
 }
 
 export async function fetchStatsGuySnapshot(): Promise<ProviderSnapshot> {
@@ -866,14 +866,14 @@ export async function fetchStatsGuySnapshot(): Promise<ProviderSnapshot> {
   if (!response.ok)
     throw new Error(`Stats Guy Fantasy API failed (${response.status})`);
   const data = (await response.json()) as StatsGuyResponse;
-  const asOf = data.valuesAsOf?.sf_dynasty;
+  const asOf = data.asOf;
   if (!asOf)
-    throw new Error("Stats Guy Fantasy did not return valuesAsOf.sf_dynasty");
+    throw new Error("Stats Guy Fantasy did not return rankings.asOf");
   const sourceUpdatedAt = new Date(asOf);
   assertFresh("Stats Guy Fantasy", sourceUpdatedAt, fetchedAt);
-  const players = Array.isArray(data.players) ? data.players : [];
+  const players = Array.isArray(data.rankings) ? data.rankings : [];
   const rows: ProviderRow[] = players.flatMap((player) => {
-    const value = Number(player.value?.sf_dynasty);
+    const value = Number(player.value);
     const name = player.name?.trim();
     if (!player.id || !name || !Number.isFinite(value) || value <= 0) return [];
     return [
@@ -883,13 +883,16 @@ export async function fetchStatsGuySnapshot(): Promise<ProviderSnapshot> {
         position: player.position,
         team: player.team,
         rawValue: Math.round(value),
-        rank: Number.isFinite(Number(player.rank?.sf_dynasty))
-          ? Number(player.rank?.sf_dynasty)
+        rank: Number.isFinite(Number(player.rank))
+          ? Number(player.rank)
           : undefined,
-        positionRank: Number.isFinite(Number(player.positionRank?.sf_dynasty))
-          ? Number(player.positionRank?.sf_dynasty)
+        positionRank: Number.isFinite(Number(player.positionRank))
+          ? Number(player.positionRank)
           : undefined,
-        metadata: { valueChange: player.valueChange?.sf_dynasty ?? null },
+        metadata: {
+          attribution: "Stats Guy Fantasy",
+          attributionUrl: "https://statsguyfantasy.com/",
+        },
       },
     ];
   });
@@ -1259,12 +1262,17 @@ export async function refreshLiveMarketSources(
     refreshRunId,
   );
   const rest = await Promise.all([
-    // Tradyr and StatsGuy are intentionally retained as historical source
-    // types only. They are not refreshed or exposed as current evidence.
+    // Tradyr remains historical-only without an authorized complete feed.
     runSource(
       "DYNASTY_DEALER",
       DYNASTY_DEALER_REFRESH_ENABLED,
       fetchDynastyDealerSnapshot,
+      refreshRunId,
+    ),
+    runSource(
+      "STATSGUY",
+      STATSGUY_REFRESH_ENABLED,
+      fetchStatsGuySnapshot,
       refreshRunId,
     ),
   ]);

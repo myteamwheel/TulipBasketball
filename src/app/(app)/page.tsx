@@ -268,6 +268,15 @@ export default async function HomePage() {
             detail={`${my.lastKnownPlayerCount}/${my.playerCount} Orlando Oswalds`}
           />
           <DataBadge
+            label="Stats Guy"
+            state={sourceStatuses.STATSGUY.stale ? "warn" : "good"}
+            detail={providerDetail(
+              "STATSGUY",
+              sourceStatuses.STATSGUY.stale,
+              latestRun,
+            )}
+          />
+          <DataBadge
             label="Dynasty Dealer"
             state={sourceStatuses.DYNASTY_DEALER.stale ? "warn" : "good"}
             detail={providerDetail(
