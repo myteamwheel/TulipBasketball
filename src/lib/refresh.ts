@@ -25,7 +25,7 @@ import {
 } from "@/lib/weeklyProjection";
 import { recordAuditSnapshot, type AuditSnapshotData } from "@/lib/audit";
 
-const VISIBLE_SOURCES = new Set(["KTC", "TRADYR", "DYNASTY_DEALER", "STATSGUY"]);
+const VISIBLE_SOURCES = new Set(["KTC", "DYNASTY_DEALER", "FANTASYCALC"]);
 const REFRESH_LOCK_KEY = 731521527;
 
 export interface RefreshRunView {
@@ -111,7 +111,7 @@ function toView(run: {
     finishedAt: run.finishedAt?.toISOString() ?? null,
     requestedSources: parseJsonArray(run.requestedSources)
       .map(String)
-      .filter((s) => !/fantasycalc/i.test(s)),
+      .filter(Boolean),
     sleeperSyncOk: run.sleeperSyncOk,
     ktcSyncOk: run.ktcSyncOk,
     draftPickMarketOk: draftStale !== null ? !draftStale : draftError ? false : null,
@@ -481,13 +481,12 @@ async function executeRefresh(runId: string) {
     });
   }
 
-  // Diagnostic-only Stats Guy failures are visible in source status but do not
-  // turn an otherwise healthy KTC/Sleeper refresh amber. Trusted secondary
-  // failures still do.
+  // A failed trusted secondary is visible but does not invalidate a successful
+  // Sleeper/KTC refresh; its values are excluded from that run's consensus.
   const trustedOptionalFailures = marketSourceStatuses.filter(
     (s) =>
       s.enabled &&
-      (s.source === "TRADYR" || s.source === "DYNASTY_DEALER") &&
+      (s.source === "DYNASTY_DEALER" || s.source === "FANTASYCALC") &&
       !s.ok,
   ).length;
   const footballUsageOk = !sleeperSyncOk || footballUsage !== null;

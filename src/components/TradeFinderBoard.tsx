@@ -121,12 +121,8 @@ export default function TradeFinderBoard({ data }: { data: TradeFinderData }) {
     targetOwners = [
       ...new Map(data.targets.map((t) => [t.ownerId, t.ownerName])).entries(),
     ],
-    shopMatches = data.targets
-      .flatMap((t) =>
-        t.offers
-          .filter((o) => o.give.some((a) => a.id === shopAsset))
-          .map((o) => ({ target: t, offer: o })),
-      )
+    shopMatches = data.shopMatches
+      .filter((match) => match.assetId === shopAsset)
       .sort((a, b) => b.offer.valueBalance - a.offer.valueBalance),
     partners = [
       ...new Map(
@@ -193,9 +189,9 @@ export default function TradeFinderBoard({ data }: { data: TradeFinderData }) {
               Who can realistically return value for this asset?
             </h2>
             <p className="mt-1 text-[10px] leading-4 text-neutral-500">
-              Only assets eligible for generated outgoing packages appear here.
-              Private owner constraints stay private; the manual calculator
-              remains unrestricted.
+              These are direct player-for-player value matches for the selected
+              asset, so it does not bury that player inside a larger package.
+              Use the calculator for multi-player or pick structures.
             </p>
             {shopAssets.length ? (
               <select
@@ -245,8 +241,8 @@ export default function TradeFinderBoard({ data }: { data: TradeFinderData }) {
           ))}
           {shopAsset && !shopMatches.length ? (
             <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-6 text-center text-xs text-neutral-500">
-              No generated package currently uses this asset. Try another asset
-              or build the trade manually.
+              No direct player-for-player match is within the current value
+              range. Try another asset or use the calculator for a package.
             </div>
           ) : null}
         </section>

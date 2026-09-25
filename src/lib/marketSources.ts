@@ -9,9 +9,7 @@ import {
   MARKET_SOURCE_MAX_AGE_MS,
   SECONDARY_KTC_DIVERGENCE_LIMIT,
   SLEEPER_LEAGUE_ID,
-  STATSGUY_REFRESH_ENABLED,
   TRADYR_API_KEY,
-  TRADYR_REFRESH_ENABLED,
 } from "@/lib/config";
 import { commitKtcImport, type KtcImportRow } from "@/lib/ktcImport";
 import {
@@ -26,7 +24,7 @@ export type MarketSourceKey =
   | "DYNASTY_DEALER"
   | "FANTASYCALC"
   | "STATSGUY";
-export type TrustedMarketSourceKey = "KTC" | "TRADYR" | "DYNASTY_DEALER";
+export type TrustedMarketSourceKey = "KTC" | "DYNASTY_DEALER" | "FANTASYCALC";
 const marketDb = prisma;
 
 export interface MarketSourceStatus {
@@ -1262,12 +1260,8 @@ export async function refreshLiveMarketSources(
     refreshRunId,
   );
   const rest = await Promise.all([
-    runSource(
-      "TRADYR",
-      TRADYR_REFRESH_ENABLED,
-      fetchTradyrSnapshot,
-      refreshRunId,
-    ),
+    // Tradyr and StatsGuy are intentionally retained as historical source
+    // types only. They are not refreshed or exposed as current evidence.
     runSource(
       "DYNASTY_DEALER",
       DYNASTY_DEALER_REFRESH_ENABLED,
@@ -1278,12 +1272,6 @@ export async function refreshLiveMarketSources(
       "FANTASYCALC",
       FANTASYCALC_REFRESH_ENABLED,
       fetchFantasyCalcSnapshot,
-      refreshRunId,
-    ),
-    runSource(
-      "STATSGUY",
-      STATSGUY_REFRESH_ENABLED,
-      fetchStatsGuySnapshot,
       refreshRunId,
     ),
   ]);

@@ -15,12 +15,14 @@ export const TRADYR_REFRESH_ENABLED =
   Boolean(TRADYR_API_KEY) && process.env.TRADYR_REFRESH_ENABLED !== "false";
 export const DYNASTY_DEALER_REFRESH_ENABLED =
   process.env.DYNASTY_DEALER_REFRESH_ENABLED !== "false";
-export const FANTASYCALC_REFRESH_ENABLED = false;
-// Stats Guy Fantasy exposes a documented, no-auth bulk API keyed by Sleeper ID
-// and archives daily historical snapshots. Keep it active as an independent
-// market input so Tradyr key availability is not a single point of failure.
-export const STATSGUY_REFRESH_ENABLED =
-  process.env.STATSGUY_REFRESH_ENABLED !== "false";
+// FantasyCalc is a public, no-key secondary source with a published sub-daily
+// update cadence. Its fetcher verifies that cadence and ages out unchanged
+// data instead of pretending that an HTTP 200 is a fresh market update.
+export const FANTASYCALC_REFRESH_ENABLED =
+  process.env.FANTASYCALC_REFRESH_ENABLED !== "false";
+// Do not run sources that cannot meet the dashboard's daily freshness policy.
+// Historical rows remain available in exports, but cannot affect live values.
+export const STATSGUY_REFRESH_ENABLED = false;
 export const KTC_AUTO_REFRESH_ENABLED = KTC_DIRECT_REFRESH_ENABLED;
 export const AUTO_REFRESH_ON_VISIT = false;
 
@@ -31,16 +33,16 @@ export const MARKET_SOURCE_MAX_AGE_MS =
   MARKET_SOURCE_MAX_AGE_HOURS * 60 * 60 * 1000;
 
 export const CONSENSUS_WEIGHTS = {
-  KTC: 0.6,
-  TRADYR: 0.2,
-  DYNASTY_DEALER: 0.2,
+  KTC: 0.55,
+  DYNASTY_DEALER: 0.25,
+  FANTASYCALC: 0.2,
 } as const;
 export const CONSENSUS_TRUSTED_SOURCES = [
   "KTC",
-  "TRADYR",
   "DYNASTY_DEALER",
+  "FANTASYCALC",
 ] as const;
-export const DIAGNOSTIC_MARKET_SOURCES = ["STATSGUY"] as const;
+export const DIAGNOSTIC_MARKET_SOURCES = [] as const;
 export const SECONDARY_KTC_DIVERGENCE_LIMIT = Number(
   process.env.SECONDARY_KTC_DIVERGENCE_LIMIT || "0.35",
 );

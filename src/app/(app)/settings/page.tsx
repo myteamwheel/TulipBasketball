@@ -80,14 +80,11 @@ export default async function SettingsPage() {
     })
     .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
     .sort((a, b) => a.name.localeCompare(b.name));
-  const tradyrCovered = entries.filter(
-    (entry) => mix.get(entry.playerId)?.tradyrValue !== null,
-  ).length;
   const dealerCovered = entries.filter(
     (entry) => mix.get(entry.playerId)?.dynastyDealerValue !== null,
   ).length;
-  const statsGuyCovered = entries.filter(
-    (entry) => mix.get(entry.playerId)?.statsGuyValue !== null,
+  const fantasyCalcCovered = entries.filter(
+    (entry) => mix.get(entry.playerId)?.fantasyCalcValue !== null,
   ).length;
   const consensusCovered = entries.filter(
     (entry) => mix.get(entry.playerId)?.consensusValue !== null,
@@ -102,14 +99,6 @@ export default async function SettingsPage() {
       covered: freshKtc,
     },
     {
-      key: "TRADYR",
-      label: "Tradyr",
-      role: "Optional trusted secondary",
-      detail: "Calibrated onto the KTC scale when complete keyed access is configured.",
-      status: statuses.TRADYR,
-      covered: tradyrCovered,
-    },
-    {
       key: "DYNASTY_DEALER",
       label: "Dynasty Dealer",
       role: "Trusted secondary",
@@ -119,13 +108,12 @@ export default async function SettingsPage() {
       covered: dealerCovered,
     },
     {
-      key: "STATSGUY",
-      label: "Stats Guy Fantasy",
-      role: "Independent fallback",
-      detail:
-        "No-key Sleeper-ID market checkpoint retained as an independent diagnostic; never relabeled as KTC or silently blended into the trusted consensus.",
-      status: statuses.STATSGUY,
-      covered: statsGuyCovered,
+      key: "FANTASYCALC",
+      label: "FantasyCalc",
+      role: "Trusted secondary",
+      detail: "Public market values are refreshed only when the provider passes freshness checks and are calibrated onto the KTC scale.",
+      status: statuses.FANTASYCALC,
+      covered: fantasyCalcCovered,
     },
   ] as const;
   const latestSourceStatus = new Map(
@@ -470,10 +458,9 @@ export default async function SettingsPage() {
           })}
         </div>
         <p className="mt-3 text-[10px] text-neutral-600">
-          When all trusted sources qualify: KTC 60% · Tradyr 20% · Dynasty
-          Dealer 20%, renormalized across the trusted sources that are actually
-          available. Stats Guy is retained independently and is not used to
-          manufacture KTC coverage or consensus.
+          When all trusted sources qualify: KTC 55% · Dynasty Dealer 25% ·
+          FantasyCalc 20%, renormalized across the sources that are actually
+          fresh and within the player-level consensus guard.
         </p>
       </section>
 

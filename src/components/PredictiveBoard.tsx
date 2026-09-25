@@ -26,7 +26,8 @@ export default function PredictiveBoard({
 }) {
   const [query, setQuery] = useState("");
   const [position, setPosition] = useState("ALL");
-  const [sort, setSort] = useState<SortKey>("model");
+  const [sort, setSort] = useState<SortKey>("edge");
+  const [includeLowEvidence, setIncludeLowEvidence] = useState(false);
 
   const visible = useMemo(
     () =>
@@ -34,12 +35,16 @@ export default function PredictiveBoard({
         .filter(
           (row) =>
             (position === "ALL" || row.position === position) &&
+            (includeLowEvidence || row.confidence !== "LOW") &&
             `${row.fullName} ${row.nflTeam ?? ""}`
               .toLowerCase()
               .includes(query.toLowerCase().trim()),
         )
         .sort((a, b) => {
-          if (sort === "edge") return b.modelEdgePercent - a.modelEdgePercent;
+          if (sort === "edge") {
+            const confidence = (value: PredictivePlayerModel["confidence"]) => value === "HIGH" ? 2 : value === "MEDIUM" ? 1 : 0;
+            return confidence(b.confidence) - confidence(a.confidence) || b.modelEdgePercent - a.modelEdgePercent;
+          }
           if (sort === "market") return b.currentValue - a.currentValue;
           if (sort === "recent")
             return (b.fantasyPpg ?? -Infinity) - (a.fantasyPpg ?? -Infinity);
@@ -47,21 +52,20 @@ export default function PredictiveBoard({
             return (b.opportunityPerGame ?? -Infinity) - (a.opportunityPerGame ?? -Infinity);
           return b.modelValue - a.modelValue;
         }),
-    [rows, query, position, sort],
+    [rows, query, position, sort, includeLowEvidence],
   );
 
   return (
     <div className="space-y-3">
       <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-3 text-[10px] leading-5 text-neutral-500">
         <span className="font-semibold text-neutral-300">What this board means: </span>
-        KTC is the live dynasty market. Model fair value only moves meaningfully
-        away from market when recent same-position football evidence is strong
-        enough. Recent PPG and opportunity are shown directly so the reason for
-        an edge is visible instead of hidden behind speculative long-range
-        probability columns.
+        This view defaults to decision-ready players ranked by model edge. A
+        player needs recent same-position football evidence before the model can
+        move materially from the live market; low-evidence players are hidden
+        until you choose to include them.
       </div>
 
-      <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto]">
+      <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto_auto]">
         <input
           aria-label="Search predictive player board"
           value={query}
@@ -87,12 +91,16 @@ export default function PredictiveBoard({
           onChange={(event) => setSort(event.target.value as SortKey)}
           className="h-9 rounded-md border border-neutral-800 bg-neutral-950 px-2 text-xs text-neutral-300"
         >
+          <option value="edge">Model edge</option>
           <option value="model">Model fair value</option>
           <option value="market">KTC market value</option>
-          <option value="edge">Model edge</option>
           <option value="recent">Recent NFL PPG</option>
           <option value="usage">Opportunity / game</option>
         </select>
+        <label className="flex h-9 items-center gap-2 rounded-md border border-neutral-800 bg-neutral-950 px-2 text-[10px] text-neutral-400">
+          <input type="checkbox" checked={includeLowEvidence} onChange={(event) => setIncludeLowEvidence(event.target.checked)} />
+          Show low evidence
+        </label>
       </div>
 
       <div className="overflow-x-auto rounded-lg border border-neutral-800">
@@ -166,7 +174,8 @@ export default function PredictiveBoard({
       </div>
 
       <p className="text-[9px] leading-4 text-neutral-600">
-        The board intentionally omits uncalibrated one-year probability columns
+        Low-evidence rows are market-anchored rather than treated as actionable
+        edges. The board intentionally omits uncalibrated one-year probability columns
         from the primary decision table. Long-range scenario ranges remain
         available in the underlying player model, but the main view prioritizes
         observable market, production, opportunity and evidence quality. Weekly

@@ -54,9 +54,7 @@ function providerDetail(
     return "Disabled";
   }
   if (latest?.ok === false) {
-    return latest.message.includes("TRADYR_API_KEY")
-      ? "API key required"
-      : "Refresh failed";
+    return "Refresh failed";
   }
   return "Unavailable";
 }
@@ -270,11 +268,11 @@ export default async function HomePage() {
             detail={`${my.lastKnownPlayerCount}/${my.playerCount} Orlando Oswalds`}
           />
           <DataBadge
-            label="Tradyr"
-            state={sourceStatuses.TRADYR.stale ? "warn" : "good"}
+            label="FantasyCalc"
+            state={sourceStatuses.FANTASYCALC.stale ? "warn" : "good"}
             detail={providerDetail(
-              "TRADYR",
-              sourceStatuses.TRADYR.stale,
+              "FANTASYCALC",
+              sourceStatuses.FANTASYCALC.stale,
               latestRun,
             )}
           />

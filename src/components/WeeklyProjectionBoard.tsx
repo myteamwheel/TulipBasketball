@@ -23,7 +23,19 @@ function statLine(position: string, stats: ProjectedStatLine | null) {
   if (position === "QB") {
     return `${Math.round(stats.completions)}/${Math.round(stats.attempts)} pass · ${Math.round(stats.passingYards)} yd · ${Math.round(stats.passingTds)} TD · ${Math.round(stats.interceptions)} INT · ${Math.round(stats.carries)} car · ${Math.round(stats.rushingYards)} rush yd · ${Math.round(stats.rushingTds)} rush TD`;
   }
-  return `${Math.round(stats.carries)} car · ${Math.round(stats.rushingYards)} rush yd · ${Math.round(stats.rushingTds)} rush TD · ${Math.round(stats.targets)} tgt · ${Math.round(stats.receptions)} rec · ${Math.round(stats.receivingYards)} rec yd · ${Math.round(stats.receivingTds)} rec TD`;
+  const rushing = `${Math.round(stats.carries)} car · ${Math.round(stats.rushingYards)} rush yd · ${Math.round(stats.rushingTds)} rush TD`;
+  const receiving = `${Math.round(stats.targets)} tgt · ${Math.round(stats.receptions)} rec · ${Math.round(stats.receivingYards)} rec yd · ${Math.round(stats.receivingTds)} rec TD`;
+  // Receiving volume is the first meaningful category for WR/TE; RBs remain
+  // rush-first while retaining targets for receiving-back context.
+  return position === "RB" ? `${rushing} · ${receiving}` : `${receiving} · ${rushing}`;
+}
+
+function accuracyTone(value: number | null) {
+  if (value === null) return "text-neutral-500";
+  if (value >= 75) return "text-emerald-300";
+  if (value >= 50) return "text-amber-300";
+  if (value >= 25) return "text-orange-400";
+  return "text-red-500";
 }
 
 function confidenceWeight(value: WeeklyProjectionRow["confidence"]) {
@@ -105,16 +117,9 @@ export default function WeeklyProjectionBoard({
     : null;
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-3 text-[10px] leading-5 text-neutral-500">
-        <span className="font-semibold text-neutral-300">Projection rules: </span>
-        a player must have a current NFL team, not be marked unavailable, and
-        have a meaningful weekly role supported by Sleeper and/or CBS. The
-        final fantasy points come from the unrounded model calculation. The
-        displayed NFL stat line is a readable whole-number illustration of that
-        forecast; it does not re-score or replace the final points. Fractional
-        touchdowns remain in the internal expected-value calculation and are
-        never shown as a real-life outcome.
+    <div className="flex flex-col gap-6">
+      <div className="order-5 rounded-lg border border-neutral-800 bg-neutral-900 p-2.5 text-[10px] leading-4 text-neutral-500">
+        <span className="font-semibold text-neutral-300">How to read this:</span> final points use the unrounded blend; stat lines are readable whole-number outcomes. Only players with a supported current role are projected.
       </div>
 
       <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
@@ -219,7 +224,7 @@ export default function WeeklyProjectionBoard({
       </section>
 
       {unavailableRows.length ? (
-        <section className="space-y-2">
+        <section className="order-3 space-y-2">
           <div>
             <h2 className="text-sm font-semibold text-neutral-100">
               Not projected
@@ -259,7 +264,7 @@ export default function WeeklyProjectionBoard({
         </section>
       ) : null}
 
-      <section className="space-y-2">
+      <section className="order-2 space-y-2">
         <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto] sm:items-end">
           <div>
             <h2 className="text-sm font-semibold text-neutral-100">Projection accuracy history</h2>
@@ -292,7 +297,7 @@ export default function WeeklyProjectionBoard({
         </div>
 
         <div className="overflow-x-auto rounded-lg border border-neutral-800">
-          <table className="w-full min-w-[1120px] text-xs">
+          <table className="w-full min-w-[1040px] text-xs">
             <thead>
               <tr className="bg-neutral-950 text-[9px] uppercase tracking-wide text-neutral-600">
                 <th className="px-2.5 py-2 text-left">Player</th>
@@ -301,8 +306,7 @@ export default function WeeklyProjectionBoard({
                 <th className="px-2 py-2 text-right">Actual</th>
                 <th className="px-2 py-2 text-right">Abs error</th>
                 <th className="px-2 py-2 text-right">Accuracy</th>
-                <th className="px-2 py-2 text-left">Projected stat line</th>
-                <th className="px-2 py-2 text-left">Actual stat line</th>
+                <th className="px-2 py-2 text-left">Projected vs actual stat line</th>
               </tr>
             </thead>
             <tbody>
@@ -322,14 +326,12 @@ export default function WeeklyProjectionBoard({
                   <td className="px-2 py-2 text-right tabular-nums text-neutral-300">
                     {number(row.absoluteError)}
                   </td>
-                  <td className="px-2 py-2 text-right font-medium tabular-nums text-emerald-300">
+                  <td className={`px-2 py-2 text-right font-medium tabular-nums ${accuracyTone(row.accuracyScore)}`}>
                     {row.accuracyScore === null ? "—" : `${row.accuracyScore.toFixed(1)}%`}
                   </td>
-                  <td className="max-w-[360px] px-2 py-2 text-[9px] leading-4 text-neutral-400">
-                    {statLine(row.position, row.projectedStats)}
-                  </td>
-                  <td className="max-w-[360px] px-2 py-2 text-[9px] leading-4 text-neutral-400">
-                    {statLine(row.position, row.actualStats)}
+                  <td className="min-w-[420px] px-2 py-2 text-[9px] leading-4">
+                    <div className="rounded border border-sky-900/60 bg-sky-950/20 px-2 py-1 text-sky-200"><span className="mr-1 font-semibold uppercase tracking-wide text-sky-400">Projected</span>{statLine(row.position, row.projectedStats)}</div>
+                    <div className="mt-1 rounded border border-emerald-900/60 bg-emerald-950/20 px-2 py-1 text-emerald-200"><span className="mr-1 font-semibold uppercase tracking-wide text-emerald-400">Actual</span>{statLine(row.position, row.actualStats)}</div>
                   </td>
                 </tr>
               ))}

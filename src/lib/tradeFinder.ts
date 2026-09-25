@@ -76,6 +76,7 @@ export type TradeFinderTarget = {
 };
 export type TradeFinderData = {
   targets: TradeFinderTarget[];
+  shopMatches: { assetId: string; target: TradeFinderTarget; offer: TradeFinderOffer }[];
   orlandoNeeds: { position: string; leagueRank: number; note: string }[];
   playerTradeChipCount: number;
   pickTradeChipCount: number;
@@ -522,8 +523,44 @@ export async function buildTradeFinderData(): Promise<TradeFinderData | null> {
     .sort(
       (a, b) => a.managerName.localeCompare(b.managerName) || b.value - a.value,
     );
+  const shopMatches = ktcStale
+    ? []
+    : playerChips.flatMap((give) =>
+        assets
+          .filter((get) => get.managerId !== primary.id && !get.isStale && get.assetType === "player" && get.value >= 500)
+          .map((get) => {
+            const givePackage = calculatePackageTradeValue([give]);
+            const getPackage = calculatePackageTradeValue([get]);
+            const ratio = givePackage.adjustedValue / Math.max(1, getPackage.adjustedValue);
+            const ownerNeeds = needsForManager(get.managerId, valuations);
+            const offer: TradeFinderOffer = {
+              give: [cleanAsset(give)], get: [cleanAsset(get)],
+              giveRawValue: givePackage.rawValue, getRawValue: getPackage.rawValue,
+              giveAdjustedValue: givePackage.adjustedValue, getAdjustedValue: getPackage.adjustedValue,
+              rawEdge: getPackage.rawValue - givePackage.rawValue,
+              adjustedEdge: getPackage.adjustedValue - givePackage.adjustedValue,
+              valueBalance: Math.min(ratio, 1 / ratio) * 100,
+              packageQuality: ratio >= .94 && ratio <= 1.06 ? "STRONG" : "WORKABLE",
+              ownerNeedMatch: ownerNeeds.includes(give.position as Position) ? [give.position] : [],
+            };
+            const target: TradeFinderTarget = {
+              id: get.id, name: get.name, position: get.position, nflTeam: get.nflTeam,
+              ownerName: get.managerName, ownerId: get.managerId, value: get.value,
+              consensusValue: get.consensusValue, change30d: get.change30d,
+              change30dPercent: get.change30dPercent, fitScore: 0,
+              confidence: get.consensusValue === null ? "MEDIUM" : "HIGH", tags: [],
+              ownerNeeds, why: "Direct player-for-player value match.", offers: [offer],
+            };
+            return { assetId: give.id, target, offer, ratio };
+          })
+          .filter((match) => match.ratio >= .82 && match.ratio <= 1.22)
+          .sort((a, b) => b.offer.valueBalance - a.offer.valueBalance || b.target.value - a.target.value)
+          .slice(0, 12)
+          .map((match) => ({ assetId: match.assetId, target: match.target, offer: match.offer })),
+      );
   return {
     targets,
+    shopMatches,
     orlandoNeeds,
     playerTradeChipCount: playerChips.length,
     pickTradeChipCount: pickChips.length,

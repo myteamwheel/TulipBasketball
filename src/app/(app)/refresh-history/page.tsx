@@ -10,7 +10,7 @@ const STATUS_STYLE: Record<string, string> = {
   PARTIAL_FAILURE: "text-amber-300 bg-amber-950/40 border-amber-900",
   FAILED: "text-red-300 bg-red-950/40 border-red-900",
 };
-const CURRENT_SOURCES = new Set(["KTC", "TRADYR", "DYNASTY_DEALER", "STATSGUY"]);
+const CURRENT_SOURCES = new Set(["KTC", "DYNASTY_DEALER", "FANTASYCALC"]);
 
 function safeJson<T>(value: string | null, fallback: T): T {
   if (!value) return fallback;

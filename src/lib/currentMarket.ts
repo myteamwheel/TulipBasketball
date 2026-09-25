@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { MARKET_SOURCE_MAX_AGE_MS } from "@/lib/config";
 import type { CurrentMarketMix } from "@/lib/marketSources";
 
-const TRUSTED = new Set(["KTC", "TRADYR", "DYNASTY_DEALER"]);
+const TRUSTED = new Set(["KTC", "DYNASTY_DEALER", "FANTASYCALC"]);
 
 type LatestMarketRow = {
   playerId: string;
@@ -66,7 +66,7 @@ export async function getFreshCurrentMarketMix(playerIds: string[]): Promise<Map
         "playerId", "source"::text AS "source", "rawValue", "normalizedValue", "observedAt", "sourceUpdatedAt"
       FROM "MarketObservation"
       WHERE "playerId" = ANY(${uniquePlayerIds}::text[])
-        AND "source" IN ('KTC', 'TRADYR', 'DYNASTY_DEALER', 'STATSGUY')
+        AND "source" IN ('KTC', 'DYNASTY_DEALER', 'FANTASYCALC')
       ORDER BY "playerId", "source", "observedAt" DESC, "createdAt" DESC
     `,
     prisma.$queryRaw<LatestConsensusRow[]>`
@@ -84,13 +84,11 @@ export async function getFreshCurrentMarketMix(playerIds: string[]): Promise<Map
   for (const playerId of uniquePlayerIds) {
     const row = result.get(playerId)!;
     const ktc = latestByPlayerSource.get(`${playerId}:KTC`);
-    const tradyr = latestByPlayerSource.get(`${playerId}:TRADYR`);
     const dealer = latestByPlayerSource.get(`${playerId}:DYNASTY_DEALER`);
-    const statsGuy = latestByPlayerSource.get(`${playerId}:STATSGUY`);
+    const fantasyCalc = latestByPlayerSource.get(`${playerId}:FANTASYCALC`);
     if (ktc && freshTimestamp(ktc.sourceUpdatedAt, ktc.observedAt)) row.ktcValue = ktc.rawValue;
-    if (tradyr && freshTimestamp(tradyr.sourceUpdatedAt, tradyr.observedAt)) row.tradyrValue = tradyr.normalizedValue;
     if (dealer && freshTimestamp(dealer.sourceUpdatedAt, dealer.observedAt)) row.dynastyDealerValue = dealer.normalizedValue;
-    if (statsGuy && freshTimestamp(statsGuy.sourceUpdatedAt, statsGuy.observedAt)) row.statsGuyValue = statsGuy.normalizedValue;
+    if (fantasyCalc && freshTimestamp(fantasyCalc.sourceUpdatedAt, fantasyCalc.observedAt)) row.fantasyCalcValue = fantasyCalc.normalizedValue;
   }
 
   for (const c of consensus) {

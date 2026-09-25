@@ -13,14 +13,6 @@
       "schedule": "0 13 * * *"
     },
     {
-      "path": "/api/cron/statsguy-refresh/14",
-      "schedule": "0 14 * * *"
-    },
-    {
-      "path": "/api/cron/statsguy-refresh/15",
-      "schedule": "0 15 * * *"
-    },
-    {
       "path": "/api/cron/projection-refresh/16",
       "schedule": "0 16 * * *"
     },

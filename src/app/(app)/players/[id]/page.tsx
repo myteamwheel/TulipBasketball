@@ -34,8 +34,8 @@ export default async function PlayerDetailPage({ params }: { params: Promise<{ i
   const baselineLabel = formatDateEastern(ORLANDO_BASELINE_DATE);
   const sourceRows = [
     { key: "KTC", label: "KTC", value: mix.ktcValue },
-    { key: "TRADYR", label: "Tradyr", value: mix.tradyrValue },
     { key: "DYNASTY_DEALER", label: "Dynasty Dealer", value: mix.dynastyDealerValue },
+    { key: "FANTASYCALC", label: "FantasyCalc", value: mix.fantasyCalcValue },
   ];
   const latestSeason=football.seasons[0]??null;
   const careerGames=football.seasons.reduce((sum,row)=>sum+row.games,0);

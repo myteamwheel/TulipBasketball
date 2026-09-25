@@ -67,8 +67,6 @@ export default async function ProjectionsPage() {
         </div>
       </section>
 
-      {omittedScoring.length > 0 && <p className="rounded-lg border border-amber-900 bg-amber-950/20 p-3 text-xs leading-5 text-amber-200">Projection totals apply the league’s core passing, rushing, receiving and lost-fumble scoring. The feeds do not consistently project these additional scoring events: {omittedScoring.map(row => row.key).join(", ")}. Totals and model accuracy therefore cover core scoring, and can differ from the final Sleeper score.</p>}
-
       <WeeklyProjectionBoard
         current={data.current}
         history={data.history}
@@ -76,6 +74,8 @@ export default async function ProjectionsPage() {
         season={data.season}
         week={data.week}
       />
+
+      {omittedScoring.length > 0 && <details className="rounded-lg border border-neutral-800 bg-neutral-900 px-3 py-2 text-xs leading-5 text-neutral-500"><summary className="cursor-pointer font-medium text-neutral-300">Scoring coverage note</summary><p className="mt-1">Final points use the league’s core scoring. {omittedScoring.length} bonus or uncommon event type{omittedScoring.length === 1 ? " is" : "s are"} not projected by the source feeds, so the visible stat line and accuracy grade cover the core scoring events.</p></details>}
 
       <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3 text-[10px] leading-5 text-neutral-500">
         <div className="font-semibold text-neutral-300">How the projection model learns</div>
