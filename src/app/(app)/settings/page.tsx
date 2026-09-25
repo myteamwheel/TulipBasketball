@@ -83,9 +83,6 @@ export default async function SettingsPage() {
   const dealerCovered = entries.filter(
     (entry) => mix.get(entry.playerId)?.dynastyDealerValue !== null,
   ).length;
-  const fantasyCalcCovered = entries.filter(
-    (entry) => mix.get(entry.playerId)?.fantasyCalcValue !== null,
-  ).length;
   const consensusCovered = entries.filter(
     (entry) => mix.get(entry.playerId)?.consensusValue !== null,
   ).length;
@@ -106,14 +103,6 @@ export default async function SettingsPage() {
         "Player market calibrated onto the KTC scale; draft picks are modeled separately.",
       status: statuses.DYNASTY_DEALER,
       covered: dealerCovered,
-    },
-    {
-      key: "FANTASYCALC",
-      label: "FantasyCalc",
-      role: "Trusted secondary",
-      detail: "Public market values are refreshed only when the provider passes freshness checks and are calibrated onto the KTC scale.",
-      status: statuses.FANTASYCALC,
-      covered: fantasyCalcCovered,
     },
   ] as const;
   const latestSourceStatus = new Map(
@@ -458,9 +447,9 @@ export default async function SettingsPage() {
           })}
         </div>
         <p className="mt-3 text-[10px] text-neutral-600">
-          When all trusted sources qualify: KTC 55% · Dynasty Dealer 25% ·
-          FantasyCalc 20%, renormalized across the sources that are actually
-          fresh and within the player-level consensus guard.
+          Trusted consensus uses KTC 70% and Dynasty Dealer 30%, renormalized
+          across the sources that are actually fresh and within the player-level
+          consensus guard.
         </p>
       </section>
 

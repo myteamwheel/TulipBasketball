@@ -10,7 +10,7 @@ const STATUS_STYLE: Record<string, string> = {
   PARTIAL_FAILURE: "text-amber-300 bg-amber-950/40 border-amber-900",
   FAILED: "text-red-300 bg-red-950/40 border-red-900",
 };
-const CURRENT_SOURCES = new Set(["KTC", "DYNASTY_DEALER", "FANTASYCALC"]);
+const CURRENT_SOURCES = new Set(["KTC", "DYNASTY_DEALER"]);
 
 function safeJson<T>(value: string | null, fallback: T): T {
   if (!value) return fallback;
@@ -58,8 +58,6 @@ export default async function RefreshHistoryPage({
           const errors = safeJson<{ source: string; message: string }[]>(
             run.errors,
             [],
-          ).filter((error) =>
-            !/fantasycalc|patch14/i.test(`${error.source} ${error.message}`),
           );
           const summary = safeJson<Record<string, unknown>>(run.summary, {});
           const sourceStatuses = (

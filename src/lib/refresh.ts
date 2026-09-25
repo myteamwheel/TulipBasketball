@@ -25,7 +25,7 @@ import {
 } from "@/lib/weeklyProjection";
 import { recordAuditSnapshot, type AuditSnapshotData } from "@/lib/audit";
 
-const VISIBLE_SOURCES = new Set(["KTC", "DYNASTY_DEALER", "FANTASYCALC"]);
+const VISIBLE_SOURCES = new Set(["KTC", "DYNASTY_DEALER"]);
 const REFRESH_LOCK_KEY = 731521527;
 
 export interface RefreshRunView {
@@ -238,7 +238,6 @@ export async function startRefresh(): Promise<{ runId: string }> {
         "ktc",
         "full_ktc_universe",
         "dynasty_dealer",
-        "fantasycalc",
         "consensus",
         "draft_pick_market",
         "traded_pick_ownership",
@@ -485,7 +484,7 @@ async function executeRefresh(runId: string) {
   const trustedOptionalFailures = marketSourceStatuses.filter(
     (s) =>
       s.enabled &&
-      (s.source === "DYNASTY_DEALER" || s.source === "FANTASYCALC") &&
+      s.source === "DYNASTY_DEALER" &&
       !s.ok,
   ).length;
   const footballUsageOk = !sleeperSyncOk || footballUsage !== null;

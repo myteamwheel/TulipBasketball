@@ -4,7 +4,6 @@ import {
   CONSENSUS_TRUSTED_SOURCES,
   CONSENSUS_WEIGHTS,
   DYNASTY_DEALER_REFRESH_ENABLED,
-  FANTASYCALC_REFRESH_ENABLED,
   KTC_DIRECT_REFRESH_ENABLED,
   MARKET_SOURCE_MAX_AGE_MS,
   SECONDARY_KTC_DIVERGENCE_LIMIT,
@@ -24,7 +23,7 @@ export type MarketSourceKey =
   | "DYNASTY_DEALER"
   | "FANTASYCALC"
   | "STATSGUY";
-export type TrustedMarketSourceKey = "KTC" | "DYNASTY_DEALER" | "FANTASYCALC";
+export type TrustedMarketSourceKey = "KTC" | "DYNASTY_DEALER";
 const marketDb = prisma;
 
 export interface MarketSourceStatus {
@@ -1268,12 +1267,6 @@ export async function refreshLiveMarketSources(
       fetchDynastyDealerSnapshot,
       refreshRunId,
     ),
-    runSource(
-      "FANTASYCALC",
-      FANTASYCALC_REFRESH_ENABLED,
-      fetchFantasyCalcSnapshot,
-      refreshRunId,
-    ),
   ]);
   const statuses = [ktc, ...rest];
   const consensusPlayersStored = await buildConsensus(refreshRunId);
@@ -1296,7 +1289,6 @@ export interface CurrentMarketMix {
   ktcValue: number | null;
   tradyrValue: number | null;
   dynastyDealerValue: number | null;
-  fantasyCalcValue: number | null;
   statsGuyValue: number | null;
 }
 
@@ -1314,7 +1306,6 @@ export async function getCurrentMarketMix(
       ktcValue: null,
       tradyrValue: null,
       dynastyDealerValue: null,
-      fantasyCalcValue: null,
       statsGuyValue: null,
     });
   if (playerIds.length === 0) return result;
@@ -1354,7 +1345,6 @@ export async function getCurrentMarketMix(
     if (m.source === "TRADYR") row.tradyrValue = m.normalizedValue;
     if (m.source === "DYNASTY_DEALER")
       row.dynastyDealerValue = m.normalizedValue;
-    if (m.source === "FANTASYCALC") row.fantasyCalcValue = m.normalizedValue;
     if (m.source === "STATSGUY") row.statsGuyValue = m.normalizedValue;
   }
   return result;

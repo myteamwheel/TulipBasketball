@@ -268,15 +268,6 @@ export default async function HomePage() {
             detail={`${my.lastKnownPlayerCount}/${my.playerCount} Orlando Oswalds`}
           />
           <DataBadge
-            label="FantasyCalc"
-            state={sourceStatuses.FANTASYCALC.stale ? "warn" : "good"}
-            detail={providerDetail(
-              "FANTASYCALC",
-              sourceStatuses.FANTASYCALC.stale,
-              latestRun,
-            )}
-          />
-          <DataBadge
             label="Dynasty Dealer"
             state={sourceStatuses.DYNASTY_DEALER.stale ? "warn" : "good"}
             detail={providerDetail(
