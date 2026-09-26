@@ -6,6 +6,8 @@ import { SLEEPER_LEAGUE_ID } from "@/lib/config";
 import { publicTeamName } from "@/lib/publicIdentity";
 import { formatDateTimeEastern, formatPoints, formatSigned, trendColorClass } from "@/lib/format";
 import { computeAllTeamValuations } from "@/lib/teamMetrics";
+import { fetchFreshDraftPickMarketValues } from "@/lib/pickMarket";
+import { currentPickMarketValue } from "@/lib/pickValuation";
 
 export const dynamic = "force-dynamic";
 const PAGE_SIZE = 50;
@@ -38,10 +40,11 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
   const total = await prisma.transaction.count({ where });
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const page = Math.min(requestedPage, totalPages);
-  const [transactions, managers, valuations] = await Promise.all([
+  const [transactions, managers, valuations, pickMarket] = await Promise.all([
     prisma.transaction.findMany({ where, orderBy: { sleeperCreatedAt: "desc" }, skip: (page - 1) * PAGE_SIZE, take: PAGE_SIZE }),
     prisma.manager.findMany({ where: { league: { sleeperId: SLEEPER_LEAGUE_ID } } }),
     computeAllTeamValuations(),
+    fetchFreshDraftPickMarketValues().catch(() => []),
   ]);
   const sleeperIds = [...new Set(transactions.flatMap((tx) => [...Object.keys(record(tx.adds)), ...Object.keys(record(tx.drops))]))];
   const players = await prisma.player.findMany({ where: { sleeperId: { in: sleeperIds } }, select: { id: true, sleeperId: true, fullName: true, position: true } });
@@ -64,8 +67,9 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
     const sides = rosterIds.map((rosterId) => {
       const gotPlayers = Object.entries(adds).filter(([, owner]) => owner === rosterId).map(([id]) => playerAsset(id, tx.sleeperCreatedAt));
       const gavePlayers = Object.entries(drops).filter(([, owner]) => owner === rosterId).map(([id]) => playerAsset(id, tx.sleeperCreatedAt));
-      const gotPicks: Asset[] = picks.filter((p) => p.owner_id === rosterId).map((p) => ({ id: null, label: `${p.season} Round ${p.round} · ${teamName(p.roster_id)} original`, atMove: null, current: pickValues.get(`pick:${p.season}:${p.round}:${p.roster_id}`) ?? null }));
-      const gavePicks: Asset[] = picks.filter((p) => p.previous_owner_id === rosterId).map((p) => ({ id: null, label: `${p.season} Round ${p.round} · ${teamName(p.roster_id)} original`, atMove: null, current: pickValues.get(`pick:${p.season}:${p.round}:${p.roster_id}`) ?? null }));
+      const pickValue = (p: TradedPick) => pickValues.get(`pick:${p.season}:${p.round}:${p.roster_id}`) ?? currentPickMarketValue(pickMarket, Number(p.season), p.round, null);
+      const gotPicks: Asset[] = picks.filter((p) => p.owner_id === rosterId).map((p) => ({ id: null, label: `${p.season} Round ${p.round} · ${teamName(p.roster_id)} original`, atMove: null, current: pickValue(p) }));
+      const gavePicks: Asset[] = picks.filter((p) => p.previous_owner_id === rosterId).map((p) => ({ id: null, label: `${p.season} Round ${p.round} · ${teamName(p.roster_id)} original`, atMove: null, current: pickValue(p) }));
       return { rosterId, name: teamName(rosterId), got: [...gotPlayers, ...gotPicks], gave: [...gavePlayers, ...gavePicks] };
     }).filter((side) => side.got.length || side.gave.length);
     return { tx, sides, bid: waiverBid(tx.rawPayload), faab: array<FaabTransfer>(tx.waiverBudget).filter((row) => Number(row.amount) > 0) };
