@@ -128,10 +128,7 @@ export default async function ForecastPage() {
               Prediction Center
             </h1>
             <p className="mt-1 max-w-3xl text-sm leading-5 text-neutral-500">
-              A grounded dynasty decision view: live market value, recent NFL
-              production, opportunity, age and draft context are separated so
-              you can see exactly why the model differs from KTC. Weekly stat
-              forecasting now lives in its own Projected Points tab.
+              Dynasty value, upside and team outlook. Open a player to see the evidence behind the model.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -213,7 +210,7 @@ export default async function ForecastPage() {
             {Math.round(simulation.weeklyProjectionCoverage * 100)}%.
           </div>
         )}
-        <p className="mt-2 text-[9px] leading-4 text-neutral-600">
+        <details className="mt-2 text-xs text-neutral-400"><summary className="cursor-pointer">How the forecast works</summary>        <p className="mt-2 text-[9px] leading-4 text-neutral-600">
           Simulation probabilities are model outputs, not betting probabilities.
           The canonical weekly-consensus projection feed now drives lineup
           strength when available, and players explicitly withheld for no current
@@ -222,7 +219,7 @@ export default async function ForecastPage() {
           conservatively shrunk toward league-neutral priors. Recent-production
           evidence remains a secondary fallback, not a competing projection
           system.
-        </p>
+        </p></details>
       </section>
       {weeklyForecastReady ? (
       <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3 sm:p-4">

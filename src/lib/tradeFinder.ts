@@ -1,3 +1,7 @@
+import { simulateDynastyBoys } from "@/lib/leagueSimulation";
+import { getDecisionGradePredictiveModels } from "@/lib/predictiveSafety";
+import { getProjectionDashboardData } from "@/lib/weeklyProjection";
+import { fitsRoster, windowMotive } from "@/lib/tradeEligibility";
 import { prisma } from "@/lib/prisma";
 import { SLEEPER_LEAGUE_ID } from "@/lib/config";
 import {
@@ -11,11 +15,6 @@ import { getFreshCurrentMarketMix } from "@/lib/currentMarket";
 import { getLatestMarketSourceStatuses } from "@/lib/marketSources";
 import { fetchFreshDraftPickMarketValues } from "@/lib/pickMarket";
 import { fetchFreshTradedPickOwnershipState } from "@/lib/pickOwnership";
-import {
-  currentPickMarketValue,
-  firstTradableDraftSeason,
-  projectedRookieSlot,
-} from "@/lib/pickValuation";
 import { calculatePackageTradeValue } from "@/lib/tradeValue";
 import { publicTeamName } from "@/lib/publicIdentity";
 import {
@@ -154,6 +153,7 @@ function offerCandidates(
   primaryActive: number,
   ownerActive: number,
   activeLimit: number,
+  plausible: (give: LiveAsset[], get: LiveAsset[]) => boolean,
 ): TradeFinderOffer[] {
   const secondaries = ownerAssets
       .filter(
@@ -214,7 +214,7 @@ function offerCandidates(
       })
       .filter((c) => {
         const active = (assets: LiveAsset[]) => assets.filter((asset) => asset.assetType === "player" && asset.slot !== "IR" && asset.slot !== "TAXI").length;
-        return c.ratio >= 0.9 && c.ratio <= 1.16 && primaryActive - active(c.give) + active(c.get) <= activeLimit && ownerActive - active(c.get) + active(c.give) <= activeLimit;
+        return c.ratio >= 0.9 && c.ratio <= 1.16 && fitsRoster(primaryActive, active(c.give), c.get.filter(a => a.assetType === "player").length, activeLimit) && fitsRoster(ownerActive, active(c.get), c.give.filter(a => a.assetType === "player").length, activeLimit) && plausible(c.give, c.get);
       })
       .sort((a, b) => a.rankScore - b.rankScore);
   const selected: typeof candidates = [],
@@ -261,15 +261,6 @@ function dataConfidence(
   if (target.consensusValue !== null || target.change30dPercent !== null)
     return "MEDIUM";
   return "LOW";
-}
-function ordinalRound(round: number) {
-  return round === 1
-    ? "1st"
-    : round === 2
-      ? "2nd"
-      : round === 3
-        ? "3rd"
-        : `${round}th`;
 }
 export async function buildTradeFinderData(): Promise<TradeFinderData | null> {
   const primary = await getPrimaryManager();
@@ -324,83 +315,38 @@ export async function buildTradeFinderData(): Promise<TradeFinderData | null> {
       };
     })
     .filter((a) => a.value > 0);
-  let draftRounds = 4,
-    leagueStatus = "";
-  try {
-    const settings = league?.settings ? JSON.parse(league.settings) : null,
-      parsed = Number(settings?.settings?.draft_rounds);
-    if (Number.isFinite(parsed) && parsed >= 1 && parsed <= 10)
-      draftRounds = parsed;
-    leagueStatus = String(settings?.status ?? "");
-  } catch {}
   let activeRosterLimit = 24;
   try {
     const settings = league?.settings ? JSON.parse(league.settings) : null;
-    const positions = Array.isArray(settings?.roster_positions) ? settings.roster_positions.map(String) : [];
-    const calculated = positions.filter((position: string) => !["IR", "TAXI"].includes(position)).length;
-    if (calculated > 0) activeRosterLimit = calculated;
+    const positions = settings?.roster_positions;
+    if (Array.isArray(positions) && positions.length) activeRosterLimit = positions.filter((p: string) => !["IR", "TAXI"].includes(p)).length;
   } catch {}
-  const leagueSeason = Number(league?.season ?? new Date().getUTCFullYear()),
-    firstSeason = firstTradableDraftSeason(leagueSeason, leagueStatus),
-    futureSeasons = [
-      ...new Set(
-        pickMarket
-          .map((p) => Number(p.season))
-          .filter((y) => Number.isFinite(y) && y >= firstSeason),
-      ),
-    ]
-      .sort((a, b) => a - b)
-      .slice(0, 4),
-    playerCapital = new Map(
-      valuations.map((v) => [v.managerId, v.playerCapital]),
-    ),
-    managerByRosterId = new Map(managers.map((m) => [m.sleeperRosterId, m])),
-    allPickAssets: LiveAsset[] = [];
-  if (pickOwnership && pickMarket.length)
-    for (const season of futureSeasons)
-      for (let round = 1; round <= draftRounds; round++)
-        for (const origin of managers) {
-          const moved = pickOwnership.rows.find(
-              (p) =>
-                Number(p.season) === season &&
-                p.round === round &&
-                p.roster_id === origin.sleeperRosterId,
-            ),
-            owner = managerByRosterId.get(
-              moved?.owner_id ?? origin.sleeperRosterId,
-            );
-          if (!owner) continue;
-          const slot = projectedRookieSlot(
-              origin.id,
-              origin.sleeperRosterId,
-              managers,
-              playerCapital,
-            ),
-            value = currentPickMarketValue(pickMarket, season, round, slot);
-          if (!value || value < 200) continue;
-          allPickAssets.push({
-            id: `pick:${season}:${round}:${origin.sleeperRosterId}`,
-            assetType: "pick",
-            name: `${season} ${ordinalRound(round)} · ${publicTeamName(origin)} original`,
-            position: "PICK",
-            value,
-            slot: "PICK",
-            managerId: owner.id,
-            managerName: publicTeamName(owner),
-            nflTeam: null,
-            consensusValue: null,
-            isStale: false,
-            change30d: null,
-            change30dPercent: null,
-          });
-        }
+  const allPickAssets: LiveAsset[] = valuations.flatMap(v => v.draftPicks.map(p => ({
+    id: p.id, assetType: "pick" as const, name: p.label, position: "PICK", value: p.value,
+    slot: "PICK", managerId: v.managerId, managerName: v.teamName, nflTeam: null,
+    consensusValue: null, isStale: v.draftMarketStale || v.draftOwnershipStale,
+    change30d: null, change30dPercent: null,
+  })));
+  const [simulation, models, weekly] = await Promise.all([simulateDynastyBoys(), getDecisionGradePredictiveModels(playerIds), getProjectionDashboardData()]);
+  const windows = new Map(simulation.rows.map(row => [row.managerId, row.window]));
+  const projected = new Set(weekly.current.filter(row => row.projectedFantasyPoints > 0).map(row => row.playerId));
+  const eligible = (asset: LiveAsset) => {
+    if (asset.isStale) return false;
+    if (asset.assetType === "pick") return true;
+    const model = models.get(asset.id);
+    const prospect = model?.draftYear != null && model.draftYear >= weekly.season - 1 && (model.draftRound ?? 99) <= 3;
+    return !!asset.nflTeam && (projected.has(asset.id) || prospect);
+  };
+  const activeCount = (managerId: string) => entries.filter(entry => entry.managerId === managerId && !["IR", "TAXI"].includes(slotMap.get(`${managerId}:${entry.playerId}`) ?? "BENCH")).length;
+  const motive = (managerId: string, incoming: LiveAsset[], outgoing: LiveAsset[]) => windowMotive(windows.get(managerId) ?? "MIDDLE", incoming.map(a => ({isPick: a.assetType === "pick", age: models.get(a.id)?.age ?? null, position: a.position, hasProjection: projected.has(a.id), value: a.value, needed: needsForManager(managerId, valuations).includes(a.position as Position)})), outgoing.reduce((sum,a) => sum + a.value, 0));
+  const plausible = (ownerId: string, give: LiveAsset[], get: LiveAsset[]) => !!motive(primary.id, get, give) && !!motive(ownerId, give, get);
   const primaryPlayers = assets
       .filter((a) => a.managerId === primary.id)
       .sort((a, b) => b.value - a.value),
     playerChips = primaryPlayers
       .filter(
         (a) =>
-          !a.isStale && !blocksOutgoing(strategies.get(a.id)) && a.value >= 500,
+          eligible(a) && !blocksOutgoing(strategies.get(a.id)) && a.value >= 500,
       )
       .sort(
         (a, b) =>
@@ -408,7 +354,7 @@ export async function buildTradeFinderData(): Promise<TradeFinderData | null> {
           outgoingAdjustment(strategies.get(a.id)) -
           (b.value + outgoingAdjustment(strategies.get(b.id))),
       ),
-    pickChips = allPickAssets.filter((a) => a.managerId === primary.id),
+    pickChips = allPickAssets.filter((a) => a.managerId === primary.id && eligible(a)),
     chips = [...playerChips, ...pickChips].sort((a, b) => b.value - a.value),
     rankingComplete = valuations.every((v) => v.capitalComplete),
     orlandoNeeds = rankedPositionNeeds(primary.id, valuations)
@@ -419,14 +365,14 @@ export async function buildTradeFinderData(): Promise<TradeFinderData | null> {
         note: `#${rank} of ${valuations.length} in start-eligible ${position} market capital${rankingComplete ? "" : " · provisional because some league players lack KTC"}`,
       })),
     ktcStale = marketStatuses.KTC.stale,
-    targetUniverse = [...assets, ...allPickAssets];
+    targetUniverse = [...assets, ...allPickAssets].filter(eligible);
   const targets = ktcStale
     ? []
     : assets
         .filter(
           (a) =>
             a.managerId !== primary.id &&
-            !a.isStale &&
+            eligible(a) &&
             POSITIONS.includes(a.position as Position) &&
             !!a.nflTeam &&
             a.value >= 1700 &&
@@ -449,8 +395,8 @@ export async function buildTradeFinderData(): Promise<TradeFinderData | null> {
             ownerAssets = targetUniverse.filter(
               (a) => a.managerId === target.managerId,
             ),
-            primaryActive = primaryPlayers.filter((asset) => asset.slot !== "IR" && asset.slot !== "TAXI").length,
-            ownerActive = ownerAssets.filter((asset) => asset.assetType === "player" && asset.slot !== "IR" && asset.slot !== "TAXI").length,
+            primaryActive = activeCount(primary.id),
+            ownerActive = activeCount(target.managerId),
             offers = offerCandidates(
               target,
               chips,
@@ -460,6 +406,7 @@ export async function buildTradeFinderData(): Promise<TradeFinderData | null> {
               primaryActive,
               ownerActive,
               activeRosterLimit,
+              (give, get) => plausible(target.managerId, give, get),
             );
           if (ownerPosRank <= 4 && target.position === "QB" && target.slot === "STARTER") return null;
           if (!offers.length) return null;
@@ -527,7 +474,7 @@ export async function buildTradeFinderData(): Promise<TradeFinderData | null> {
             confidence,
             tags: [...new Set(tags)].slice(0, 5),
             ownerNeeds,
-            why: `${position} is a market weakness for Orlando Oswalds at #${rank} by start-eligible dynasty capital${rankingComplete ? "" : " (provisional)"}. ${target.managerName}'s weakest market-capital groups include ${ownerNeeds.join(" / ")}. ${movementText}.`,
+            why: `${motive(primary.id, best.get as LiveAsset[], best.give as LiveAsset[])} ${target.managerName}: ${motive(target.managerId, best.give as LiveAsset[], best.get as LiveAsset[])} ${position} is a market weakness for Orlando Oswalds at #${rank} by start-eligible dynasty capital${rankingComplete ? "" : " (provisional)"}. ${target.managerName}'s weakest market-capital groups include ${ownerNeeds.join(" / ")}. ${movementText}.`,
             offers,
           } satisfies TradeFinderTarget;
         })
@@ -548,7 +495,7 @@ export async function buildTradeFinderData(): Promise<TradeFinderData | null> {
     ? []
     : playerChips.flatMap((give) =>
         assets
-          .filter((get) => get.managerId !== primary.id && !get.isStale && get.assetType === "player" && get.value >= 500)
+          .filter((get) => get.managerId !== primary.id && eligible(get) && fitsRoster(activeCount(primary.id), ["IR", "TAXI"].includes(give.slot) ? 0 : 1, 1, activeRosterLimit) && fitsRoster(activeCount(get.managerId), ["IR", "TAXI"].includes(get.slot) ? 0 : 1, 1, activeRosterLimit) && plausible(get.managerId, [give], [get]) && get.assetType === "player" && get.value >= 500)
           .map((get) => {
             const givePackage = calculatePackageTradeValue([give]);
             const getPackage = calculatePackageTradeValue([get]);
@@ -569,8 +516,8 @@ export async function buildTradeFinderData(): Promise<TradeFinderData | null> {
               ownerName: get.managerName, ownerId: get.managerId, value: get.value,
               consensusValue: get.consensusValue, change30d: get.change30d,
               change30dPercent: get.change30dPercent, fitScore: 0,
-              confidence: get.consensusValue === null ? "MEDIUM" : "HIGH", tags: [],
-              ownerNeeds, why: "Direct player-for-player value match.", offers: [offer],
+              confidence: !rankingComplete ? "LOW" : get.consensusValue === null ? "MEDIUM" : "HIGH", tags: [],
+              ownerNeeds, why: `${motive(primary.id, [get], [give])} ${get.managerName}: ${motive(get.managerId, [give], [get])}`, offers: [offer],
             };
             return { assetId: give.id, target, offer, ratio };
           })
@@ -606,13 +553,13 @@ export async function refreshTradeFinderCache(): Promise<TradeFinderData | null>
   const data = await buildTradeFinderData();
   if (!data) return null;
   await ensureTradeFinderCache();
-  await prisma.$executeRawUnsafe(`INSERT INTO "TradeFinderCache" (id, "computedAt", data) VALUES ('current', now(), $1::jsonb) ON CONFLICT (id) DO UPDATE SET "computedAt"=now(), data=EXCLUDED.data`, JSON.stringify(data));
+  await prisma.$executeRawUnsafe(`INSERT INTO "TradeFinderCache" (id, "computedAt", data) VALUES ('guarded-v2', now(), $1::jsonb) ON CONFLICT (id) DO UPDATE SET "computedAt"=now(), data=EXCLUDED.data`, JSON.stringify(data));
   return data;
 }
 
 export async function getTradeFinderData(): Promise<TradeFinderData | null> {
   await ensureTradeFinderCache();
-  const rows = await prisma.$queryRawUnsafe<Array<{ data: TradeFinderData; computedAt: Date }>>(`SELECT data, "computedAt" FROM "TradeFinderCache" WHERE id='current' LIMIT 1`);
-  if (rows[0]) return { ...rows[0].data, computedAt: rows[0].computedAt.toISOString() };
+  const rows = await prisma.$queryRawUnsafe<Array<{ data: TradeFinderData; computedAt: Date }>>(`SELECT data, "computedAt" FROM "TradeFinderCache" WHERE id='guarded-v2' LIMIT 1`);
+  if (rows[0] && Date.now() - new Date(rows[0].computedAt).getTime() < 24 * 3600000) return { ...rows[0].data, computedAt: rows[0].computedAt.toISOString() };
   return refreshTradeFinderCache();
 }

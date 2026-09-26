@@ -71,6 +71,7 @@ export function projectedRookieSlot(managerId: string, rosterId: number, manager
   // Lower weekly lineup strength means an earlier rookie pick. Dynasty market
   // value is intentionally not used here: young rebuilders can be valuable
   // while still finishing near the bottom of the current standings.
+  if (managers.some(manager => !Number.isFinite(projectedWeeklyStrength.get(manager.id)))) return Math.ceil(managers.length / 2);
   const ranked = [...managers].sort((a, b) => (projectedWeeklyStrength.get(a.id) ?? 0) - (projectedWeeklyStrength.get(b.id) ?? 0));
   const rank = ranked.findIndex((manager) => manager.id === managerId) + 1;
   return rank > 0 ? rank : Math.ceil(managers.length / 2);

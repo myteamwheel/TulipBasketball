@@ -184,21 +184,13 @@ export default async function AuditPage({
           description={`Generated ${formatDateTimeEastern(data.generatedAt)} · refresh ${data.health.latestRefreshStatus ?? "unknown"} · ${data.health.rosteredPlayers} league players tracked.`}
         />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
-          <MetricCard
-            label="Total capital"
-            value={formatPoints(data.team.totalDynastyValue)}
-            detail={`${allIncomplete ? "~" : ""}#${data.team.totalRank}/${data.league.length}`}
-          />
-          <MetricCard
-            label="Player capital"
-            value={formatPoints(data.team.playerCapital)}
-            detail={`${allIncomplete ? "~" : ""}#${data.team.playerRank}`}
-          />
-          <MetricCard
-            label="Draft capital"
-            value={formatPoints(data.team.draftCapital)}
-            detail={`#${data.team.draftRank} · ${data.team.draftPickCount} picks`}
-          />
+          <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-3">
+            <Link href="/#capital" className="text-sm text-emerald-300">Current capital on My Team →</Link>
+            <details className="mt-2 text-xs text-neutral-400"><summary className="cursor-pointer">Saved capital at this audit date</summary>
+              <p className="mt-2">As of {formatDateTimeEastern(data.generatedAt)}</p>
+              <p>Total {formatPoints(data.team.totalDynastyValue)} · Players {formatPoints(data.team.playerCapital)} · Picks {formatPoints(data.team.draftCapital)}</p>
+            </details>
+          </div>
           <MetricCard
             label="Start-eligible"
             value={formatPoints(data.team.optimalLineupValue)}

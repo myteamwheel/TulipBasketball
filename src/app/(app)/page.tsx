@@ -1,3 +1,4 @@
+export const metadata = { title: "My Team · Dynasty Bois" };
 import Link from "next/link";
 import { getPrimaryManager, getCurrentRoster } from "@/lib/queries";
 import { computeMarketDataForPlayers } from "@/lib/metrics";
@@ -289,7 +290,7 @@ export default async function HomePage() {
             state={sourceStatuses.KTC.stale ? "warn" : "good"}
             detail={`${my.lastKnownPlayerCount}/${my.playerCount} Orlando Oswalds`}
           />
-          <DataBadge
+          {!sourceStatuses.STATSGUY.stale && <DataBadge
             label="Stats Guy"
             state={sourceStatuses.STATSGUY.stale ? "warn" : "good"}
             detail={providerDetail(
@@ -297,8 +298,8 @@ export default async function HomePage() {
               sourceStatuses.STATSGUY.stale,
               latestRun,
             )}
-          />
-          <DataBadge
+          />}
+          {!sourceStatuses.DYNASTY_DEALER.stale && <DataBadge
             label="Dynasty Dealer"
             state={sourceStatuses.DYNASTY_DEALER.stale ? "warn" : "good"}
             detail={providerDetail(
@@ -306,10 +307,11 @@ export default async function HomePage() {
               sourceStatuses.DYNASTY_DEALER.stale,
               latestRun,
             )}
-          />
+          />}
         </div>
       </section>
-      <section>
+      <section id="capital">
+        <p className="mb-2 text-xs text-neutral-400">Capital as of {capitalAsOf ? new Date(capitalAsOf).toLocaleString("en-US", { timeZone: "America/New_York", timeZoneName: "short" }) : "unavailable"}</p>
         <SectionHeader
           title="Dynasty snapshot"
           description={`Known capital never converts missing values to zero. IR/taxi players are excluded from lineup strength. Capital as of ${capitalAsOf ? new Date(capitalAsOf).toLocaleString("en-US", { timeZone: "America/New_York" }) : "unavailable"}.`}

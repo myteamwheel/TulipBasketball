@@ -384,7 +384,7 @@ export default async function SettingsPage() {
           usable observation.
         </p>
         <div className="mt-4 space-y-2">
-          {sources.map((source) => {
+          {sources.filter(source => !source.status.stale && source.covered > 0).map((source) => {
             const runStatus = latestSourceStatus.get(source.key);
             const disabled = runStatus?.enabled === false;
             const label = disabled
@@ -471,10 +471,7 @@ export default async function SettingsPage() {
           })}
         </div>
         <p className="mt-3 text-[10px] text-neutral-600">
-          When all trusted sources qualify: KTC 55% · Dynasty Dealer 25% ·
-          Stats Guy Fantasy 20%, renormalized across the sources that are
-          actually fresh and within the player-level consensus guard. Stats Guy
-          Fantasy values are credited to their provider.
+          Only fresh sources with usable coverage appear here. The blend excludes unavailable or stale values and renormalizes weights across qualifying sources.
         </p>
       </section>
 

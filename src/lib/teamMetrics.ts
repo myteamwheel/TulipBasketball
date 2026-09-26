@@ -210,7 +210,7 @@ export async function computeAllTeamValuations(): Promise<TeamValuation[]> {
       slot: slotMap.get(`${entry.managerId}:${entry.playerId}`) ?? "BENCH",
     }));
     const weeklyPoints = projectOptimalWeeklyPoints(roster);
-    return [manager.id, weeklyPoints > 0 ? weeklyPoints : optimalLineupValue(byManager.get(manager.id) ?? [], rosterPositions)] as const;
+    return [manager.id, weeklyPoints > 0 ? weeklyPoints : Number.NaN] as const;
   }));
   const
     projectedSlot = new Map(

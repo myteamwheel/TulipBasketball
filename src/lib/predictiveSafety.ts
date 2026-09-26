@@ -1,3 +1,4 @@
+import { getProjectionDashboardData } from "@/lib/weeklyProjection";
 import { cache } from "react";
 import {
   getPredictivePlayerModels,
@@ -6,7 +7,8 @@ import {
 } from "@/lib/predictive";
 
 const MIN_POSITIONAL_FOOTBALL_PEERS = 8;
-const MAX_PRODUCTION_SEASON_AGE = 0;
+import { isDecisionGradeProductionSeason } from "@/lib/productionEligibility";
+export { isDecisionGradeProductionSeason } from "@/lib/productionEligibility";
 
 function round(value: number) { return Math.round(value); }
 function clamp(value: number, min: number, max: number) { return Math.max(min, Math.min(max, value)); }
@@ -24,7 +26,7 @@ function hasCurrentRoleEvidence(row:PredictivePlayerModel){
   return opportunity>=minimum;
 }
 
-export function isDecisionGradeProductionSeason(latestSeason:number|null,games:number,currentYear=new Date().getUTCFullYear()){return latestSeason!==null&&games>=3&&latestSeason>=currentYear-MAX_PRODUCTION_SEASON_AGE;}
+
 
 type RecentPeerPool={ppg:number[];opportunity:number[];market:number[]};
 
@@ -47,9 +49,11 @@ async function computeDecisionGradePredictiveModels(requestedIds?:string[]):Prom
     if(row.opportunityPerGame!==null&&Number.isFinite(row.opportunityPerGame))pool.opportunity.push(row.opportunityPerGame);
     pool.market.push(row.currentValue);recentPeers.set(row.position,pool);
   }
+  const weekly = await getProjectionDashboardData();
+  const liveRoles = new Set(weekly.current.filter(row => row.projectedFantasyPoints > 0).map(row => row.playerId));
   const guarded=new Map<string,PredictivePlayerModel>();
   for(const[playerId,row]of models){
-    const hasProfileEvidence=row.age!==null||row.draftYear!==null||row.draftRound!==null,hasProduction=row.games>=3,hasRecentProduction=isDecisionGradeProductionSeason(row.latestSeason,row.games,currentYear),productionIsStale=hasProduction&&!hasRecentProduction,positionalPeerCount=peerCounts.get(row.position)??0,peerSampleAdequate=positionalPeerCount>=MIN_POSITIONAL_FOOTBALL_PEERS,hasTrustedBlend=row.consensusValue!==null,hasActionableEvidence=hasRecentProduction&&peerSampleAdequate&&hasTrustedBlend&&hasCurrentRoleEvidence(row);
+    const hasProfileEvidence=row.age!==null||row.draftYear!==null||row.draftRound!==null,hasProduction=row.games>=3,hasRecentProduction=isDecisionGradeProductionSeason(row.latestSeason,row.games,currentYear),productionIsStale=hasProduction&&!hasRecentProduction,positionalPeerCount=peerCounts.get(row.position)??0,peerSampleAdequate=positionalPeerCount>=MIN_POSITIONAL_FOOTBALL_PEERS,hasTrustedBlend=row.consensusValue!==null,hasActionableEvidence=hasRecentProduction&&peerSampleAdequate&&hasTrustedBlend&&hasCurrentRoleEvidence(row)&&liveRoles.has(playerId);
     let next=row;
     if(hasRecentProduction&&peerSampleAdequate){
       const pool=recentPeers.get(row.position);
@@ -74,13 +78,13 @@ async function computeDecisionGradePredictiveModels(requestedIds?:string[]):Prom
     if(!hasActionableEvidence){
       const{modelValue,modelEdge,modelEdgePercent}=neutralMarketModel(row);
       const missing=[];
-      if(!hasRecentProduction)missing.push("current-season production");
+      if(!hasRecentProduction)missing.push("current or prior-season production");
       if(!hasTrustedBlend)missing.push("fresh trusted-market blend");
-      if(!hasCurrentRoleEvidence(row))missing.push("current role volume");
+      if(!hasCurrentRoleEvidence(row)||!liveRoles.has(playerId))missing.push("current role volume");
       if(!peerSampleAdequate)missing.push("adequate same-position peer sample");
       next={...next,fundamentalValue:row.currentValue,fundamentalScore:.5,productionScore:.5,usageScore:.5,efficiencyScore:.5,modelValue,modelEdge,modelEdgePercent,forecast30d:recenterForecast(next.forecast30d,modelValue),forecastRos:recenterForecast(next.forecastRos,modelValue),forecast1y:recenterForecast(next.forecast1y,modelValue),forecast3y:recenterForecast(next.forecast3y,modelValue),confidence:"LOW",mispricingQuadrant:"MARKET_ONLY",reasons:[`Model edge is withheld until ${missing.join(", ")} is available; the displayed value is market-anchored rather than an actionable recommendation.`,...next.reasons.filter(reason=>!reason.startsWith("Football peer value")&&!reason.startsWith("Independent football valuation is withheld")).slice(0,3)]};
     }else{
-      next={...next,confidence:"HIGH",reasons:[`Actionable edge requires current-season production, a current role, a fresh trusted-market blend, and ${MIN_POSITIONAL_FOOTBALL_PEERS}+ same-position peers.`,...next.reasons].slice(0,4)};
+      next={...next,confidence:"HIGH",reasons:[`Actionable edge requires current or prior-season production, a current role, a fresh trusted-market blend, and ${MIN_POSITIONAL_FOOTBALL_PEERS}+ same-position peers.`,...next.reasons].slice(0,4)};
     }
     guarded.set(playerId,next);
   }
@@ -102,4 +106,4 @@ export async function getDecisionGradePredictiveModels(requestedIds?:string[]):P
 }
 
 export const DECISION_GRADE_POSITIONAL_PEER_MINIMUM=MIN_POSITIONAL_FOOTBALL_PEERS;
-export const DECISION_GRADE_MAX_PRODUCTION_SEASON_AGE=MAX_PRODUCTION_SEASON_AGE;
+export const DECISION_GRADE_MAX_PRODUCTION_SEASON_AGE=1;

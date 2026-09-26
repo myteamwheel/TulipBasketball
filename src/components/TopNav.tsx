@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect } from "react";
+
 import { usePathname } from "next/navigation";
 
 const groups = [
@@ -12,14 +12,8 @@ const groups = [
   { label: "Data", href: "/audit", links: [{ href: "/audit", label: "Audit" }, { href: "/audit/report", label: "Full Report" }, { href: "/refresh-history", label: "Refreshes" }, { href: "/settings", label: "Data Health" }, { href: "/data-export", label: "Export" }] },
 ];
 
-const routeTitle = (pathname: string) => {
-  const match = groups.flatMap((group) => group.links).sort((a, b) => b.href.length - a.href.length).find((link) => link.href === "/" ? pathname === "/" : pathname.startsWith(link.href));
-  return `${match?.label ?? "Dashboard"} · Dynasty Bois`;
-};
-
 export default function TopNav() {
   const pathname = usePathname();
-  useEffect(() => { document.title = routeTitle(pathname); }, [pathname]);
   return (
     <nav aria-label="Primary" className="grid grid-cols-2 gap-1 py-1 sm:flex sm:flex-wrap">
       {groups.map((group) => {
