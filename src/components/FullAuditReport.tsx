@@ -23,18 +23,21 @@ const REPORT_DESCRIPTIONS: Record<string, string> = {
 const TABLE_TITLES: Record<string, string> = { current_brett_players: "Orlando Oswalds roster", future_picks: "Future rookie picks", audit_core_per_league: "League overview", playbook_bois_best: "Best Dynasty Bois trades", playbook_bois_worst: "Costliest Dynasty Bois trades", history_best_trades: "Best trades in league history", history_worst_trades: "Costliest trades in league history", recommendations: "Strategy recommendations", trends_manager_season: "Manager season trends", history_activity_by_league: "League activity by season", history_trade_mgr_rank: "Manager trade rankings", history_partners: "Trade partners", playbook_bois_month: "Trade outcomes by month", playbook_bois_phase: "Trade outcomes by career phase", playbook_formula_bois: "Trade-pattern model", ledger_brett_partners: "Orlando Oswalds trade partners", ledger_brett_rank_by_league: "Orlando Oswalds standing by season", brett_trades_ranked: "Orlando Oswalds trades ranked", playbook_brett_best: "Orlando Oswalds best trades", playbook_brett_worst: "Orlando Oswalds costliest trades" };
 
 function dynastyRow(tableName: string, row?: Record<string, unknown>) {
-  if (/bois|brett/i.test(tableName)) return true;
-  return Object.values(row ?? {}).some((value) => /dynasty bois/i.test(String(value)));
+  const leagueValues = Object.entries(row ?? {}).filter(([key]) => /league/i.test(key)).map(([, value]) => String(value).trim());
+  if (leagueValues.length) return leagueValues.some((value) => /^dynasty bois$/i.test(value));
+  return /bois/i.test(tableName);
 }
 function displayText(value: unknown, tableName = "", row?: Record<string, unknown>) {
   let text = String(value).replaceAll(/jeffsharpington/gi, "Jeff");
   if (dynastyRow(tableName, row)) text = text.replaceAll(/BrettTulip/gi, "Orlando Oswalds").replaceAll(/Brett's/gi, "Orlando Oswalds'").replaceAll(/\bBrett\b/gi, "Orlando Oswalds");
-  return text;
+  const labels: Record<string, string> = { yr2: "Year 2", yr3: "Year 3", vet4: "Veteran (Year 4+)", fcs_below: "FCS or below", g5: "Group of Five", sec: "SEC", acc: "ACC", pac: "Pac-12", b10: "Big Ten", b12: "Big 12", day2: "Day 2", day3: "Day 3", top10: "Top 10" };
+  return labels[text.toLowerCase()] ?? text;
 }
-function humanColumn(value: string) { return value.replaceAll("_", " ").replace(/\b(fcs|nfl|qb|rb|wr|te)\b/gi, (match) => match.toUpperCase()).replace(/\byr(\d+)\b/gi, "Year $1").replace(/\bn rosters\b/i, "Roster count").replace(/\brank high\b/i, "Best rank").replace(/\b\w/g, (letter) => letter.toUpperCase()); }
+function humanColumn(value: string) { if (value.toLowerCase() === "brett") return "Orlando Oswalds"; return value.replaceAll("_", " ").replace(/\b(fcs|nfl|qb|rb|wr|te)\b/gi, (match) => match.toUpperCase()).replace(/\byr(\d+)\b/gi, "Year $1").replace(/\bn rosters\b/i, "Roster count").replace(/\brank high\b/i, "Best rank").replace(/\b\w/g, (letter) => letter.toUpperCase()); }
 function displayValue(value: unknown, column: string, tableName: string, row: Record<string, unknown>) {
   if (value === null || value === undefined || value === "") return "—";
   if (typeof value === "number") {
+    if (tableName === "audit_core_per_league" && /^(brett|league_mean)$/i.test(column) && String(row.metric).toLowerCase() !== "age") return `${(value * 100).toFixed(1)}%`;
     if (/percent|pct|rate|ratio|share|probability/i.test(column) && Math.abs(value) <= 1) return `${(value * 100).toFixed(1)}%`;
     return Number.isInteger(value) ? value.toLocaleString("en-US") : value.toLocaleString("en-US", { maximumFractionDigits: 2 });
   }
