@@ -24,6 +24,7 @@ import {
   type ProjectionRefreshResult,
 } from "@/lib/weeklyProjection";
 import { recordAuditSnapshot, type AuditSnapshotData } from "@/lib/audit";
+import { refreshTradeFinderCache } from "@/lib/tradeFinder";
 
 const VISIBLE_SOURCES = new Set(["KTC", "DYNASTY_DEALER", "STATSGUY"]);
 const REFRESH_LOCK_KEY = 731521527;
@@ -226,7 +227,7 @@ export async function startRefresh(): Promise<{ runId: string }> {
         update: {},
         create: {
           sleeperId: SLEEPER_LEAGUE_ID,
-          name: sleeperLeague?.name ?? "Dynasty Boys",
+          name: sleeperLeague?.name ?? "Dynasty Bois",
           season: sleeperLeague?.season ?? "unknown",
           format: "Superflex, 0.5 PPR, no TE premium",
           settings: "{}",
@@ -469,6 +470,12 @@ async function executeRefresh(runId: string) {
       source: "projections",
       message: error instanceof Error ? error.message : String(error),
     });
+  }
+
+  try {
+    await refreshTradeFinderCache();
+  } catch (error) {
+    errors.push({ source: "trade_finder_cache", message: error instanceof Error ? error.message : String(error) });
   }
 
   try {

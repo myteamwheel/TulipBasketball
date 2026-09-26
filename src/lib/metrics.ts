@@ -33,6 +33,7 @@ const STALE_MS = MARKET_SOURCE_MAX_AGE_MS,
   SEVEN_DAY_TOLERANCE_MS = 48 * 3600000,
   THIRTY_DAY_TOLERANCE_MS = 72 * 3600000,
   HISTORICAL_TX_TOLERANCE_MS = 7 * DAY_MS,
+  CONSECUTIVE_FRESH_STATE_MAX_GAP_MS = 3 * DAY_MS,
   RANGE_MIN_SPAN_MS = 14 * DAY_MS;
 export interface Obs {
   value: number;
@@ -167,7 +168,8 @@ function computeForPlayer(now: Date, observations: Obs[]): PlayerMarketData {
     isStale = dataAgeMs === null || dataAgeMs > STALE_MS;
   const previousState = states.length >= 2 ? states[states.length - 2] : null,
     changeSinceLastRefresh =
-      latestState && previousState
+      latestState && previousState &&
+      latestState.observedAt.getTime() - previousState.observedAt.getTime() <= CONSECUTIVE_FRESH_STATE_MAX_GAP_MS
         ? change(latestState.value, previousState)
         : null,
     anchor = latestValid?.observedAt ?? now,

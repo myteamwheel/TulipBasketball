@@ -227,14 +227,14 @@ export default async function ForecastPage() {
       {weeklyForecastReady ? (
       <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3 sm:p-4">
         <SectionHeader
-          title="Dynasty Boys title race"
+          title="Dynasty Bois title race"
           description="Projected start-eligible weekly points drive game simulation; completed Sleeper results are retained when the regular season is underway."
         />
         <div className="overflow-x-auto">
           <table className="w-full min-w-[760px] text-xs">
             <caption className="sr-only">
               Simulated weekly scoring, expected wins, playoff odds, and title
-              odds for every Dynasty Boys team
+              odds for every Dynasty Bois team
             </caption>
             <thead>
               <tr className="text-[9px] uppercase tracking-wide text-neutral-600">

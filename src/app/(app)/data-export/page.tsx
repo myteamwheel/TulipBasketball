@@ -44,7 +44,7 @@ export default async function DataExportPage() {
             Download complete .xlsx
           </Link>
           <div className="text-[10px] leading-4 text-neutral-500">
-            {Number(snapshot?.count ?? 0).toLocaleString("en-US")} daily audit snapshots ·{" "}
+            {Number(snapshot?.count ?? 0).toLocaleString("en-US")} daily export checkpoints ·{" "}
             {Number(projections[0]?.count ?? 0).toLocaleString("en-US")} saved projection rows
           </div>
         </div>
@@ -55,7 +55,7 @@ export default async function DataExportPage() {
         <p className="mt-1">
           The 8 a.m. refresh writes new market, roster, transaction, game, and
           projection observations into the historical database and records a
-          DailyExportSnapshot. The Excel file is generated from that full history
+          daily export checkpoint. This is separate from the validated audit snapshot history. The Excel file is generated from that full history
           whenever you click export, which prevents a corrupted or missed file
           write from becoming a single point of failure.
         </p>

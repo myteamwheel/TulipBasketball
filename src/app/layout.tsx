@@ -7,8 +7,8 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Orlando Oswalds Market Dashboard",
-  description: "Dynasty Boys fantasy-football market dashboard",
+  title: "Dashboard · Dynasty Bois",
+  description: "Dynasty Bois fantasy-football market dashboard",
   robots: {
     index: false,
     follow: false,

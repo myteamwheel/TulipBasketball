@@ -10,7 +10,7 @@ const PLAYER_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 export interface SleeperLeague { league_id:string; name:string; season:string; status:string; roster_positions:string[]; scoring_settings:Record<string,number>; settings:Record<string,number|string>; previous_league_id:string|null; }
 export interface SleeperUser { user_id:string; display_name:string; metadata:{team_name?:string}|null; }
-export interface SleeperRoster { roster_id:number; owner_id:string|null; players:string[]|null; starters:string[]|null; reserve:string[]|null; taxi:string[]|null; }
+export interface SleeperRoster { roster_id:number; owner_id:string|null; players:string[]|null; starters:string[]|null; reserve:string[]|null; taxi:string[]|null; settings?:Record<string,number>; }
 export interface SleeperPlayer { player_id:string; full_name?:string; first_name?:string; last_name?:string; position?:string; team?:string|null; status?:string|null; injury_status?:string|null; active?:boolean; }
 export interface SleeperTransaction { transaction_id:string; type:string; status:string; status_updated:number; roster_ids:number[]; adds:Record<string,number>|null; drops:Record<string,number>|null; draft_picks:unknown[]; waiver_budget:unknown[]; created:number; }
 export interface SleeperTradedPick { season:string; round:number; roster_id:number; previous_owner_id:number; owner_id:number; }

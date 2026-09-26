@@ -19,7 +19,8 @@ import {
   formatSigned,
   timeAgo,
 } from "@/lib/format";
-import { ORLANDO_BASELINE_DATE } from "@/lib/config";
+import { ORLANDO_BASELINE_DATE, SLEEPER_LEAGUE_ID } from "@/lib/config";
+import { getNflState, getRosters } from "@/lib/sleeper";
 import { getLatestMarketSourceStatuses } from "@/lib/marketSources";
 import { getFreshCurrentMarketMix } from "@/lib/currentMarket";
 import ManualRefreshButton from "@/components/ManualRefreshButton";
@@ -74,6 +75,8 @@ export default async function HomePage() {
     latestRun,
     lastGoodSleeperSync,
     verifiedCheckpoint,
+    sleeperRosters,
+    nflState,
   ] = await Promise.all([
     getCurrentRoster(manager.id),
     computeAllTeamValuations(),
@@ -81,6 +84,8 @@ export default async function HomePage() {
     getLatestRefreshRun(),
     getLatestSuccessfulSleeperSyncTime(),
     getVerifiedCheckpointChange(manager.id),
+    getRosters(SLEEPER_LEAGUE_ID).catch(() => []),
+    getNflState().catch(() => null),
   ]);
   const playerIds = roster.map((p) => p.id);
   const [marketData, marketMix, sourceStatuses, signals] = await Promise.all([
@@ -191,7 +196,14 @@ export default async function HomePage() {
     consensusCovered = roster.filter(
       (p) => marketMix.get(p.id)?.consensusValue !== null,
     ).length,
-    provisional = anyIncomplete ? "~" : "#";
+    provisional = anyIncomplete ? "~" : "#",
+    lineupProblems = rows.filter((row) => row.slot === "STARTER" && /out|ir|pup|doubt/i.test(row.status ?? "")),
+    illegalIr = rows.filter((row) => row.slot === "IR" && !/out|ir|pup|doubt/i.test(row.status ?? "")),
+    topSell = rows.filter((row) => row.signal === "SELL_HIGH").sort((a, b) => (b.signalScore ?? 0) - (a.signalScore ?? 0))[0],
+    topBuy = rows.filter((row) => row.signal === "BUY_LOW").sort((a, b) => (b.signalScore ?? 0) - (a.signalScore ?? 0))[0],
+    faabUsed = sleeperRosters.find((roster) => roster.roster_id === manager.sleeperRosterId)?.settings?.waiver_budget_used,
+    faabRemaining = Number.isFinite(faabUsed) ? 100 - Number(faabUsed) : null,
+    capitalAsOf = rows.map((row) => row.currentObservedAt).filter((value): value is string => Boolean(value)).sort().at(-1) ?? null;
   return (
     <div className="min-w-0 space-y-5 sm:space-y-6">
       <section>
@@ -206,6 +218,16 @@ export default async function HomePage() {
             </p>
           </div>
           <div className="mt-2 flex w-fit items-start gap-2 sm:mt-0"><ManualRefreshButton /><Link href="/trade-finder" className="inline-flex rounded-md border border-emerald-800 bg-emerald-950/30 px-3 py-1.5 text-xs font-medium text-emerald-300">Open Trade Lab →</Link></div>
+        </div>
+      </section>
+      <section className="rounded-lg border border-emerald-900/60 bg-emerald-950/10 p-3 sm:p-4">
+        <SectionHeader title="This week" description="Current lineup actions, roster legality, market decisions and waiver budget in one place." />
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="rounded bg-neutral-950 p-3"><div className="text-xs text-neutral-400">Lineup issues</div><div className={`mt-1 text-lg font-semibold ${lineupProblems.length ? "text-red-300" : "text-emerald-300"}`}>{lineupProblems.length}</div><div className="text-xs text-neutral-400">{lineupProblems.map((row) => row.fullName).join(", ") || "No injured starters"}</div></div>
+          <div className="rounded bg-neutral-950 p-3"><div className="text-xs text-neutral-400">Illegal IR</div><div className={`mt-1 text-lg font-semibold ${illegalIr.length ? "text-red-300" : "text-emerald-300"}`}>{illegalIr.length}</div><div className="text-xs text-neutral-400">{illegalIr.map((row) => row.fullName).join(", ") || "IR slots valid"}</div></div>
+          <div className="rounded bg-neutral-950 p-3"><div className="text-xs text-neutral-400">Taxi check</div><div className="mt-1 font-semibold text-neutral-100">Before Week {nflState?.week ?? "—"} lock</div><div className="text-xs text-neutral-400">Review promotions before lineup lock</div></div>
+          <div className="rounded bg-neutral-950 p-3"><div className="text-xs text-neutral-400">Top decisions</div><div className="mt-1 text-sm text-neutral-100">Sell: {topSell?.fullName ?? "None"}</div><div className="text-sm text-neutral-100">Buy: {topBuy?.fullName ?? "None"}</div></div>
+          <div className="rounded bg-neutral-950 p-3"><div className="text-xs text-neutral-400">FAAB left</div><div className="mt-1 text-lg font-semibold text-emerald-300">{faabRemaining === null ? "—" : `$${faabRemaining}`}</div><Link href="/waivers" className="text-xs text-emerald-400">Open waivers →</Link></div>
         </div>
       </section>
       {latestSleeperFailed ? (
@@ -290,7 +312,7 @@ export default async function HomePage() {
       <section>
         <SectionHeader
           title="Dynasty snapshot"
-          description="Known capital never converts missing values to zero. IR/taxi players are excluded from current start-eligible lineup strength. Verified checkpoints are labeled by their real date rather than forced into a 7-day/30-day bucket."
+          description={`Known capital never converts missing values to zero. IR/taxi players are excluded from lineup strength. Capital as of ${capitalAsOf ? new Date(capitalAsOf).toLocaleString("en-US", { timeZone: "America/New_York" }) : "unavailable"}.`}
         />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
           <MetricCard
@@ -338,7 +360,7 @@ export default async function HomePage() {
             detail={`${my.change30dCoverage}/${totalPlayers} comparable`}
           />
           <MetricCard
-            label="Since Aug. 13 verified"
+            label={`Since ${formatDateEastern(verifiedCheckpoint.observedAt)} verified`}
             value={
               checkpointChange === null ? "—" : formatSigned(checkpointChange)
             }

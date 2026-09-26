@@ -22,13 +22,30 @@ const REPORT_DESCRIPTIONS: Record<string, string> = {
 
 const TABLE_TITLES: Record<string, string> = { current_brett_players: "Orlando Oswalds roster", future_picks: "Future rookie picks", audit_core_per_league: "League overview", playbook_bois_best: "Best Dynasty Bois trades", playbook_bois_worst: "Costliest Dynasty Bois trades", history_best_trades: "Best trades in league history", history_worst_trades: "Costliest trades in league history", recommendations: "Strategy recommendations", trends_manager_season: "Manager season trends", history_activity_by_league: "League activity by season", history_trade_mgr_rank: "Manager trade rankings", history_partners: "Trade partners", playbook_bois_month: "Trade outcomes by month", playbook_bois_phase: "Trade outcomes by career phase", playbook_formula_bois: "Trade-pattern model", ledger_brett_partners: "Orlando Oswalds trade partners", ledger_brett_rank_by_league: "Orlando Oswalds standing by season", brett_trades_ranked: "Orlando Oswalds trades ranked", playbook_brett_best: "Orlando Oswalds best trades", playbook_brett_worst: "Orlando Oswalds costliest trades" };
 
-function displayText(value: unknown) { return String(value).replaceAll(/BrettTulip/gi, "Orlando Oswalds").replaceAll(/Brett's/gi, "Orlando Oswalds'").replaceAll(/\bBrett\b/gi, "Orlando Oswalds").replaceAll(/jeffsharpington/gi, "Jeff"); }
-function tableTitle(name: string) { return TABLE_TITLES[name] ?? displayText(name.replaceAll("_", " ")).replace(/\b\w/g, letter => letter.toUpperCase()); }
+function dynastyRow(tableName: string, row?: Record<string, unknown>) {
+  if (/bois|brett/i.test(tableName)) return true;
+  return Object.values(row ?? {}).some((value) => /dynasty bois/i.test(String(value)));
+}
+function displayText(value: unknown, tableName = "", row?: Record<string, unknown>) {
+  let text = String(value).replaceAll(/jeffsharpington/gi, "Jeff");
+  if (dynastyRow(tableName, row)) text = text.replaceAll(/BrettTulip/gi, "Orlando Oswalds").replaceAll(/Brett's/gi, "Orlando Oswalds'").replaceAll(/\bBrett\b/gi, "Orlando Oswalds");
+  return text;
+}
+function humanColumn(value: string) { return value.replaceAll("_", " ").replace(/\b(fcs|nfl|qb|rb|wr|te)\b/gi, (match) => match.toUpperCase()).replace(/\byr(\d+)\b/gi, "Year $1").replace(/\bn rosters\b/i, "Roster count").replace(/\brank high\b/i, "Best rank").replace(/\b\w/g, (letter) => letter.toUpperCase()); }
+function displayValue(value: unknown, column: string, tableName: string, row: Record<string, unknown>) {
+  if (value === null || value === undefined || value === "") return "—";
+  if (typeof value === "number") {
+    if (/percent|pct|rate|ratio|share|probability/i.test(column) && Math.abs(value) <= 1) return `${(value * 100).toFixed(1)}%`;
+    return Number.isInteger(value) ? value.toLocaleString("en-US") : value.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  }
+  return displayText(typeof value === "object" ? JSON.stringify(value) : value, tableName, row);
+}
+function tableTitle(name: string) { return TABLE_TITLES[name] ?? humanColumn(name); }
 type AuditTable = Awaited<ReturnType<typeof getFullAudit>>["data"]["tables"][number];
 
 function NativeTable({ table, expanded = false }: { table: AuditTable; expanded?: boolean }) {
-  const columns = [...new Set(table.rows.flatMap((row) => Object.keys(row)))].slice(0, 14), visible = table.rows.slice(0, expanded ? 100 : 20);
-  return <section className="overflow-hidden rounded-lg border border-neutral-800 bg-neutral-900"><div className="flex flex-wrap items-start justify-between gap-2 border-b border-neutral-800 px-4 py-3"><div><h2 className="text-base font-semibold text-neutral-100">{tableTitle(table.name)}</h2><p className="mt-1 max-w-3xl text-xs leading-5 text-neutral-500">{displayText(table.description || `${table.rows.length.toLocaleString()} rows from the validated audit.`)}</p></div><Link href={`/audit/research?table=${encodeURIComponent(table.name)}`} className="rounded border border-neutral-700 px-2 py-1 text-[11px] text-neutral-300">Search full table</Link></div><div className="max-w-full overflow-auto"><table className="w-full min-w-[720px] text-xs"><thead className="bg-neutral-950"><tr>{columns.map((column) => <th key={column} className="whitespace-nowrap border-b border-neutral-800 px-3 py-2 text-left font-medium text-neutral-500">{displayText(column.replaceAll("_", " "))}</th>)}</tr></thead><tbody>{visible.map((row, index) => <tr key={index} className="border-b border-neutral-800/80 last:border-0">{columns.map((column) => <td key={column} className="max-w-sm px-3 py-2 align-top text-neutral-300">{row[column] === null || row[column] === undefined || row[column] === "" ? "—" : displayText(typeof row[column] === "object" ? JSON.stringify(row[column]) : row[column])}</td>)}</tr>)}</tbody></table></div>{table.rows.length > visible.length && <div className="border-t border-neutral-800 px-4 py-2 text-xs text-neutral-500">Showing {visible.length} of {table.rows.length.toLocaleString()} rows. Use “Search full table” for the complete dataset.</div>}</section>;
+  const columns = [...new Set(table.rows.flatMap((row) => Object.keys(row)))], visible = table.rows;
+  return <section className="overflow-hidden rounded-lg border border-neutral-800 bg-neutral-900"><div className="flex flex-wrap items-start justify-between gap-2 border-b border-neutral-800 px-4 py-3"><div><h2 className="text-base font-semibold text-neutral-100">{tableTitle(table.name)}</h2><p className="mt-1 max-w-3xl text-xs leading-5 text-neutral-500">{displayText(table.description || `${table.rows.length.toLocaleString()} rows from the validated audit.`, table.name)}</p></div><Link href={`/audit/research?table=${encodeURIComponent(table.name)}`} className="rounded border border-neutral-700 px-2 py-1 text-[11px] text-neutral-300">Search table</Link></div><div className="max-h-[42rem] max-w-full overflow-auto"><table className="w-full min-w-[720px] text-xs"><thead className="sticky top-0 bg-neutral-950"><tr>{columns.map((column) => <th key={column} className="whitespace-nowrap border-b border-neutral-800 px-3 py-2 text-left font-medium text-neutral-500">{humanColumn(column)}</th>)}</tr></thead><tbody>{visible.map((row, index) => <tr key={index} className="border-b border-neutral-800/80 last:border-0">{columns.map((column) => <td key={column} className="max-w-sm px-3 py-2 align-top text-neutral-300">{displayValue(row[column], column, table.name, row)}</td>)}</tr>)}</tbody></table></div></section>;
 }
 
 export default function FullAuditReport({ audit, selectedName }: { audit: Awaited<ReturnType<typeof getFullAudit>>; selectedName?: string }) {

@@ -55,6 +55,12 @@ textarea {
   color: #8a8a8a;
 }
 
+/* Keep compact dashboard labels readable on dark cards. */
+:where(main) :is(.text-\[8px\], .text-\[9px\], .text-\[10px\], .text-\[11px\]) {
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
 .no-scrollbar {
   scrollbar-width: none;
   -ms-overflow-style: none;

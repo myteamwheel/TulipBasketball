@@ -17,6 +17,8 @@ import {
   firstTradableDraftSeason,
   projectedRookieSlot,
 } from "@/lib/pickValuation";
+import { getProjectionDashboardData } from "@/lib/weeklyProjection";
+import { projectOptimalWeeklyPoints } from "@/lib/lineupProjection";
 
 export interface TeamDraftPickValue {
   id: string;
@@ -198,12 +200,19 @@ export async function computeAllTeamValuations(): Promise<TeamValuation[]> {
       draftRounds = parsedRounds;
     leagueStatus = String(settings?.status ?? "");
   } catch {}
-  const rawPlayerCapital = new Map(
-      managers.map((m) => [
-        m.id,
-        (byManager.get(m.id) ?? []).reduce((sum, p) => sum + (p.value ?? 0), 0),
-      ]),
-    ),
+  const weekly = await getProjectionDashboardData().catch(() => null);
+  const weeklyByPlayer = new Map((weekly?.current ?? []).map((row) => [row.playerId, row.projectedFantasyPoints]));
+  const projectedWeeklyStrength = new Map(managers.map((manager) => {
+    const roster = entries.filter((entry) => entry.managerId === manager.id).map((entry) => ({
+      id: entry.playerId,
+      position: entry.player.position,
+      projectedPpg: weeklyByPlayer.get(entry.playerId) ?? 0,
+      slot: slotMap.get(`${entry.managerId}:${entry.playerId}`) ?? "BENCH",
+    }));
+    const weeklyPoints = projectOptimalWeeklyPoints(roster);
+    return [manager.id, weeklyPoints > 0 ? weeklyPoints : optimalLineupValue(byManager.get(manager.id) ?? [], rosterPositions)] as const;
+  }));
+  const
     projectedSlot = new Map(
       managers.map((m) => [
         m.sleeperRosterId,
@@ -211,7 +220,7 @@ export async function computeAllTeamValuations(): Promise<TeamValuation[]> {
           m.id,
           m.sleeperRosterId,
           managers,
-          rawPlayerCapital,
+          projectedWeeklyStrength,
         ),
       ]),
     ),

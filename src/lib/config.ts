@@ -1,5 +1,5 @@
 export const SLEEPER_LEAGUE_ID = "1312155271526625280";
-export const PRIMARY_LEAGUE_NAME = "Dynasty Boys";
+export const PRIMARY_LEAGUE_NAME = "Dynasty Bois";
 export const PRIMARY_TEAM_NAME = "Orlando Oswalds";
 
 export const KTC_FORMAT = "SF-0.5PPR-noTEP";

@@ -210,7 +210,7 @@ export async function buildCompleteDataWorkbook(options?: {
     const readme = workbook.addWorksheet("README");
     readme.getColumn(1).width = 28;
     readme.getColumn(2).width = 92;
-    const title = readme.addRow(["Dynasty Boys complete data export", ""]);
+    const title = readme.addRow(["Dynasty Bois complete data export", ""]);
     title.font = { bold: true, size: 14 };
     title.commit();
     [

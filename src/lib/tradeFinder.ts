@@ -75,6 +75,7 @@ export type TradeFinderTarget = {
   offers: TradeFinderOffer[];
 };
 export type TradeFinderData = {
+  computedAt: string;
   targets: TradeFinderTarget[];
   shopMatches: { assetId: string; target: TradeFinderTarget; offer: TradeFinderOffer }[];
   orlandoNeeds: { position: string; leagueRank: number; note: string }[];
@@ -150,6 +151,9 @@ function offerCandidates(
   ownerAssets: LiveAsset[],
   ownerNeeds: Position[],
   strategies: Map<string, StrategyStatus>,
+  primaryActive: number,
+  ownerActive: number,
+  activeLimit: number,
 ): TradeFinderOffer[] {
   const secondaries = ownerAssets
       .filter(
@@ -208,7 +212,10 @@ function offerCandidates(
           };
         });
       })
-      .filter((c) => c.ratio >= 0.9 && c.ratio <= 1.16)
+      .filter((c) => {
+        const active = (assets: LiveAsset[]) => assets.filter((asset) => asset.assetType === "player" && asset.slot !== "IR" && asset.slot !== "TAXI").length;
+        return c.ratio >= 0.9 && c.ratio <= 1.16 && primaryActive - active(c.give) + active(c.get) <= activeLimit && ownerActive - active(c.get) + active(c.give) <= activeLimit;
+      })
       .sort((a, b) => a.rankScore - b.rankScore);
   const selected: typeof candidates = [],
     seen = new Set<string>();
@@ -326,6 +333,13 @@ export async function buildTradeFinderData(): Promise<TradeFinderData | null> {
       draftRounds = parsed;
     leagueStatus = String(settings?.status ?? "");
   } catch {}
+  let activeRosterLimit = 24;
+  try {
+    const settings = league?.settings ? JSON.parse(league.settings) : null;
+    const positions = Array.isArray(settings?.roster_positions) ? settings.roster_positions.map(String) : [];
+    const calculated = positions.filter((position: string) => !["IR", "TAXI"].includes(position)).length;
+    if (calculated > 0) activeRosterLimit = calculated;
+  } catch {}
   const leagueSeason = Number(league?.season ?? new Date().getUTCFullYear()),
     firstSeason = firstTradableDraftSeason(leagueSeason, leagueStatus),
     futureSeasons = [
@@ -414,6 +428,7 @@ export async function buildTradeFinderData(): Promise<TradeFinderData | null> {
             a.managerId !== primary.id &&
             !a.isStale &&
             POSITIONS.includes(a.position as Position) &&
+            !!a.nflTeam &&
             a.value >= 1700 &&
             strategies.get(a.id) !== "AVOID",
         )
@@ -434,13 +449,19 @@ export async function buildTradeFinderData(): Promise<TradeFinderData | null> {
             ownerAssets = targetUniverse.filter(
               (a) => a.managerId === target.managerId,
             ),
+            primaryActive = primaryPlayers.filter((asset) => asset.slot !== "IR" && asset.slot !== "TAXI").length,
+            ownerActive = ownerAssets.filter((asset) => asset.assetType === "player" && asset.slot !== "IR" && asset.slot !== "TAXI").length,
             offers = offerCandidates(
               target,
               chips,
               ownerAssets,
               ownerNeeds,
               strategies,
+              primaryActive,
+              ownerActive,
+              activeRosterLimit,
             );
+          if (ownerPosRank <= 4 && target.position === "QB" && target.slot === "STARTER") return null;
           if (!offers.length) return null;
           const tags: string[] = [];
           const rank = managerPositionRank(primary.id, position, valuations);
@@ -480,13 +501,13 @@ export async function buildTradeFinderData(): Promise<TradeFinderData | null> {
             tags.push("Pick structure available");
           if (offers.some((o) => o.get.length > 1))
             tags.push("Multi-asset return available");
-          const fitScore = Math.max(1, Math.min(92, Math.round(score))),
-            confidence = dataConfidence(
+          const confidence = dataConfidence(
               target,
               offers,
               ktcStale,
               rankingComplete,
             ),
+            fitScore = Math.max(1, Math.min(confidence === "LOW" ? 59 : 92, Math.round(score))),
             movementText =
               target.change30dPercent === null
                 ? "No decision-grade 30-day trend is available"
@@ -559,6 +580,7 @@ export async function buildTradeFinderData(): Promise<TradeFinderData | null> {
           .map((match) => ({ assetId: match.assetId, target: match.target, offer: match.offer })),
       );
   return {
+    computedAt: new Date().toISOString(),
     targets,
     shopMatches,
     orlandoNeeds,
@@ -574,4 +596,23 @@ export async function buildTradeFinderData(): Promise<TradeFinderData | null> {
     pickMarketAvailable: !!pickOwnership && pickMarket.length > 0,
     rankingComplete,
   };
+}
+
+async function ensureTradeFinderCache() {
+  await prisma.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "TradeFinderCache" (id text PRIMARY KEY, "computedAt" timestamptz NOT NULL DEFAULT now(), data jsonb NOT NULL)`);
+}
+
+export async function refreshTradeFinderCache(): Promise<TradeFinderData | null> {
+  const data = await buildTradeFinderData();
+  if (!data) return null;
+  await ensureTradeFinderCache();
+  await prisma.$executeRawUnsafe(`INSERT INTO "TradeFinderCache" (id, "computedAt", data) VALUES ('current', now(), $1::jsonb) ON CONFLICT (id) DO UPDATE SET "computedAt"=now(), data=EXCLUDED.data`, JSON.stringify(data));
+  return data;
+}
+
+export async function getTradeFinderData(): Promise<TradeFinderData | null> {
+  await ensureTradeFinderCache();
+  const rows = await prisma.$queryRawUnsafe<Array<{ data: TradeFinderData; computedAt: Date }>>(`SELECT data, "computedAt" FROM "TradeFinderCache" WHERE id='current' LIMIT 1`);
+  if (rows[0]) return { ...rows[0].data, computedAt: rows[0].computedAt.toISOString() };
+  return refreshTradeFinderCache();
 }

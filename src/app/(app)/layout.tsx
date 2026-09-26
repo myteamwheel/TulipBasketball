@@ -10,7 +10,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         <div className="mx-auto w-full max-w-7xl px-3 sm:px-4">
           <div className="flex min-w-0 items-center justify-between gap-2 py-2.5">
             <div className="min-w-0 truncate text-sm font-semibold tracking-tight text-neutral-100">
-              <span>Dynasty Boys</span>
+              <span>Dynasty Bois</span>
               <span className="hidden sm:inline"> <span className="text-emerald-500">·</span> Market Terminal</span>
             </div>
             <div className="shrink-0 text-[9px] text-neutral-600 sm:text-[10px]">Read-only · auto sync ~8 a.m. ET</div>

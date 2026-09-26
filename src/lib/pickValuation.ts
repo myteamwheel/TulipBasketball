@@ -67,9 +67,11 @@ export function firstTradableDraftSeason(leagueSeason: number, leagueStatus: str
   return leagueStatus === "in_season" ? leagueSeason + 1 : leagueSeason;
 }
 
-export function projectedRookieSlot(managerId: string, rosterId: number, managers: { id: string; sleeperRosterId: number }[], playerCapital: Map<string, number>): number {
-  const ranked = [...managers].sort((a, b) => (playerCapital.get(b.id) ?? 0) - (playerCapital.get(a.id) ?? 0));
+export function projectedRookieSlot(managerId: string, rosterId: number, managers: { id: string; sleeperRosterId: number }[], projectedWeeklyStrength: Map<string, number>): number {
+  // Lower weekly lineup strength means an earlier rookie pick. Dynasty market
+  // value is intentionally not used here: young rebuilders can be valuable
+  // while still finishing near the bottom of the current standings.
+  const ranked = [...managers].sort((a, b) => (projectedWeeklyStrength.get(a.id) ?? 0) - (projectedWeeklyStrength.get(b.id) ?? 0));
   const rank = ranked.findIndex((manager) => manager.id === managerId) + 1;
-  const safeRank = rank > 0 ? rank : ranked.length;
-  return Math.max(1, managers.length + 1 - safeRank);
+  return rank > 0 ? rank : Math.ceil(managers.length / 2);
 }

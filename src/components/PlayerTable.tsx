@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Sparkline from "@/components/Sparkline";
 import SignalBadge from "@/components/SignalBadge";
@@ -82,6 +82,8 @@ export default function PlayerTable({
   const [signal, setSignal] = useState("ALL");
   const [status, setStatus] = useState("ALL");
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const pageSize = 50;
   const owners = useMemo(
     () =>
       [
@@ -152,18 +154,19 @@ export default function PlayerTable({
     [rows, position, owner, slot, signal, status, search, sortKey, sortDir],
   );
 
-  const toggle = (key: SortKey) => {
-    if (sortKey === key) setSortDir((dir) => (dir === "asc" ? "desc" : "asc"));
-    else {
-      setSortKey(key);
-      setSortDir(key === "fullName" ? "asc" : "desc");
-    }
-  };
+  useEffect(() => setPage(1), [position, owner, slot, signal, status, search, sortKey, sortDir]);
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const visibleRows = filtered.slice((page - 1) * pageSize, page * pageSize);
+
   const selectClass =
     "h-9 rounded-md border border-neutral-700 bg-neutral-950 px-2 text-[11px] text-neutral-300";
 
   return (
     <div className="min-w-0 overflow-hidden rounded-lg border border-neutral-800 bg-neutral-900">
+      <details className="border-b border-neutral-800 px-3 py-2 text-xs text-neutral-400">
+        <summary className="cursor-pointer font-medium text-neutral-300">Signal legend and perspective</summary>
+        <p className="mt-2 leading-5">SELL HIGH requires a fresh rise near a real tracked high plus roster, age and team-window fit. BUY LOW requires a decision-grade drawdown and roster need. WATCH means evidence is incomplete or volatile. HIGH DATA means at least six observations with fresh recent coverage. {showOwner ? "League-player signals are advice for that player's current owner." : "These signals are from the Orlando Oswalds perspective."}</p>
+      </details>
       <div className="border-b border-neutral-800 p-3 space-y-2">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <input
@@ -250,7 +253,7 @@ export default function PlayerTable({
           >
             <option value="ALL">All signals</option>
             {signals.map((value) => (
-              <option key={value}>{value.replaceAll("_", " ")}</option>
+              <option key={value} value={value}>{value.replaceAll("_", " ")}</option>
             ))}
           </select>
           <select
@@ -265,13 +268,13 @@ export default function PlayerTable({
             ))}
           </select>
         </div>
-        <div className="text-right text-[10px] text-neutral-600">
-          {filtered.length} of {rows.length}
+        <div className="text-right text-xs text-neutral-400">
+          {filtered.length} of {rows.length}{pageCount > 1 ? ` · page ${page} of ${pageCount}` : ""}
         </div>
       </div>
 
       <div className="divide-y divide-neutral-800 md:hidden">
-        {filtered.map((row) => (
+        {visibleRows.map((row) => (
           <Link
             key={row.id}
             href={`/players/${row.id}`}
@@ -345,15 +348,7 @@ export default function PlayerTable({
           </caption>
           <thead>
             <tr className="border-b border-neutral-800 text-[10px] uppercase tracking-wide text-neutral-500">
-              <th className="px-3 py-2 text-left">
-                <button
-                  type="button"
-                  onClick={() => toggle("fullName")}
-                  className="hover:text-neutral-100"
-                >
-                  Player
-                </button>
-              </th>
+              <th className="px-3 py-2 text-left">Player</th>
               {showOwner ? (
                 <th className="px-2 py-2 text-left">Owner</th>
               ) : null}
@@ -364,15 +359,7 @@ export default function PlayerTable({
                 ["30d", "change30dPoints"],
                 ["Since Jun 21", "changeBaselinePoints"],
               ].map(([label, key]) => (
-                <th key={key} className="px-2 py-2 text-right">
-                  <button
-                    type="button"
-                    onClick={() => toggle(key as SortKey)}
-                    className="hover:text-neutral-100"
-                  >
-                    {label}
-                  </button>
-                </th>
+                <th key={key} className="px-2 py-2 text-right">{label}</th>
               ))}
               <th className="px-2 py-2 text-right">Range</th>
               <th className="px-2 py-2 text-right">Trend</th>
@@ -380,7 +367,7 @@ export default function PlayerTable({
             </tr>
           </thead>
           <tbody>
-            {filtered.map((row) => (
+            {visibleRows.map((row) => (
               <tr
                 key={row.id}
                 className="border-b border-neutral-900 hover:bg-neutral-800/40"
@@ -451,6 +438,13 @@ export default function PlayerTable({
           </tbody>
         </table>
       </div>
+      {pageCount > 1 ? (
+        <nav aria-label="Player table pages" className="flex items-center justify-between border-t border-neutral-800 p-3 text-xs">
+          <button disabled={page === 1} onClick={() => setPage((value) => Math.max(1, value - 1))} className="rounded border border-neutral-700 px-3 py-2 text-neutral-200 disabled:opacity-40">Previous</button>
+          <span className="text-neutral-400">Page {page} of {pageCount}</span>
+          <button disabled={page === pageCount} onClick={() => setPage((value) => Math.min(pageCount, value + 1))} className="rounded border border-neutral-700 px-3 py-2 text-neutral-200 disabled:opacity-40">Next</button>
+        </nav>
+      ) : null}
     </div>
   );
 }

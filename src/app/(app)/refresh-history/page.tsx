@@ -50,7 +50,7 @@ export default async function RefreshHistoryPage({
       <div>
         <h1 className="text-xl font-semibold text-neutral-100">Refresh History</h1>
         <p className="mt-1 text-sm text-neutral-500">
-          Full paginated Dynasty Boys ingestion history · {total} recorded runs.
+          Full paginated Dynasty Bois ingestion history · {total} recorded runs.
         </p>
       </div>
       <div className="space-y-2">

@@ -10,6 +10,8 @@ export interface RosterContext {
   status: string | null;
   positionRank: number;
   leagueTeamCount: number;
+  teamWindow: "CONTENDER" | "MIDDLE" | "REBUILDER";
+  age: number | null;
 }
 
 const INJURY_FLAGS = new Set(["Out", "IR", "PUP", "Suspended", "NA"]);
@@ -64,6 +66,14 @@ export function computeSignal(market: PlayerMarketData, ctx: RosterContext): Sig
   if (ctx.slot === "STARTER") rosterScore -= 8;
   if (ctx.slot === "IR") rosterScore -= 15;
   rosterScore = clamp(rosterScore, 0, 100);
+  if (ctx.teamWindow === "REBUILDER" && ctx.age !== null && ctx.age >= (ctx.position === "QB" ? 31 : ctx.position === "TE" ? 28 : 26)) {
+    rosterScore += 14;
+    reasonCodes.push({ code: "WINDOW_AGE_SELL", label: "Rebuilder age fit", detail: `Age ${ctx.age.toFixed(1)} is outside the preferred ${ctx.position} timeline for a rebuilding roster.` });
+  }
+  if (ctx.teamWindow === "REBUILDER" && ctx.age !== null && ctx.age <= 24) {
+    rosterScore -= 10;
+    reasonCodes.push({ code: "WINDOW_YOUTH_HOLD", label: "Youth fits rebuild", detail: `Age ${ctx.age.toFixed(1)} fits the rebuilding window.` });
+  }
   reasonCodes.push({ code: `ROSTER_${needState}_${ctx.position}`, label: `${needState === "SURPLUS" ? "League strength" : needState === "NEED" ? "League weakness" : "Middle-tier"} at ${ctx.position}`, detail: `#${ctx.positionRank}/${ctx.leagueTeamCount} in starter-quality ${ctx.position} capital` });
 
   let statusScore = 60;
@@ -83,7 +93,7 @@ export function computeSignal(market: PlayerMarketData, ctx: RosterContext): Sig
   let signal: SignalType = "HOLD";
   if (market.isStale || market.observationCount < 3 || !hasReliableMomentumWindow || recent14Count < 2 || spanDays < 3) signal = "WATCH";
   else if (flagged) signal = ctx.slot === "STARTER" ? "HOLD" : "WATCH";
-  else if (nearHigh && (pct7d > 5 || pct30d > 10) && (needState === "SURPLUS" || ctx.slot === "BENCH" || ctx.slot === "TAXI") && score >= 70) signal = "SELL_HIGH";
+  else if (nearHigh && (pct7d > 5 || pct30d > 10) && (needState === "SURPLUS" || ctx.slot === "BENCH" || ctx.slot === "TAXI" || (ctx.teamWindow === "REBUILDER" && (ctx.age ?? 0) >= 26)) && score >= 66) signal = "SELL_HIGH";
   else if (bigDrawdown && ctx.slot !== "IR" && needState !== "SURPLUS" && !flagged && (market.currentValue ?? 0) >= 800) signal = "BUY_LOW";
   else if ((market.currentValue ?? 9999) < 1000 && market.change30d !== null && pct30d < -10 && (ctx.slot === "BENCH" || ctx.slot === "TAXI") && needState === "SURPLUS") signal = "CUT_BAIT";
   else if (volatility > 0.2 && market.observationCount < 6) signal = "WATCH";

@@ -9,6 +9,8 @@ const context: RosterContext = {
   status: "Active",
   positionRank: 6,
   leagueTeamCount: 12,
+  teamWindow: "MIDDLE",
+  age: 27,
 };
 
 function market(overrides: Partial<PlayerMarketData> = {}): PlayerMarketData {

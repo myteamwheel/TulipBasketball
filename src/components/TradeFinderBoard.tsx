@@ -75,9 +75,7 @@ function Offer({ offer }: { offer: TradeFinderOffer }) {
               ? "Strong value match"
               : "Workable value match"}
           </div>
-          <div className="text-[9px] text-neutral-600">
-            Value balance {offer.valueBalance.toFixed(0)}%
-          </div>
+          <div className="text-[9px] text-neutral-600">Within the accepted value range</div>
           <div
             className={`mt-1 text-xs font-semibold tabular-nums ${edgeClass}`}
           >
@@ -215,10 +213,13 @@ export default function TradeFinderBoard({ data }: { data: TradeFinderData }) {
             )}
           </div>
           {shopMatches.map(({ target, offer }, i) => (
-            <article
+            <details
               key={`${target.id}:${i}`}
               className="rounded-xl border border-neutral-800 bg-neutral-900 p-3"
             >
+              <summary className="cursor-pointer list-none text-sm font-semibold text-neutral-100">
+                {target.name} from {target.ownerName} · direct match
+              </summary>
               <div className="mb-2 flex items-center justify-between gap-3">
                 <div>
                   <Link
@@ -232,12 +233,10 @@ export default function TradeFinderBoard({ data }: { data: TradeFinderData }) {
                     {points(target.value)}
                   </div>
                 </div>
-                <div className="text-[10px] text-neutral-500">
-                  {offer.valueBalance.toFixed(0)}% balance
-                </div>
+                <div className="text-[10px] text-neutral-500">Direct value match</div>
               </div>
               <Offer offer={offer} />
-            </article>
+            </details>
           ))}
           {shopAsset && !shopMatches.length ? (
             <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-6 text-center text-xs text-neutral-500">
@@ -305,9 +304,7 @@ export default function TradeFinderBoard({ data }: { data: TradeFinderData }) {
             <span className="font-medium text-neutral-300">Offer pool:</span>{" "}
             {data.playerTradeChipCount} eligible Orlando Oswalds players and{" "}
             {data.pickTradeChipCount} verified owned picks. Generated packages
-            can now return multiple opposing assets and use up to three Orlando Oswalds
-            players
-            pieces.
+            can return multiple opposing assets and use up to three Orlando Oswalds pieces. Both teams must remain within active-roster limits.
           </div>
           <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto]">
             <div className="flex flex-wrap gap-1 rounded-lg border border-neutral-800 bg-neutral-900 p-1">
@@ -349,10 +346,13 @@ export default function TradeFinderBoard({ data }: { data: TradeFinderData }) {
           </div>
           <div className="space-y-3">
             {visible.map((t) => (
-              <article
+              <details
                 key={t.id}
                 className="rounded-xl border border-neutral-800 bg-neutral-900 p-3 sm:p-4"
               >
+                <summary className="cursor-pointer list-none text-sm font-semibold text-neutral-100">
+                  {t.name} · {t.ownerName} · fit {t.fitScore} · {t.offers.length} offer{t.offers.length === 1 ? "" : "s"}
+                </summary>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
@@ -415,7 +415,7 @@ export default function TradeFinderBoard({ data }: { data: TradeFinderData }) {
                     <Offer key={i} offer={o} />
                   ))}
                 </div>
-              </article>
+              </details>
             ))}
             {!visible.length && !data.ktcStale ? (
               <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-6 text-center text-sm text-neutral-500">

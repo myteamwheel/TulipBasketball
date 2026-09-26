@@ -122,21 +122,9 @@ export default async function AuditPage({
   const historicalFindings = [
     {
       kind: "CHANGE",
-      title: "Raise the bar when consolidating",
-      detail:
-        "The deep historical audit found Orlando Oswalds received the best single asset in only 34% of Dynasty Bois trades. Consolidation should produce a clear best-player outcome.",
-    },
-    {
-      kind: "CHANGE",
       title: "Avoid paying for last season's production",
       detail:
         "Trades led by prior-season starters and aging veterans were among Orlando Oswalds' weakest historical groups. Current role and price matter more than the old headline.",
-    },
-    {
-      kind: "KEEP",
-      title: "Keep targeting young players and quarterbacks",
-      detail:
-        "Those were Orlando Oswalds' strongest historical trade patterns in this Superflex league, especially when the incoming asset was already rising.",
     },
     {
       kind: "KEEP",

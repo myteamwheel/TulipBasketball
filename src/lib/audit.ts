@@ -1,6 +1,7 @@
 import { AuditNotFoundError, isAuditSelector } from "@/lib/auditSelection";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
+import { getFullAudit } from "@/lib/fullAudit";
 import { SLEEPER_LEAGUE_ID } from "@/lib/config";
 import { computeMarketDataForPlayers } from "@/lib/metrics";
 import {
@@ -631,10 +632,10 @@ export async function recordAuditSnapshot(refreshRunId: string | null) {
 export async function listAuditSnapshots(): Promise<AuditSnapshotSummary[]> {
   await ensureAuditStorage();
   const rows = await prisma.$queryRawUnsafe<StoredAuditRow[]>(`
-    SELECT "snapshotDate", "generatedAt", "refreshRunId", data
+    SELECT DISTINCT ON ("snapshotDate") "snapshotDate", "generatedAt", "refreshRunId", data
     FROM "AuditSnapshot"
     WHERE status = 'VALIDATED'
-    ORDER BY "generatedAt" DESC
+    ORDER BY "snapshotDate" DESC, "generatedAt" DESC
     LIMIT 90
   `);
   return rows.map((row) => {
@@ -681,7 +682,13 @@ export async function getAuditDashboardData(snapshotDate?: string | null) {
     listAuditSnapshots(),
     getAuditSnapshot(snapshotDate),
   ]);
-  if (stored) return { data: stored, snapshots: snapshots.filter(row => row.generatedAt <= stored.generatedAt), isLivePreview: false };
+  if (stored) {
+    const full = await getFullAudit().catch(() => null);
+    const table = full?.data.tables.find((item) => item.name === "trends_manager_season");
+    const historical = (table?.rows ?? []).filter((row) => String(row.league) === "Dynasty Bois" && Number(row.is_me) === 1).map((row) => ({ season: Number(row.season), trades: Number(row.trades ?? 0), waiverClaims: Number(row.waiver_claims ?? 0), freeAgentAdds: Number(row.fa_adds ?? 0), drops: Number(row.drops ?? 0) })).filter((row) => Number.isFinite(row.season));
+    const activity = historical.length ? historical.sort((a, b) => b.season - a.season) : stored.activity;
+    return { data: { ...stored, activity }, snapshots: snapshots.filter(row => row.generatedAt <= stored.generatedAt), isLivePreview: false };
+  }
   if (snapshotDate) throw new AuditNotFoundError("Audit snapshot not found");
   const live = await buildLiveAuditData(null, easternDate());
   return { data: live, snapshots, isLivePreview: true };
