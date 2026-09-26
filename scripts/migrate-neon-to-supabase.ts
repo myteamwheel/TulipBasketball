@@ -20,7 +20,14 @@ const quote = (value: string) => `"${value.replaceAll('"', '""')}"`;
 // provider certificate chains that `pg` does not have in its default CA store;
 // encryption is still required, while this avoids rejecting that known chain.
 function managedPostgresClient(connectionString: string) {
-  return new Client({ connectionString, ssl: { rejectUnauthorized: false } });
+  // pg gives `sslmode` in the URI priority over the explicit `ssl` option.
+  // Remove provider-specific TLS URI parameters first so the encrypted,
+  // non-default provider chain configuration below is actually applied.
+  const url = new URL(connectionString);
+  for (const parameter of ["sslmode", "sslcert", "sslkey", "sslrootcert"]) {
+    url.searchParams.delete(parameter);
+  }
+  return new Client({ connectionString: url.toString(), ssl: { rejectUnauthorized: false } });
 }
 
 async function prompt(label: string) {
