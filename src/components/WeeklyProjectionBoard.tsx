@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type {
   WeeklyProjectionRow,
   ProjectedStatLine,
@@ -57,6 +57,7 @@ export default function WeeklyProjectionBoard({
   const [sort, setSort] = useState<SortKey>("projected");
   const [historySort, setHistorySort] = useState<SortKey>("error");
   const [historyWeek, setHistoryWeek] = useState("ALL");
+  const [currentPage, setCurrentPage] = useState(1);
 
   const matchesSearch = (name: string, team: string | null, pos: string) =>
     (position === "ALL" || pos === position) &&
@@ -79,6 +80,12 @@ export default function WeeklyProjectionBoard({
       });
 
   const currentRows = filterRows(current, sort);
+  const currentPageCount = Math.max(1, Math.ceil(currentRows.length / 50));
+  const visibleCurrentRows = currentRows.slice((currentPage - 1) * 50, currentPage * 50);
+  useEffect(() => setCurrentPage(1), [query, position, sort]);
+  useEffect(() => {
+    if (currentPage > currentPageCount) setCurrentPage(currentPageCount);
+  }, [currentPage, currentPageCount]);
   const currentIds = new Set(current.map((row) => row.playerId));
   const lockedIds = new Set(unavailable.filter((row) => row.status === "ALREADY_PLAYED").map((row) => row.playerId));
   const unavailableRows = unavailable
@@ -160,7 +167,7 @@ export default function WeeklyProjectionBoard({
           </select>
         </div>
         <div className="space-y-2 md:hidden">
-          {currentRows.map((row) => (
+          {visibleCurrentRows.map((row) => (
             <article key={row.id} className="rounded-lg border border-neutral-800 bg-neutral-900 p-3">
               <div className="flex items-start justify-between gap-3"><div><div className="font-semibold text-neutral-100">{row.playerName}{lockedIds.has(row.playerId) ? <span className="ml-1 rounded bg-amber-950 px-1.5 py-0.5 text-[10px] text-amber-300">LOCKED</span> : null}</div><div className="text-xs text-neutral-400">{row.position}{row.nflTeam ? ` · ${row.nflTeam}` : ""} · {row.confidence} confidence</div></div><div className="text-xl font-semibold text-emerald-300">{row.projectedFantasyPoints.toFixed(1)}</div></div>
               <div className="mt-3 text-xs text-neutral-300">Sleeper {number(row.sourceBreakdown.sleeperPoints)} · CBS {number(row.sourceBreakdown.cbsPoints)} · Model {number(row.sourceBreakdown.localModelPoints)}</div>
@@ -188,7 +195,7 @@ export default function WeeklyProjectionBoard({
               </tr>
             </thead>
             <tbody>
-              {currentRows.map((row) => (
+              {visibleCurrentRows.map((row) => (
                 <tr key={row.id} className="border-t border-neutral-800 bg-neutral-900/50">
                   <td className="px-2.5 py-2">
                     <div className="font-medium text-neutral-100">{row.playerName}{lockedIds.has(row.playerId) ? <span className="ml-1 rounded bg-amber-950 px-1.5 py-0.5 text-[9px] text-amber-300">LOCKED</span> : null}</div>
@@ -225,6 +232,7 @@ export default function WeeklyProjectionBoard({
             </tbody>
           </table>
         </div>
+        {currentPageCount > 1 ? <nav aria-label="Current projection pages" className="flex items-center justify-between rounded-lg border border-neutral-800 bg-neutral-900 p-2.5 text-xs"><button disabled={currentPage === 1} onClick={() => setCurrentPage((page) => Math.max(1, page - 1))} className="rounded border border-neutral-700 px-3 py-1.5 text-neutral-200 disabled:border-neutral-800 disabled:text-neutral-600">Previous</button><span className="text-neutral-400">{(currentPage - 1) * 50 + 1}–{Math.min(currentPage * 50, currentRows.length)} of {currentRows.length}</span><button disabled={currentPage === currentPageCount} onClick={() => setCurrentPage((page) => Math.min(currentPageCount, page + 1))} className="rounded border border-neutral-700 px-3 py-1.5 text-neutral-200 disabled:border-neutral-800 disabled:text-neutral-600">Next</button></nav> : null}
       </section>
 
       {unavailableRows.length ? (
