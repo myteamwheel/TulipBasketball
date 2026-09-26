@@ -30,6 +30,15 @@ function managedPostgresClient(connectionString: string) {
   return new Client({ connectionString: url.toString(), ssl: { rejectUnauthorized: false } });
 }
 
+function valueForTarget(type: string, value: unknown) {
+  if (value === null || value === undefined) return null;
+  // pg parses JSON documents into JS values. A JSON document whose root is a
+  // string must still be sent as a JSON-encoded string rather than raw text;
+  // otherwise Postgres tries to parse its contents as a JSON document again.
+  if (/\bjsonb?\b/i.test(type)) return JSON.stringify(value);
+  return value;
+}
+
 async function prompt(label: string) {
   const terminal = createInterface({ input, output });
   try {
@@ -179,7 +188,7 @@ async function copyTable(source: Client, target: Client, table: string) {
     if (!rows.length) break;
     const params: unknown[] = [];
     const groups = rows.map((row, rowIndex) => `(${usable.map((_, columnIndex) => {
-      params.push(row[usable[columnIndex].name]);
+      params.push(valueForTarget(usable[columnIndex].type, row[usable[columnIndex].name]));
       return `$${rowIndex * usable.length + columnIndex + 1}`;
     }).join(", ")})`);
     await target.query(`INSERT INTO public.${quote(table)} (${names.join(", ")}) VALUES ${groups.join(", ")};`, params);
