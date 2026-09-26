@@ -97,7 +97,7 @@ export default function TradeFinderBoard({ data }: { data: TradeFinderData }) {
       .filter((a) => a.managerId === data.primaryManagerId)
       .sort((a, b) => b.value - a.value),
     shopAssets = primaryAssets.filter((a) =>
-      data.shopEligibleAssetIds.includes(a.id),
+      a.assetType === "player" && data.shopEligibleAssetIds.includes(a.id),
     ),
     [shopAsset, setShopAsset] = useState(shopAssets[0]?.id ?? ""),
     visible = data.targets
