@@ -182,10 +182,10 @@ async function main() {
     return;
   }
   console.log("This reads the source and writes only to the new Supabase database. It does not alter Neon.");
-  // `vercel env pull` can provide the existing production URL locally without
-  // ever printing it. Prefer it when available; otherwise preserve the
-  // interactive fallback for a one-off manual migration.
-  const sourceUrl = process.env.DATABASE_URL?.trim() || await prompt("Current Neon DATABASE_URL: ");
+  // Keep the source variable distinct from generic local `DATABASE_URL`
+  // values. This avoids accidentally connecting to an unrelated database
+  // inherited from a shell profile.
+  const sourceUrl = process.env.NEON_DATABASE_URL?.trim() || await prompt("Current Neon DATABASE_URL: ");
   const targetUrl = await prompt("New Supabase database connection URL: ");
   const source = new Client({ connectionString: sourceUrl });
   const target = new Client({ connectionString: targetUrl });
