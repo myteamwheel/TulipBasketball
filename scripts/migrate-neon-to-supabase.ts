@@ -62,7 +62,7 @@ async function columns(client: Client, table: string): Promise<Column[]> {
 }
 
 async function enumTypes(client: Client) {
-  const { rows } = await client.query<{ name: string; values: string[] }>(`
+  const { rows } = await client.query<{ name: string; values: string[] | string }>(`
     SELECT t.typname AS name,
       array_agg(e.enumlabel ORDER BY e.enumsortorder) AS values
     FROM pg_type t
@@ -72,7 +72,18 @@ async function enumTypes(client: Client) {
     GROUP BY t.typname
     ORDER BY t.typname
   `);
-  return rows;
+  return rows.map((row) => ({
+    ...row,
+    // `pg` normally parses text[] into a JS array. Some hosted Postgres
+    // connection paths return its wire representation instead, so accept both.
+    values: Array.isArray(row.values)
+      ? row.values
+      : row.values
+          .replace(/^\{/, "")
+          .replace(/\}$/, "")
+          .split(",")
+          .map((value) => value.replace(/^"|"$/g, "").replaceAll('\\"', '"')),
+  }));
 }
 
 async function foreignKeys(client: Client): Promise<ForeignKey[]> {
