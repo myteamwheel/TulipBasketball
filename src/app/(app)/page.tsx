@@ -16,6 +16,7 @@ import SectionHeader from "@/components/SectionHeader";
 import SignalBadge from "@/components/SignalBadge";
 import {
   formatDateEastern,
+  formatDateTimeEastern,
   formatPoints,
   formatSigned,
   timeAgo,
@@ -311,10 +312,10 @@ export default async function HomePage() {
         </div>
       </section>
       <section id="capital">
-        <p className="mb-2 text-xs text-neutral-400">Capital as of {capitalAsOf ? new Date(capitalAsOf).toLocaleString("en-US", { timeZone: "America/New_York", timeZoneName: "short" }) : "unavailable"}</p>
+        <p className="mb-2 text-xs text-neutral-400">Player values as of {formatDateTimeEastern(capitalAsOf)} · Pick values as of {formatDateTimeEastern(my.draftMarketObservedAt)}</p>
         <SectionHeader
           title="Dynasty snapshot"
-          description={`Known capital never converts missing values to zero. IR/taxi players are excluded from lineup strength. Capital as of ${capitalAsOf ? new Date(capitalAsOf).toLocaleString("en-US", { timeZone: "America/New_York" }) : "unavailable"}.`}
+          description={`Known capital never converts missing values to zero. IR/taxi players are excluded from lineup strength. Capital as of ${formatDateTimeEastern(capitalAsOf)}.`}
         />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
           <MetricCard

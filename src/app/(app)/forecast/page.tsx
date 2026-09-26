@@ -147,6 +147,7 @@ export default async function ForecastPage() {
           </div>
         </div>
       </section>
+      <p className="text-xs text-neutral-400">Usable current or prior-season production: {productionCovered}/{rows.length} valued players. A live weekly role is also required for actionable model edges.</p>
       {productionCovered < rows.length * 0.6 ? (
         <div className="rounded-lg border border-amber-900/70 bg-amber-950/20 p-3 text-[11px] leading-5 text-amber-200">
           Football-model coverage is still ramping: {productionCovered}/

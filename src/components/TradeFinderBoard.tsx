@@ -381,7 +381,7 @@ export default function TradeFinderBoard({ data }: { data: TradeFinderData }) {
                       Trade fit
                     </div>
                     <div className="text-sm font-semibold text-neutral-200">
-                      {t.fitScore >= 76
+                      {t.confidence === "LOW" ? "Limited evidence" : t.fitScore >= 76
                         ? "High"
                         : t.fitScore >= 58
                           ? "Medium"
