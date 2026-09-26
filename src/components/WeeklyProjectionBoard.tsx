@@ -80,8 +80,8 @@ export default function WeeklyProjectionBoard({
       });
 
   const currentRows = filterRows(current, sort);
-  const currentPageCount = Math.max(1, Math.ceil(currentRows.length / 50));
-  const visibleCurrentRows = currentRows.slice((currentPage - 1) * 50, currentPage * 50);
+  const currentPageCount = Math.max(1, Math.ceil(currentRows.length / 25));
+  const visibleCurrentRows = currentRows.slice((currentPage - 1) * 25, currentPage * 25);
   useEffect(() => setCurrentPage(1), [query, position, sort]);
   useEffect(() => {
     if (currentPage > currentPageCount) setCurrentPage(currentPageCount);
@@ -232,21 +232,17 @@ export default function WeeklyProjectionBoard({
             </tbody>
           </table>
         </div>
-        {currentPageCount > 1 ? <nav aria-label="Current projection pages" className="flex items-center justify-between rounded-lg border border-neutral-800 bg-neutral-900 p-2.5 text-xs"><button disabled={currentPage === 1} onClick={() => setCurrentPage((page) => Math.max(1, page - 1))} className="rounded border border-neutral-700 px-3 py-1.5 text-neutral-200 disabled:border-neutral-800 disabled:text-neutral-600">Previous</button><span className="text-neutral-400">{(currentPage - 1) * 50 + 1}–{Math.min(currentPage * 50, currentRows.length)} of {currentRows.length}</span><button disabled={currentPage === currentPageCount} onClick={() => setCurrentPage((page) => Math.min(currentPageCount, page + 1))} className="rounded border border-neutral-700 px-3 py-1.5 text-neutral-200 disabled:border-neutral-800 disabled:text-neutral-600">Next</button></nav> : null}
+        {currentPageCount > 1 ? <nav aria-label="Current projection pages" className="flex items-center justify-between rounded-lg border border-neutral-800 bg-neutral-900 p-2.5 text-xs"><button disabled={currentPage === 1} onClick={() => setCurrentPage((page) => Math.max(1, page - 1))} className="rounded border border-neutral-700 px-3 py-1.5 text-neutral-200 disabled:border-neutral-800 disabled:text-neutral-600">Previous</button><span className="text-neutral-400">{(currentPage - 1) * 25 + 1}–{Math.min(currentPage * 25, currentRows.length)} of {currentRows.length}</span><button disabled={currentPage === currentPageCount} onClick={() => setCurrentPage((page) => Math.min(currentPageCount, page + 1))} className="rounded border border-neutral-700 px-3 py-1.5 text-neutral-200 disabled:border-neutral-800 disabled:text-neutral-600">Next</button></nav> : null}
       </section>
 
       {unavailableRows.length ? (
-        <section className="order-3 space-y-2">
-          <div>
-            <h2 className="text-sm font-semibold text-neutral-100">
-              Not projected
-            </h2>
-            <p className="text-[10px] text-neutral-500">
+        <details className="order-3 rounded-lg border border-neutral-800 bg-neutral-900 p-3">
+          <summary className="cursor-pointer text-sm font-semibold text-neutral-100">Not projected ({unavailableRows.length})</summary>
+            <p className="mt-1 text-[10px] text-neutral-500">
               Rostered players deliberately withheld instead of receiving a
               fabricated projection.
             </p>
-          </div>
-          <div className="overflow-x-auto rounded-lg border border-neutral-800">
+          <div className="mt-3 overflow-x-auto rounded-lg border border-neutral-800">
             <table className="w-full min-w-[720px] text-xs">
               <thead>
                 <tr className="bg-neutral-950 text-[9px] uppercase tracking-wide text-neutral-600">
@@ -273,7 +269,7 @@ export default function WeeklyProjectionBoard({
               </tbody>
             </table>
           </div>
-        </section>
+        </details>
       ) : null}
 
       <section className="order-2 space-y-2">
