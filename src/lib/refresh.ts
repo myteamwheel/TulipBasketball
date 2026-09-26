@@ -538,7 +538,8 @@ async function executeRefresh(runId: string) {
           !draftFresh ||
           !pickOwnershipOk ||
           !projectionsOk ||
-          !exportSnapshotOk
+          !exportSnapshotOk ||
+          errors.length > 0
         ? "PARTIAL_FAILURE"
         : "SUCCESS";
 

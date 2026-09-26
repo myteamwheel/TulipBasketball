@@ -1,3 +1,4 @@
+import { refreshDiagnostics } from "@/lib/refreshDiagnostics";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { formatDateTimeEastern } from "@/lib/format";
@@ -55,7 +56,7 @@ export default async function RefreshHistoryPage({
       </div>
       <div className="space-y-2">
         {runs.map((run) => {
-          const errors = safeJson<{ source: string; message: string }[]>(
+          const recordedErrors = safeJson<{ source: string; message: string }[]>(
             run.errors,
             [],
           );
@@ -71,6 +72,7 @@ export default async function RefreshHistoryPage({
             rowsStored: number;
             message?: string;
           }[];
+          const errors = refreshDiagnostics(recordedErrors, sourceStatuses, run.status);
           const visibleSources = sourceStatuses.filter((source) =>
             CURRENT_SOURCES.has(source.source),
           );

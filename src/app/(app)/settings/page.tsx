@@ -1,3 +1,4 @@
+import { projectionSummary } from "@/lib/projectionSummary";
 import {
   getAllCurrentRosterEntries,
   getPlayersNeedingMappingReview,
@@ -234,7 +235,7 @@ export default async function SettingsPage() {
                 Explicitly withheld
               </div>
               <div className="mt-1 text-lg font-semibold text-neutral-200">
-                {projectionData.unavailable.length}
+                {projectionSummary(projectionData.current, projectionData.unavailable, projectionData.history).withheld}
               </div>
               <div className="text-[10px] text-neutral-600">
                 no team / unavailable / unsupported role / already played

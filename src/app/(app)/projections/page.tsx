@@ -1,3 +1,4 @@
+import { projectionSummary } from "@/lib/projectionSummary";
 import MetricCard from "@/components/MetricCard";
 import SectionHeader from "@/components/SectionHeader";
 import WeeklyProjectionBoard from "@/components/WeeklyProjectionBoard";
@@ -11,13 +12,8 @@ export const dynamic = "force-dynamic";
 export default async function ProjectionsPage() {
   const [data, league] = await Promise.all([getProjectionDashboardData(), getLeague(SLEEPER_LEAGUE_ID)]);
   const omittedScoring = unsupportedNonzeroScoring(league.scoring_settings);
-  const graded = data.history.filter((row) => row.absoluteError !== null);
-  const mae = graded.length
-    ? graded.reduce((sum, row) => sum + (row.absoluteError ?? 0), 0) / graded.length
-    : null;
-  const accuracy = graded.length
-    ? graded.reduce((sum, row) => sum + (row.accuracyScore ?? 0), 0) / graded.length
-    : null;
+  const summary = projectionSummary(data.current, data.unavailable, data.history);
+  const { mae, bias, withinFive } = summary;
   const highConfidence = data.current.filter((row) => row.confidence === "HIGH").length;
 
   return (
@@ -40,15 +36,15 @@ export default async function ProjectionsPage() {
           title={`${data.season} Week ${data.week}`}
           description="Every row shows the Sleeper and CBS player projections, the local recency model, their player-level blend, DraftKings game-market context through ESPN, and the final scoring-adjusted fantasy projection. Game odds are a bounded team-environment adjustment, not an invented individual player projection."
         />
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <MetricCard
             label="Players projected"
             value={data.current.length.toLocaleString("en-US")}
           />
           <MetricCard
             label="Withheld"
-            value={data.unavailable.length.toLocaleString("en-US")}
-            detail="inactive / no supported role / already played"
+            value={summary.withheld.toLocaleString("en-US")}
+            detail="excludes players with locked forecasts"
           />
           <MetricCard
             label="High confidence"
@@ -59,11 +55,8 @@ export default async function ProjectionsPage() {
             value={mae === null ? "—" : mae.toFixed(2)}
             detail="fantasy points"
           />
-          <MetricCard
-            label="Mean accuracy"
-            value={accuracy === null ? "—" : `${accuracy.toFixed(1)}%`}
-            detail={`${graded.length} graded player-weeks`}
-          />
+          <MetricCard label="Projection bias" value={bias === null ? "—" : `${bias >= 0 ? "+" : ""}${bias.toFixed(2)}`} detail="points; positive = projected too high" />
+          <MetricCard label="Within 5 points" value={withinFive === null ? "—" : `${withinFive.toFixed(1)}%`} detail={`${summary.graded} graded player-weeks`} />
         </div>
       </section>
 
@@ -77,8 +70,8 @@ export default async function ProjectionsPage() {
 
       {omittedScoring.length > 0 && <details className="rounded-lg border border-neutral-800 bg-neutral-900 px-3 py-2 text-xs leading-5 text-neutral-500"><summary className="cursor-pointer font-medium text-neutral-300">Scoring coverage note</summary><p className="mt-1">Final points use the league’s core scoring. {omittedScoring.length} bonus or uncommon event type{omittedScoring.length === 1 ? " is" : "s are"} not projected by the source feeds, so the visible stat line and accuracy grade cover the core scoring events.</p></details>}
 
-      <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3 text-[10px] leading-5 text-neutral-500">
-        <div className="font-semibold text-neutral-300">How the projection model learns</div>
+      <details className="rounded-lg border border-neutral-800 bg-neutral-900 p-3 text-xs leading-5 text-neutral-400">
+        <summary className="cursor-pointer font-semibold text-neutral-300">How the projection model learns</summary>
         <p className="mt-1">
           Sleeper and CBS weekly projections establish current playing-time and
           role expectations. DraftKings game totals and spreads, supplied through
@@ -90,7 +83,7 @@ export default async function ProjectionsPage() {
           Actual results come from nflverse. Accuracy is descriptive model error,
           not a betting edge.
         </p>
-      </section>
+      </details>
     </div>
   );
 }

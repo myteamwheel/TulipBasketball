@@ -194,12 +194,12 @@ export default async function AuditPage({
           <MetricCard
             label="Start-eligible"
             value={formatPoints(data.team.optimalLineupValue)}
-            detail={`${allIncomplete ? "~" : ""}#${data.team.lineupRank}`}
+            detail={`#${data.team.lineupRank}`}
           />
           <MetricCard
             label="Depth"
             value={formatPoints(data.team.depthValue)}
-            detail={`${allIncomplete ? "~" : ""}#${data.team.depthRank}`}
+            detail={`#${data.team.depthRank}`}
           />
           <MetricCard
             label="7-day"
@@ -319,7 +319,7 @@ export default async function AuditPage({
                 >
                   <td className="px-3 py-2.5 text-neutral-200">
                     <Link href={`/league/${team.managerId}`} className="font-medium">
-                      {allIncomplete ? "~" : ""}#{team.totalRank} {team.teamName}
+                      #{team.totalRank} {team.teamName}
                     </Link>
                   </td>
                   <td className="px-3 py-2.5 text-right text-neutral-200">

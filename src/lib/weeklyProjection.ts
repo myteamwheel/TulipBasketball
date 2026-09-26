@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { getNflSchedule, scheduleTeam, type ScheduledGame } from "@/lib/nflSchedule";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
@@ -517,7 +518,7 @@ async function upsertAvailability(
   );
 }
 
-async function currentPlayers(): Promise<PlayerRow[]> {
+async function currentPlayers(includeFreeAgents = false): Promise<PlayerRow[]> {
   return prisma.$queryRawUnsafe<PlayerRow[]>(`
     SELECT p.id, p."sleeperId", p."fullName", p.position, p."nflTeam", p.status,
       (
@@ -529,7 +530,7 @@ async function currentPlayers(): Promise<PlayerRow[]> {
       ) AS "currentValue"
     FROM "Player" p
     WHERE p.position IN ('QB','RB','WR','TE')
-      AND EXISTS (
+      AND (${includeFreeAgents ? `EXISTS (SELECT 1 FROM "KtcObservation" k WHERE k."playerId" = p.id AND k."validationStatus" = 'VALID' AND k."observedAt" >= now() - interval '36 hours') OR` : ''} EXISTS (
         SELECT 1
         FROM "OwnershipInterval" oi
         JOIN "Manager" m ON m.id = oi."managerId"
@@ -538,7 +539,7 @@ async function currentPlayers(): Promise<PlayerRow[]> {
           AND oi."validTo" IS NULL
           AND m."isActive" = true
           AND l."sleeperId" = '${SLEEPER_LEAGUE_ID.replaceAll("'", "''")}'
-      )
+      ))
     ORDER BY p.position, p."fullName"
   `);
 }
@@ -719,7 +720,7 @@ export async function refreshWeeklyProjections(
   const week = Number(state.week);
   if (!Number.isInteger(season) || !Number.isInteger(week) || week < 1 || week > 18 || !String(state.season_type).startsWith("reg")) throw new Error("Regular-season weekly projections are not currently available");
   const [players, allGames, catalog, league, schedule] = await Promise.all([
-    currentPlayers(),
+    currentPlayers(true),
     footballGames(season),
     getPlayerCatalog(),
     getLeague(SLEEPER_LEAGUE_ID),
@@ -1005,13 +1006,13 @@ function normalizeProjectionRow(row: Record<string, unknown>): WeeklyProjectionR
   };
 }
 
-export async function getProjectionDashboardData() {
+async function readProjectionDashboardData(includeFreeAgents = false) {
   await ensureAnalyticsStorage();
   const state = await getNflState();
   const season = Number(state.season);
   const week = Number(state.week);
   if (!Number.isInteger(season) || !Number.isInteger(week)) throw new Error("Invalid NFL season/week");
-  const rosteredIds = new Set((await currentPlayers()).map(player => player.id));
+  const rosteredIds = new Set((await currentPlayers(includeFreeAgents)).map(player => player.id));
   const currentRaw = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(`
     SELECT DISTINCT ON ("playerId") *
     FROM "WeeklyProjection"
@@ -1079,6 +1080,8 @@ export async function getProjectionDashboardData() {
     unavailable,
   };
 }
+
+export const getProjectionDashboardData = cache(readProjectionDashboardData);
 
 export async function recordDailyExportSnapshot(refreshRunId: string | null) {
   await ensureAnalyticsStorage();

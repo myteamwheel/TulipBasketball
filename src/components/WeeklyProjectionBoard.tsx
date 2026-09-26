@@ -23,7 +23,7 @@ function statLine(position: string, stats: ProjectedStatLine | null) {
     return `${Math.round(stats.completions)}/${Math.round(stats.attempts)} pass · ${Math.round(stats.passingYards)} yd · ${Math.round(stats.passingTds)} TD · ${Math.round(stats.interceptions)} INT · ${Math.round(stats.carries)} car · ${Math.round(stats.rushingYards)} rush yd · ${Math.round(stats.rushingTds)} rush TD`;
   }
   const rushing = `${Math.round(stats.carries)} car · ${Math.round(stats.rushingYards)} rush yd · ${Math.round(stats.rushingTds)} rush TD`;
-  const receiving = `${Math.round(stats.targets)} tgt · ${Math.round(stats.receptions)} rec · ${Math.round(stats.receivingYards)} rec yd · ${Math.round(stats.receivingTds)} rec TD`;
+  const receiving = `${Math.round(stats.receptions)} rec · ${Math.round(stats.targets)} tgt · ${Math.round(stats.receivingYards)} rec yd · ${Math.round(stats.receivingTds)} rec TD`;
   // Receiving volume is the first meaningful category for WR/TE; RBs remain
   // rush-first while retaining targets for receiving-back context.
   return position === "RB" ? `${rushing} · ${receiving}` : `${receiving} · ${rushing}`;
