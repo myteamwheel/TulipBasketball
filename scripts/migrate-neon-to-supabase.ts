@@ -16,6 +16,13 @@ type ForeignKey = { child: string; parent: string };
 
 const quote = (value: string) => `"${value.replaceAll('"', '""')}"`;
 
+// Both managed Postgres providers enforce TLS. Their connection URLs can use
+// provider certificate chains that `pg` does not have in its default CA store;
+// encryption is still required, while this avoids rejecting that known chain.
+function managedPostgresClient(connectionString: string) {
+  return new Client({ connectionString, ssl: { rejectUnauthorized: false } });
+}
+
 async function prompt(label: string) {
   const terminal = createInterface({ input, output });
   try {
@@ -187,8 +194,8 @@ async function main() {
   // inherited from a shell profile.
   const sourceUrl = process.env.NEON_DATABASE_URL?.trim() || await prompt("Current Neon DATABASE_URL: ");
   const targetUrl = await prompt("New Supabase database connection URL: ");
-  const source = new Client({ connectionString: sourceUrl });
-  const target = new Client({ connectionString: targetUrl });
+  const source = managedPostgresClient(sourceUrl);
+  const target = managedPostgresClient(targetUrl);
   try {
     await source.connect();
     await target.connect();
