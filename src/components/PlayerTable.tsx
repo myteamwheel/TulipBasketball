@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import Sparkline from "@/components/Sparkline";
 import SignalBadge from "@/components/SignalBadge";
@@ -154,9 +154,12 @@ export default function PlayerTable({
     [rows, position, owner, slot, signal, status, search, sortKey, sortDir],
   );
 
-  useEffect(() => setPage(1), [position, owner, slot, signal, status, search, sortKey, sortDir]);
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const visibleRows = filtered.slice((page - 1) * pageSize, page * pageSize);
+  const visiblePage = Math.min(page, pageCount);
+  const visibleRows = filtered.slice(
+    (visiblePage - 1) * pageSize,
+    visiblePage * pageSize,
+  );
 
   const selectClass =
     "h-9 rounded-md border border-neutral-700 bg-neutral-950 px-2 text-[11px] text-neutral-300";
@@ -165,7 +168,7 @@ export default function PlayerTable({
     <div className="min-w-0 overflow-hidden rounded-lg border border-neutral-800 bg-neutral-900">
       <details className="border-b border-neutral-800 px-3 py-2 text-xs text-neutral-400">
         <summary className="cursor-pointer font-medium text-neutral-300">Signal legend and perspective</summary>
-        <p className="mt-2 leading-5">SELL HIGH: within 10% of a tracked high, up more than 5% in 7 days or 10% in 30 days, signal score at least 66, and surplus/bench/taxi or an older player on a rebuilding team. BUY LOW: at least 30% below the high, value at least 800, a positional need and no injury flag. WATCH: stale, short or volatile evidence. HIGH DATA: at least six observations, three in 14 days, a seven-day span and daily volatility below 12%. Team windows come from the league simulation; an older player's position and age also affect the score. {showOwner ? "League-player signals are advice for that player's current owner." : "These signals are from the Orlando Oswalds perspective."}</p>
+        <p className="mt-2 leading-5">SELL HIGH: within 10% of a tracked high, up more than 5% in 7 days or 10% in 30 days, signal score at least 66, and surplus/bench/taxi or an older player on a rebuilding team. BUY LOW: at least 30% below the high, value at least 800, a positional need and no injury flag. WATCH: stale, short or volatile evidence. HIGH DATA: at least six observations, three in 14 days, a seven-day span and daily volatility below 12%. Team windows come from the league simulation; an older player&apos;s position and age also affect the score. {showOwner ? "League-player signals are advice for that player's current owner." : "These signals are from the Orlando Oswalds perspective."}</p>
       </details>
       <div className="border-b border-neutral-800 p-3 space-y-2">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -174,7 +177,10 @@ export default function PlayerTable({
               showOwner ? "Search league players" : "Search Orlando Oswalds roster"
             }
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              setPage(1);
+            }}
             placeholder={
               showOwner
                 ? "Search player, team or NFL team…"
@@ -189,6 +195,7 @@ export default function PlayerTable({
               const key = event.target.value as SortKey;
               setSortKey(key);
               setSortDir(key === "fullName" ? "asc" : "desc");
+              setPage(1);
             }}
             className={selectClass}
           >
@@ -200,9 +207,10 @@ export default function PlayerTable({
           </select>
           <button
             aria-label={`Sort ${sortDir === "desc" ? "ascending" : "descending"}`}
-            onClick={() =>
-              setSortDir((dir) => (dir === "asc" ? "desc" : "asc"))
-            }
+            onClick={() => {
+              setSortDir((dir) => (dir === "asc" ? "desc" : "asc"));
+              setPage(1);
+            }}
             className="h-9 rounded-md border border-neutral-700 bg-neutral-950 px-3 text-[11px] text-neutral-400"
           >
             {sortDir === "desc" ? "↓" : "↑"}
@@ -213,7 +221,10 @@ export default function PlayerTable({
             <button
               key={pos}
               aria-pressed={position === pos}
-              onClick={() => setPosition(pos)}
+              onClick={() => {
+                setPosition(pos);
+                setPage(1);
+              }}
               className={`rounded-md px-2.5 py-2 text-[11px] ${position === pos ? "bg-emerald-700 text-white" : "bg-neutral-800 text-neutral-400"}`}
             >
               {pos}
@@ -225,7 +236,10 @@ export default function PlayerTable({
             <select
               aria-label="Filter by fantasy team"
               value={owner}
-              onChange={(event) => setOwner(event.target.value)}
+              onChange={(event) => {
+                setOwner(event.target.value);
+                setPage(1);
+              }}
               className={selectClass}
             >
               <option value="ALL">All teams</option>
@@ -237,7 +251,10 @@ export default function PlayerTable({
           <select
             aria-label="Filter by roster slot"
             value={slot}
-            onChange={(event) => setSlot(event.target.value)}
+            onChange={(event) => {
+              setSlot(event.target.value);
+              setPage(1);
+            }}
             className={selectClass}
           >
             <option value="ALL">All roster slots</option>
@@ -248,7 +265,10 @@ export default function PlayerTable({
           <select
             aria-label="Filter by signal"
             value={signal}
-            onChange={(event) => setSignal(event.target.value)}
+            onChange={(event) => {
+              setSignal(event.target.value);
+              setPage(1);
+            }}
             className={selectClass}
           >
             <option value="ALL">All signals</option>
@@ -259,7 +279,10 @@ export default function PlayerTable({
           <select
             aria-label="Filter by player status"
             value={status}
-            onChange={(event) => setStatus(event.target.value)}
+            onChange={(event) => {
+              setStatus(event.target.value);
+              setPage(1);
+            }}
             className={selectClass}
           >
             <option value="ALL">All statuses</option>
@@ -269,7 +292,7 @@ export default function PlayerTable({
           </select>
         </div>
         <div className="text-right text-xs text-neutral-400">
-          {filtered.length} of {rows.length}{pageCount > 1 ? ` · page ${page} of ${pageCount}` : ""}
+          {filtered.length} of {rows.length}{pageCount > 1 ? ` · page ${visiblePage} of ${pageCount}` : ""}
         </div>
       </div>
 
@@ -440,9 +463,9 @@ export default function PlayerTable({
       </div>
       {pageCount > 1 ? (
         <nav aria-label="Player table pages" className="flex items-center justify-between border-t border-neutral-800 p-3 text-xs">
-          <button disabled={page === 1} onClick={() => setPage((value) => Math.max(1, value - 1))} className="rounded border border-neutral-700 px-3 py-2 text-neutral-200 disabled:opacity-40">Previous</button>
-          <span className="text-neutral-400">Page {page} of {pageCount}</span>
-          <button disabled={page === pageCount} onClick={() => setPage((value) => Math.min(pageCount, value + 1))} className="rounded border border-neutral-700 px-3 py-2 text-neutral-200 disabled:opacity-40">Next</button>
+          <button disabled={visiblePage === 1} onClick={() => setPage((value) => Math.max(1, value - 1))} className="rounded border border-neutral-700 px-3 py-2 text-neutral-200 disabled:opacity-40">Previous</button>
+          <span className="text-neutral-400">Page {visiblePage} of {pageCount}</span>
+          <button disabled={visiblePage === pageCount} onClick={() => setPage((value) => Math.min(pageCount, value + 1))} className="rounded border border-neutral-700 px-3 py-2 text-neutral-200 disabled:opacity-40">Next</button>
         </nav>
       ) : null}
     </div>

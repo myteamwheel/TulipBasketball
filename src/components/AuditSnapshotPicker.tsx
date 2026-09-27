@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
 type SnapshotOption = {
   id: string;
@@ -15,6 +16,7 @@ export default function AuditSnapshotPicker({
   options: SnapshotOption[];
   selectedId: string | null;
 }) {
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const matches = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -25,7 +27,7 @@ export default function AuditSnapshotPicker({
   const selected = options.find((option) => option.id === selectedId)?.id ?? "";
 
   function openSnapshot(id: string) {
-    if (id) window.location.assign(`/audit?date=${encodeURIComponent(id)}`);
+    if (id) router.push(`/audit?date=${encodeURIComponent(id)}`);
   }
 
   return (
