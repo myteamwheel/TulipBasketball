@@ -5,6 +5,7 @@ import {
   type PredictivePlayerModel,
   type ValueForecast,
 } from "@/lib/predictive";
+import { calculateDynastyEdge, decisionGradeConfidence } from "@/lib/dynastyEdge";
 
 const MIN_POSITIONAL_FOOTBALL_PEERS = 8;
 import { isDecisionGradeProductionSeason } from "@/lib/productionEligibility";
@@ -58,7 +59,7 @@ async function computeDecisionGradePredictiveModels(requestedIds?:string[]):Prom
     if(hasRecentProduction&&peerSampleAdequate){
       const pool=recentPeers.get(row.position);
       if(pool){
-        const productionScore=percentile(row.fantasyPpg,pool.ppg),usageScore=percentile(row.opportunityPerGame,pool.opportunity),efficiencyScore=.5,yearsSinceDraft=row.draftYear===null?null:Math.max(0,currentYear-row.draftYear),fundamentalScore=clamp(productionScore*.30+usageScore*.25+efficiencyScore*.10+ageScore(row.position,row.age)*.20+draftScore(row.draftRound,yearsSinceDraft)*.15,.03,.97),fundamentalValue=round(clamp(quantile(pool.market,fundamentalScore),50,10000)),consensus=row.consensusValue??row.currentValue,unboundedModelValue=round(clamp(row.currentValue*.45+consensus*.15+fundamentalValue*.40,50,10000)),boundedEdge=clamp((unboundedModelValue-row.currentValue)/Math.max(1,row.currentValue),-.30,.30),modelValue=round(row.currentValue*(1+boundedEdge)),modelEdge=modelValue-row.currentValue,modelEdgePercent=row.currentValue>0?modelEdge/row.currentValue*100:0;
+        const productionScore=percentile(row.fantasyPpg,pool.ppg),usageScore=percentile(row.opportunityPerGame,pool.opportunity),efficiencyScore=.5,yearsSinceDraft=row.draftYear===null?null:Math.max(0,currentYear-row.draftYear),fundamentalScore=clamp(productionScore*.30+usageScore*.25+efficiencyScore*.10+ageScore(row.position,row.age)*.20+draftScore(row.draftRound,yearsSinceDraft)*.15,.03,.97),fundamentalValue=round(clamp(quantile(pool.market,fundamentalScore),50,10000)),consensus=row.consensusValue??row.currentValue,{modelValue,modelEdge,modelEdgePercent}=calculateDynastyEdge({position:row.position,age:row.age,games:row.games,currentValue:row.currentValue,consensusValue:consensus,footballValue:fundamentalValue});
         next={...row,productionScore,usageScore,efficiencyScore,fundamentalScore,fundamentalValue,modelValue,modelEdge,modelEdgePercent,forecast30d:recenterForecast(row.forecast30d,modelValue),forecastRos:recenterForecast(row.forecastRos,modelValue),forecast1y:recenterForecast(row.forecast1y,modelValue),forecast3y:recenterForecast(row.forecast3y,modelValue),reasons:[`Football peer value is benchmarked against ${positionalPeerCount} recent decision-grade ${row.position} peers; stale seasons are excluded from the comparison population.`,`Efficiency contribution is neutral in the clean-peer valuation because the underlying efficiency rate is not exposed by the raw model; an already-percentiled contaminated score is not reused.`,...row.reasons.filter(reason=>!reason.startsWith("Football-only peer value"))].slice(0,4)};
       }
     }
@@ -84,7 +85,7 @@ async function computeDecisionGradePredictiveModels(requestedIds?:string[]):Prom
       if(!peerSampleAdequate)missing.push("adequate same-position peer sample");
       next={...next,fundamentalValue:row.currentValue,fundamentalScore:.5,productionScore:.5,usageScore:.5,efficiencyScore:.5,modelValue,modelEdge,modelEdgePercent,forecast30d:recenterForecast(next.forecast30d,modelValue),forecastRos:recenterForecast(next.forecastRos,modelValue),forecast1y:recenterForecast(next.forecast1y,modelValue),forecast3y:recenterForecast(next.forecast3y,modelValue),confidence:"LOW",mispricingQuadrant:"MARKET_ONLY",reasons:[`Model edge is withheld until ${missing.join(", ")} is available; the displayed value is market-anchored rather than an actionable recommendation.`,...next.reasons.filter(reason=>!reason.startsWith("Football peer value")&&!reason.startsWith("Independent football valuation is withheld")).slice(0,3)]};
     }else{
-      next={...next,confidence:"HIGH",reasons:[`Actionable edge requires current or prior-season production, a current role, a fresh trusted-market blend, and ${MIN_POSITIONAL_FOOTBALL_PEERS}+ same-position peers.`,...next.reasons].slice(0,4)};
+      next={...next,confidence:decisionGradeConfidence(row.games),reasons:[`The edge is anchored 70% to fresh dynasty-market disagreement; football evidence is reduced for sample size and multi-year age/role risk.`, `Actionable edge requires current or prior-season production, a current role, a fresh trusted-market blend, and ${MIN_POSITIONAL_FOOTBALL_PEERS}+ same-position peers.`,...next.reasons].slice(0,4)};
     }
     guarded.set(playerId,next);
   }

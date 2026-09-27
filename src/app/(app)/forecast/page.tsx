@@ -67,6 +67,7 @@ export default async function ForecastPage() {
       )
       .sort(
         (a, b) =>
+          Math.abs(b.modelEdge) - Math.abs(a.modelEdge) ||
           Math.abs(b.modelEdgePercent) - Math.abs(a.modelEdgePercent),
       )
       .slice(0, 8),

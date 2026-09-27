@@ -43,7 +43,7 @@ export default function PredictiveBoard({
         .sort((a, b) => {
           if (sort === "edge") {
             const confidence = (value: PredictivePlayerModel["confidence"]) => value === "HIGH" ? 2 : value === "MEDIUM" ? 1 : 0;
-            return confidence(b.confidence) - confidence(a.confidence) || b.modelEdgePercent - a.modelEdgePercent;
+            return confidence(b.confidence) - confidence(a.confidence) || b.modelEdge - a.modelEdge || b.modelEdgePercent - a.modelEdgePercent;
           }
           if (sort === "market") return b.currentValue - a.currentValue;
           if (sort === "recent")
@@ -59,7 +59,7 @@ export default function PredictiveBoard({
     <div className="space-y-3">
       <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-3 text-[10px] leading-5 text-neutral-500">
         <span className="font-semibold text-neutral-300">What this board means: </span>
-        This view defaults to actionable model edges only. A player needs current-season production, a current role, a fresh trusted-market blend, and an adequate same-position peer sample before the model can move from KTC. Context-only rows are hidden until you choose to include them.
+        This view defaults to actionable model edges only, ranked by dynasty value gained rather than percentage changes on inexpensive players. Fresh dynasty markets anchor the estimate; production is reduced for sample size, age and multi-year role risk. Context-only rows are hidden until you choose to include them.
       </div>
 
       <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto_auto]">
