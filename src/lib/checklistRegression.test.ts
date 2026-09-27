@@ -23,8 +23,15 @@ test("accuracy uses magnitude, direction and a fixed five-point threshold", () =
   assert.ok(Math.abs(summary.bias! + 6.8 / 3) < .0001);
   assert.ok(Math.abs(summary.withinFive! - 100 / 3) < .0001);
 });
-test("failed sources are named and routine exclusion notes are omitted", () => {
-  const errors = refreshDiagnostics([{ source: "fantasycalc", message: "Excluded from consensus" }], [{ source: "STATSGUY", enabled: true, ok: false, message: "Feed unavailable" }], "PARTIAL_FAILURE");
+test("failed sources are named and retired-source diagnostics are omitted", () => {
+  const errors = refreshDiagnostics(
+    [{ source: "fantasycalc", message: "Excluded from consensus" }],
+    [
+      { source: "FANTASYCALC", enabled: true, ok: false, message: "No longer current" },
+      { source: "STATSGUY", enabled: true, ok: false, message: "Feed unavailable" },
+    ],
+    "PARTIAL_FAILURE",
+  );
   assert.deepEqual(errors, [{ source: "STATSGUY", message: "Feed unavailable" }]);
   assert.match(refreshDiagnostics([], [], "PARTIAL_FAILURE")[0].message, /No specific failing source/);
 });
