@@ -111,7 +111,7 @@ export default function PredictiveBoard({
               <th className="px-2 py-2 text-right">KTC</th>
               <th className="px-2 py-2 text-right">Trusted blend</th>
               <th className="px-2 py-2 text-right">Model fair</th>
-              <th className="px-2 py-2 text-right">Edge</th>
+              <th className="px-2 py-2 text-right">Edge value / %</th>
               <th className="px-2 py-2 text-right">Recent NFL PPG</th>
               <th className="px-2 py-2 text-right">Opp / game</th>
               <th className="px-2 py-2 text-right">Evidence</th>
@@ -148,7 +148,8 @@ export default function PredictiveBoard({
                 <td
                   className={`px-2 py-2 text-right font-medium tabular-nums ${row.modelEdgePercent >= 0 ? "text-emerald-300" : "text-red-300"}`}
                 >
-                  {pct(row.modelEdgePercent)}
+                  <div>{row.modelEdge >= 0 ? "+" : ""}{points(row.modelEdge)}</div>
+                  <div className="text-[9px] opacity-75">{pct(row.modelEdgePercent)}</div>
                 </td>
                 <td className="px-2 py-2 text-right tabular-nums text-neutral-300">
                   {row.fantasyPpg === null ? "—" : row.fantasyPpg.toFixed(1)}
