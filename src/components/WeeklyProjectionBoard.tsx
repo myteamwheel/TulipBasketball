@@ -109,10 +109,15 @@ export default function WeeklyProjectionBoard({
   );
   const currentIds = new Set(current.map((row) => row.playerId));
   const lockedIds = new Set(unavailable.filter((row) => row.status === "ALREADY_PLAYED").map((row) => row.playerId));
+  const totalWithheldCount = unavailable.filter((row) => !currentIds.has(row.playerId)).length;
   const unavailableRows = unavailable
     .filter((row) => !currentIds.has(row.playerId))
     .filter((row) => matchesSearch(row.playerName, row.nflTeam, row.position))
     .sort((a, b) => a.playerName.localeCompare(b.playerName));
+  const accountedPlayerCount = new Set([
+    ...current.map((row) => row.playerId),
+    ...unavailable.map((row) => row.playerId),
+  ]).size;
 
   const filteredHistory =
     historyWeek === "ALL"
@@ -181,6 +186,9 @@ export default function WeeklyProjectionBoard({
               Consensus-informed pregame projections only for players with a
               supported Week {week} role.
             </p>
+            <p className="mt-1 text-[10px] text-neutral-400">
+              All {accountedPlayerCount} rostered QB/RB/WR/TE players are accounted for: {current.length} projected and {totalWithheldCount} withheld with a reason. Completed players move to the accuracy table below when actual stats arrive.
+            </p>
           </div>
           <select
             aria-label="Sort current projections"
@@ -210,17 +218,17 @@ export default function WeeklyProjectionBoard({
           <table className="w-full min-w-[1520px] text-xs">
             <thead>
               <tr className="bg-neutral-950 text-[9px] uppercase tracking-wide text-neutral-600">
-                <th className="px-2.5 py-2 text-left">Player</th>
+                <th className="px-2.5 py-2 text-left"><button type="button" onClick={() => { setSort("player"); setCurrentPage(1); }} className={sort === "player" ? "text-emerald-300" : "hover:text-neutral-300"}>Player</button></th>
                 <th className="px-2 py-2 text-right">Sleeper</th>
                 <th className="px-2 py-2 text-right">CBS</th>
                 <th className="px-2 py-2 text-right">Local model</th>
                 <th className="px-2 py-2 text-right">Player consensus</th>
                 <th className="px-2 py-2 text-right">Odds context</th>
-                <th className="px-2 py-2 text-right">Final FP</th>
+                <th className="px-2 py-2 text-right"><button type="button" onClick={() => { setSort("projected"); setCurrentPage(1); }} className={sort === "projected" ? "text-emerald-300" : "hover:text-neutral-300"}>Final FP ↓</button></th>
                 <th className="px-2 py-2 text-left">Predicted NFL stat line</th>
                 <th className="px-2 py-2 text-left">Sources</th>
                 <th className="px-2 py-2 text-right">Sample</th>
-                <th className="px-2 py-2 text-right">Confidence</th>
+                <th className="px-2 py-2 text-right"><button type="button" onClick={() => { setSort("confidence"); setCurrentPage(1); }} className={sort === "confidence" ? "text-emerald-300" : "hover:text-neutral-300"}>Confidence</button></th>
                 <th className="px-2 py-2 text-right">As of</th>
               </tr>
             </thead>
@@ -305,9 +313,9 @@ export default function WeeklyProjectionBoard({
       <section className="order-2 space-y-2">
         <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto] sm:items-end">
           <div>
-            <h2 className="text-sm font-semibold text-neutral-100">Projection accuracy history</h2>
+            <h2 className="text-sm font-semibold text-neutral-100">Completed games — projection accuracy history</h2>
             <p className="text-[10px] text-neutral-500">
-              Ranked by highest accuracy. Accuracy is closeness to the larger of projected or actual points. MAE {mae === null ? "—" : mae.toFixed(2)} points · bias {bias === null ? "—" : `${bias > 0 ? "+" : ""}${bias.toFixed(2)}`} · within 5 points {withinFive === null ? "—" : `${withinFive.toFixed(1)}%`}.
+              These players have already played and are not active projections. {graded.length} completed player results are graded. Accuracy is closeness to the larger of projected or actual points. MAE {mae === null ? "—" : mae.toFixed(2)} points · bias {bias === null ? "—" : `${bias > 0 ? "+" : ""}${bias.toFixed(2)}`} · within 5 points {withinFive === null ? "—" : `${withinFive.toFixed(1)}%`}.
             </p>
           </div>
           <select
@@ -340,12 +348,12 @@ export default function WeeklyProjectionBoard({
           <table className="w-full min-w-[1040px] text-xs">
             <thead>
               <tr className="bg-neutral-950 text-[9px] uppercase tracking-wide text-neutral-600">
-                <th className="px-2.5 py-2 text-left">Player</th>
+                <th className="px-2.5 py-2 text-left"><button type="button" onClick={() => setHistorySort("player")} className={historySort === "player" ? "text-emerald-300" : "hover:text-neutral-300"}>Player</button></th>
                 <th className="px-2 py-2 text-right">Week</th>
-                <th className="px-2 py-2 text-right">Projected</th>
-                <th className="px-2 py-2 text-right">Actual</th>
-                <th className="px-2 py-2 text-right">Accuracy</th>
-                <th className="px-2 py-2 text-right">Abs error</th>
+                <th className="px-2 py-2 text-right"><button type="button" onClick={() => setHistorySort("projected")} className={historySort === "projected" ? "text-emerald-300" : "hover:text-neutral-300"}>Projected</button></th>
+                <th className="px-2 py-2 text-right"><button type="button" onClick={() => setHistorySort("actual")} className={historySort === "actual" ? "text-emerald-300" : "hover:text-neutral-300"}>Actual</button></th>
+                <th className="px-2 py-2 text-right"><button type="button" onClick={() => setHistorySort("accuracy")} className={historySort === "accuracy" ? "text-emerald-300" : "hover:text-neutral-300"}>Accuracy % ↓</button></th>
+                <th className="px-2 py-2 text-right"><button type="button" onClick={() => setHistorySort("error")} className={historySort === "error" ? "text-emerald-300" : "hover:text-neutral-300"}>Abs error</button></th>
                 <th className="px-2 py-2 text-right">Bias</th>
                 <th className="px-2 py-2 text-left">Projected vs actual stat line</th>
               </tr>

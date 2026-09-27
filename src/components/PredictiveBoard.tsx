@@ -9,7 +9,7 @@ const points = (value: number | null) =>
 const pct = (value: number) =>
   `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
 
-type SortKey = "edge" | "market" | "model" | "recent" | "usage";
+type SortKey = "edge" | "edgePercent" | "market" | "model" | "recent" | "usage";
 
 function evidenceLabel(row: PredictivePlayerModel) {
   if (row.latestSeason === null || row.games < 3) return "Market-led";
@@ -44,6 +44,10 @@ export default function PredictiveBoard({
           if (sort === "edge") {
             const confidence = (value: PredictivePlayerModel["confidence"]) => value === "HIGH" ? 2 : value === "MEDIUM" ? 1 : 0;
             return confidence(b.confidence) - confidence(a.confidence) || b.modelEdge - a.modelEdge || b.modelEdgePercent - a.modelEdgePercent;
+          }
+          if (sort === "edgePercent") {
+            const confidence = (value: PredictivePlayerModel["confidence"]) => value === "HIGH" ? 2 : value === "MEDIUM" ? 1 : 0;
+            return confidence(b.confidence) - confidence(a.confidence) || b.modelEdgePercent - a.modelEdgePercent || b.modelEdge - a.modelEdge;
           }
           if (sort === "market") return b.currentValue - a.currentValue;
           if (sort === "recent")
@@ -88,7 +92,8 @@ export default function PredictiveBoard({
           onChange={(event) => setSort(event.target.value as SortKey)}
           className="h-9 rounded-md border border-neutral-800 bg-neutral-950 px-2 text-xs text-neutral-300"
         >
-          <option value="edge">Model edge</option>
+            <option value="edge">Model edge</option>
+            <option value="edgePercent">Model edge %</option>
           <option value="model">Model fair value</option>
           <option value="market">KTC market value</option>
           <option value="recent">Recent NFL PPG</option>
@@ -111,7 +116,13 @@ export default function PredictiveBoard({
               <th className="px-2 py-2 text-right">KTC</th>
               <th className="px-2 py-2 text-right">Trusted blend</th>
               <th className="px-2 py-2 text-right">Model fair</th>
-              <th className="px-2 py-2 text-right">Edge value / %</th>
+              <th className="px-2 py-2 text-right">
+                <span className="inline-flex items-center gap-1">
+                  <button type="button" onClick={() => setSort("edge")} aria-pressed={sort === "edge"} className={sort === "edge" ? "text-emerald-300" : "hover:text-neutral-300"}>Edge value</button>
+                  <span aria-hidden="true">/</span>
+                  <button type="button" onClick={() => setSort("edgePercent")} aria-pressed={sort === "edgePercent"} className={sort === "edgePercent" ? "text-emerald-300" : "hover:text-neutral-300"}>%</button>
+                </span>
+              </th>
               <th className="px-2 py-2 text-right">Recent NFL PPG</th>
               <th className="px-2 py-2 text-right">Opp / game</th>
               <th className="px-2 py-2 text-right">Evidence</th>
