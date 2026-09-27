@@ -117,7 +117,15 @@ export default function WeeklyProjectionBoard({
   const accountedPlayerCount = new Set([
     ...current.map((row) => row.playerId),
     ...unavailable.map((row) => row.playerId),
+    ...history
+      .filter((row) => row.season === season && row.week === week && row.actualFantasyPoints !== null)
+      .map((row) => row.playerId),
   ]).size;
+  const completedCurrentWeekCount = new Set(
+    history
+      .filter((row) => row.season === season && row.week === week && row.actualFantasyPoints !== null)
+      .map((row) => row.playerId),
+  ).size;
 
   const filteredHistory =
     historyWeek === "ALL"
@@ -187,7 +195,7 @@ export default function WeeklyProjectionBoard({
               supported Week {week} role.
             </p>
             <p className="mt-1 text-[10px] text-neutral-400">
-              All {accountedPlayerCount} rostered QB/RB/WR/TE players are accounted for: {current.length} projected and {totalWithheldCount} withheld with a reason. Completed players move to the accuracy table below when actual stats arrive.
+              All {accountedPlayerCount} rostered QB/RB/WR/TE players are accounted for: {current.length} active projections, {totalWithheldCount} withheld with a reason, and {completedCurrentWeekCount} completed players shown only in accuracy history.
             </p>
           </div>
           <select

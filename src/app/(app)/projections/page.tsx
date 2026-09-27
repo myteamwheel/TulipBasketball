@@ -15,6 +15,7 @@ export default async function ProjectionsPage() {
   const summary = projectionSummary(data.current, data.unavailable, data.history);
   const { mae, bias, withinFive } = summary;
   const highConfidence = data.current.filter((row) => row.confidence === "HIGH").length;
+  const completedCurrentWeek = new Set(data.history.filter((row) => row.season === data.season && row.week === data.week && row.actualFantasyPoints !== null).map((row) => row.playerId)).size;
 
   return (
     <div className="min-w-0 space-y-6">
@@ -36,7 +37,7 @@ export default async function ProjectionsPage() {
           title={`${data.season} Week ${data.week}`}
           description="Every row shows the Sleeper and CBS player projections, the local recency model, their player-level blend, DraftKings game-market context through ESPN, and the final scoring-adjusted fantasy projection. Game odds are a bounded team-environment adjustment, not an invented individual player projection."
         />
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-7">
           <MetricCard
             label="Players projected"
             value={data.current.length.toLocaleString("en-US")}
@@ -45,6 +46,11 @@ export default async function ProjectionsPage() {
             label="Withheld"
             value={summary.withheld.toLocaleString("en-US")}
             detail="excludes players with locked forecasts"
+          />
+          <MetricCard
+            label="Completed"
+            value={completedCurrentWeek.toLocaleString("en-US")}
+            detail="accuracy history only"
           />
           <MetricCard
             label="High confidence"
