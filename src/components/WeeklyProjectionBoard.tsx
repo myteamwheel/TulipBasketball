@@ -64,12 +64,14 @@ export default function WeeklyProjectionBoard({
   unavailable,
   season,
   week,
+  scheduleStatusAvailable,
 }: {
   current: WeeklyProjectionRow[];
   history: WeeklyProjectionRow[];
   unavailable: ProjectionAvailabilityRow[];
   season: number;
   week: number;
+  scheduleStatusAvailable: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [position, setPosition] = useState("ALL");
@@ -197,6 +199,11 @@ export default function WeeklyProjectionBoard({
             <p className="mt-1 text-[10px] text-neutral-400">
               All {accountedPlayerCount} rostered QB/RB/WR/TE players are accounted for: {current.length} active projections, {totalWithheldCount} withheld with a reason, and {completedCurrentWeekCount} completed players shown only in accuracy history.
             </p>
+            {!scheduleStatusAvailable ? (
+              <p role="status" className="mt-1 text-[10px] text-amber-300">
+                Current-week game finals could not be verified. Locked forecasts remain labeled LOCKED until the schedule feed is available.
+              </p>
+            ) : null}
           </div>
           <select
             aria-label="Sort current projections"

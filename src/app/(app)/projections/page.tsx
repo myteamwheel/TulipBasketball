@@ -72,6 +72,7 @@ export default async function ProjectionsPage() {
         unavailable={data.unavailable}
         season={data.season}
         week={data.week}
+        scheduleStatusAvailable={data.scheduleStatusAvailable}
       />
 
       {omittedScoring.length > 0 && <details className="rounded-lg border border-neutral-800 bg-neutral-900 px-3 py-2 text-xs leading-5 text-neutral-500"><summary className="cursor-pointer font-medium text-neutral-300">Scoring coverage note</summary><p className="mt-1">Final points use the league’s core scoring. {omittedScoring.length} bonus or uncommon event type{omittedScoring.length === 1 ? " is" : "s are"} not projected by the source feeds, so the visible stat line and accuracy grade cover the core scoring events.</p></details>}

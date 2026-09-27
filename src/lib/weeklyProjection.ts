@@ -95,8 +95,13 @@ export function projectionRowPlacement(
   status: ProjectionAvailabilityRow["status"],
   hasActualResult: boolean,
   isFresh: boolean,
+  gameCompleted = false,
 ) {
   if (hasActualResult) return "HISTORY_ONLY" as const;
+  // A final forecast belongs in accuracy history only after actual stats are
+  // available. Until then, keep the player out of active projections and show
+  // the missing box-score state under Not projected.
+  if (gameCompleted) return "WITHHELD" as const;
   if (status === "ALREADY_PLAYED") return "CURRENT_LOCKED" as const;
   if (status === "PROJECTED" && isFresh) return "CURRENT" as const;
   return "WITHHELD" as const;
@@ -1023,6 +1028,22 @@ async function readProjectionDashboardData(includeFreeAgents = false) {
   const season = Number(state.season);
   const week = Number(state.week);
   if (!Number.isInteger(season) || !Number.isInteger(week)) throw new Error("Invalid NFL season/week");
+  let schedule: ScheduledGame[] | null = null;
+  try {
+    schedule = await getNflSchedule(season);
+  } catch {
+    // Keep the page usable while making the unverified final-status visible.
+    // Projection refresh itself already fails closed when the schedule is down.
+    schedule = null;
+  }
+  const isGameComplete = (team: unknown) =>
+    typeof team === "string" &&
+    schedule?.some(
+      (game) =>
+        game.week === week &&
+        game.completed &&
+        game.teams.some((gameTeam) => scheduleTeam(gameTeam) === scheduleTeam(team)),
+    ) === true;
   const rosteredIds = new Set((await currentPlayers(includeFreeAgents)).map(player => player.id));
   const currentRaw = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(`
     SELECT DISTINCT ON ("playerId") *
@@ -1049,11 +1070,20 @@ async function readProjectionDashboardData(includeFreeAgents = false) {
     .filter((row) => {
       const projection = currentRaw.find((candidate) => candidate.playerId === row.playerId);
       const hasActualResult = projection?.actualFantasyPoints !== null && projection?.actualFantasyPoints !== undefined;
-      return rosteredIds.has(String(row.playerId)) &&
-        String(row.status) !== "PROJECTED" &&
-        projectionRowPlacement(String(row.status) as ProjectionAvailabilityRow["status"], hasActualResult, true) !== "HISTORY_ONLY";
+      const isFresh = projection
+        ? new Date(String(projection.createdAt)).getTime() >= Date.now() - 36 * 3600000
+        : false;
+      const placement = projectionRowPlacement(
+        String(row.status) as ProjectionAvailabilityRow["status"],
+        hasActualResult,
+        isFresh,
+        isGameComplete(row.nflTeam),
+      );
+      return rosteredIds.has(String(row.playerId)) && placement !== "HISTORY_ONLY" && placement !== "CURRENT";
     })
     .map((row) => {
+      const projection = currentRaw.find((candidate) => candidate.playerId === row.playerId);
+      const hasActualResult = projection?.actualFantasyPoints !== null && projection?.actualFantasyPoints !== undefined;
       let inputs: unknown = row.sourceInputs;
       if (typeof inputs === "string") {
         try { inputs = JSON.parse(inputs); } catch { inputs = []; }
@@ -1070,7 +1100,9 @@ async function readProjectionDashboardData(includeFreeAgents = false) {
             ? row.asOfDate.toISOString().slice(0, 10)
             : String(row.asOfDate).slice(0, 10),
         status: String(row.status) as ProjectionAvailabilityRow["status"],
-        reason: String(row.reason),
+        reason: isGameComplete(row.nflTeam) && !hasActualResult
+          ? "Game is final; waiting for player box-score stats before grading. Removed from active projections."
+          : String(row.reason),
         sourceNames: Array.isArray(inputs)
           ? [
               ...new Set(
@@ -1095,9 +1127,10 @@ async function readProjectionDashboardData(includeFreeAgents = false) {
       const isFresh = new Date(String(row.createdAt)).getTime() >= Date.now() - 36 * 3600000;
       const placement = projectionRowPlacement(String(availability.status) as ProjectionAvailabilityRow["status"], hasActualResult, isFresh);
       return placement === "CURRENT" || placement === "CURRENT_LOCKED";
-    })).map(normalizeProjectionRow),
+    })).filter(row => !isGameComplete(row.nflTeam)).map(normalizeProjectionRow),
     history: historyRaw.map(normalizeProjectionRow),
     unavailable,
+    scheduleStatusAvailable: schedule !== null,
   };
 }
 

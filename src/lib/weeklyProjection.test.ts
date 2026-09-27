@@ -117,11 +117,14 @@ test("externalRoleSupported rejects tiny contingency backup projections", async 
   );
 });
 
-test("completed players appear only in accuracy history", async () => {
+test("completed players leave active projections and enter history only after stats arrive", async () => {
   const { projectionRowPlacement } = await import("./weeklyProjection");
   assert.equal(projectionRowPlacement("PROJECTED", false, true), "CURRENT");
   assert.equal(projectionRowPlacement("ALREADY_PLAYED", false, true), "CURRENT_LOCKED");
   assert.equal(projectionRowPlacement("ALREADY_PLAYED", true, true), "HISTORY_ONLY");
+  assert.equal(projectionRowPlacement("ALREADY_PLAYED", false, true, true), "WITHHELD");
+  assert.equal(projectionRowPlacement("PROJECTED", false, true, true), "WITHHELD");
+  assert.equal(projectionRowPlacement("ALREADY_PLAYED", true, true, true), "HISTORY_ONLY");
   assert.equal(projectionRowPlacement("PROJECTED", true, true), "HISTORY_ONLY");
   assert.equal(projectionRowPlacement("EXCLUDED", false, true), "WITHHELD");
 });
