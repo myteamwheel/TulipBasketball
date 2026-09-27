@@ -1,6 +1,6 @@
 import { irEligible, taxiDeadlineLabel } from "@/lib/rosterChecks";
 import { getDecisionGradePredictiveModels } from "@/lib/predictiveSafety";
-export const metadata = { title: "My Team · Dynasty Bois" };
+export const metadata = { title: "My Team · Dynasty Boys" };
 import Link from "next/link";
 import { getPrimaryManager, getCurrentRoster } from "@/lib/queries";
 import { computeMarketDataForPlayers } from "@/lib/metrics";

@@ -227,7 +227,7 @@ export async function startRefresh(): Promise<{ runId: string }> {
         update: {},
         create: {
           sleeperId: SLEEPER_LEAGUE_ID,
-          name: sleeperLeague?.name ?? "Dynasty Bois",
+          name: sleeperLeague?.name ?? "Dynasty Boys",
           season: sleeperLeague?.season ?? "unknown",
           format: "Superflex, 0.5 PPR, no TE premium",
           settings: "{}",

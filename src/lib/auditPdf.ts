@@ -46,7 +46,7 @@ function documentLines(
   snapshots: AuditSnapshotSummary[],
 ): PdfLine[] {
   const out: PdfLine[] = [];
-  out.push(...line("Orlando Oswalds - Dynasty Bois Audit", 18, 8));
+  out.push(...line("Orlando Oswalds - Dynasty Boys Audit", 18, 8));
   out.push(
     ...line(
       `Snapshot ${data.snapshotDate} | generated ${data.generatedAt.slice(0, 16).replace("T", " ")} UTC | model ${data.version}`,

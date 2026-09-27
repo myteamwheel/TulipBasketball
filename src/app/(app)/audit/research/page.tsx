@@ -13,6 +13,7 @@ const TABLE_TITLES: Record<string, string> = {
   playbook_brett_worst: "Orlando Oswalds costliest trades",
 };
 const displayText = (value: unknown) => String(value)
+  .replaceAll(/Dynasty Bois/gi, "Dynasty Boys")
   .replaceAll(/jeffsharpington/gi, "Jeff")
   .replaceAll(/Brett\s+Tulip['’]s/gi, "Orlando Oswalds'")
   .replaceAll(/Brett\s+Tulip/gi, "Orlando Oswalds")
@@ -37,7 +38,7 @@ export default async function ResearchPage({ searchParams }: { searchParams: Pro
   return <main className="space-y-6 min-w-0">
     <AuditAutoRefresh enabled />
     <div className="flex flex-wrap items-start justify-between gap-4">
-      <div><Link href="/audit" className="text-xs text-emerald-400">← Audit overview and trends</Link><h1 className="mt-2 text-2xl font-semibold">Full Dynasty Bois research</h1><p className="mt-2 text-sm text-neutral-400">Orlando Oswalds and the league · {data.tables.length} data tables · {formatDateTimeEastern(data.generatedAt)}</p></div>
+      <div><Link href="/audit" className="text-xs text-emerald-400">← Audit overview and trends</Link><h1 className="mt-2 text-2xl font-semibold">Full Dynasty Boys research</h1><p className="mt-2 text-sm text-neutral-400">Orlando Oswalds and the league · {data.tables.length} data tables · {formatDateTimeEastern(data.generatedAt)}</p></div>
       <div className="flex gap-2"><a className="rounded border border-emerald-800 px-3 py-2 text-sm text-emerald-300" href={downloads("Dynasty-Bois-Data.xlsx")}>Full Excel</a><a className="rounded border border-neutral-700 px-3 py-2 text-sm" href={downloads("Dynasty-Bois-Report.pdf")}>Full PDF</a></div>
     </div>
     {!audit.published && <p className="rounded border border-amber-800 bg-amber-950/20 p-4 text-sm text-amber-200">Original September 23 audit. A successful automated full rebuild has not been published yet. These historical tables are available to browse while that connection is being completed.</p>}

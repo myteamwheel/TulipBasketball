@@ -34,7 +34,7 @@ const fixture: AuditSnapshotData = {
   snapshotDate: "2026-09-23",
   generatedAt: "2026-09-23T16:00:00.000Z",
   refreshRunId: "run-1",
-  leagueName: "Dynasty Bois",
+  leagueName: "Dynasty Boys",
   leagueSeason: "2026",
   team,
   league: [team],
@@ -105,6 +105,6 @@ test("audit PDF is a valid multi-page PDF with a cross-reference table", () => {
   assert.equal(text.startsWith("%PDF-1.4"), true);
   assert.match(text, /\/Count [2-9]/);
   assert.match(text, /xref\n/);
-  assert.match(text, /Orlando Oswalds - Dynasty Bois Audit/);
+  assert.match(text, /Orlando Oswalds - Dynasty Boys Audit/);
   assert.match(text, /%%EOF/);
 });

@@ -130,7 +130,7 @@ export default async function AuditPage({
       kind: "KEEP",
       title: "Keep the strong roster discipline",
       detail:
-        "Orlando Oswalds' Dynasty Bois drops became top-150 assets less often than the league average in the source audit.",
+        "Orlando Oswalds' Dynasty Boys drops became top-150 assets less often than the league average in the source audit.",
     },
   ];
 
@@ -143,7 +143,7 @@ export default async function AuditPage({
             Orlando Oswalds
           </div>
           <h1 className="mt-1 text-xl font-semibold text-neutral-100 sm:text-2xl">
-            Dynasty Bois Audit
+            Dynasty Boys Audit
           </h1>
           <p className="mt-1 max-w-3xl text-sm leading-5 text-neutral-500">
             A saved daily view of Orlando Oswalds, every league team, roster construction,
@@ -290,7 +290,7 @@ export default async function AuditPage({
 
       <section>
         <SectionHeader
-          title="Every team in Dynasty Bois"
+          title="Every team in Dynasty Boys"
           description={
             allIncomplete
               ? "Ranks are provisional because at least one roster has an unknown current market value. Unknown is never treated as a verified zero."
@@ -415,7 +415,7 @@ export default async function AuditPage({
         <section>
           <SectionHeader
             title="Manager activity"
-            description="Recorded Dynasty Bois trades, waiver claims, free-agent additions and drops by season."
+            description="Recorded Dynasty Boys trades, waiver claims, free-agent additions and drops by season."
           />
           <div className="overflow-x-auto rounded-lg border border-neutral-800 bg-neutral-900">
             <table className="w-full min-w-[520px] text-xs">
@@ -465,7 +465,7 @@ export default async function AuditPage({
       <section>
         <SectionHeader
           title="Historical Orlando Oswalds findings"
-          description="Durable findings carried forward from the 81-sheet Dynasty Bois source audit generated on September 23, 2026."
+          description="Durable findings carried forward from the 81-sheet Dynasty Boys source audit generated on September 23, 2026."
         />
         <div className="grid gap-2 lg:grid-cols-2">
           {historicalFindings.map((row) => (

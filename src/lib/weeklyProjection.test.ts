@@ -130,7 +130,7 @@ test("completed players leave active projections and enter history only after st
 });
 
 
-test("verified Dynasty Bois scoring uses minus one per interception", async () => {
+test("verified Dynasty Boys scoring uses minus one per interception", async () => {
   const { scoreFantasyStats, VERIFIED_DYNASTY_BOIS_SCORING } = await import("./fantasyScoring");
   const points = scoreFantasyStats(
     {

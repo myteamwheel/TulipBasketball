@@ -1,2 +1,2 @@
-export const metadata = { title: "Players · Dynasty Bois" };
+export const metadata = { title: "Players · Dynasty Boys" };
 export default function PageLayout({ children }: { children: React.ReactNode }) { return children; }

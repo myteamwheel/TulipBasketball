@@ -547,7 +547,7 @@ export async function buildLiveAuditData(
     snapshotDate,
     generatedAt: new Date().toISOString(),
     refreshRunId,
-    leagueName: league?.name ?? "Dynasty Bois",
+    leagueName: league?.name ?? "Dynasty Boys",
     leagueSeason: league?.season ?? String(new Date().getUTCFullYear()),
     team,
     league: leagueRows,
@@ -685,7 +685,7 @@ export async function getAuditDashboardData(snapshotDate?: string | null) {
   if (stored) {
     const full = await getFullAudit().catch(() => null);
     const table = full?.data.tables.find((item) => item.name === "trends_manager_season");
-    const historical = (table?.rows ?? []).filter((row) => String(row.league) === "Dynasty Bois" && Number(row.is_me) === 1).map((row) => ({ season: Number(row.season), trades: Number(row.trades ?? 0), waiverClaims: Number(row.waiver_claims ?? 0), freeAgentAdds: Number(row.fa_adds ?? 0), drops: Number(row.drops ?? 0) })).filter((row) => Number.isFinite(row.season));
+    const historical = (table?.rows ?? []).filter((row) => /^dynasty bo[yi]s$/i.test(String(row.league)) && Number(row.is_me) === 1).map((row) => ({ season: Number(row.season), trades: Number(row.trades ?? 0), waiverClaims: Number(row.waiver_claims ?? 0), freeAgentAdds: Number(row.fa_adds ?? 0), drops: Number(row.drops ?? 0) })).filter((row) => Number.isFinite(row.season));
     const activity = historical.length ? historical.sort((a, b) => b.season - a.season) : stored.activity;
     return { data: { ...stored, activity }, snapshots: snapshots.filter(row => row.generatedAt <= stored.generatedAt), isLivePreview: false };
   }

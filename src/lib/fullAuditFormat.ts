@@ -32,14 +32,14 @@ const fullAuditDataSchema = z.object({
 
 export function decodeFullAudit(bytes: Buffer): FullAuditData {
   const value = fullAuditDataSchema.parse(JSON.parse(gunzipSync(bytes, { maxOutputLength: 48 * 1024 * 1024 }).toString()));
-  if (value.leagueId !== "1312155271526625280" || !Array.isArray(value.tables) || value.tables.length !== 80) throw new Error("Invalid Dynasty Bois research bundle");
+  if (value.leagueId !== "1312155271526625280" || !Array.isArray(value.tables) || value.tables.length !== 80) throw new Error("Invalid Dynasty Boys research bundle");
   const names = new Set<string>();
   for (const table of value.tables) {
     if (typeof table.name !== "string" || names.has(table.name) || !Array.isArray(table.rows)) throw new Error("Invalid research table");
     names.add(table.name);
     for (const row of table.rows) {
       if (!row || typeof row !== "object" || Array.isArray(row)) throw new Error("Invalid research row");
-      if (row.league && row.league !== "Dynasty Bois") throw new Error("Research bundle contains another league");
+      if (row.league && !/^dynasty bo[yi]s$/i.test(String(row.league))) throw new Error("Research bundle contains another league");
     }
   }
   return value;
