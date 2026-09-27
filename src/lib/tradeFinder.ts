@@ -549,17 +549,21 @@ async function ensureTradeFinderCache() {
   await prisma.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "TradeFinderCache" (id text PRIMARY KEY, "computedAt" timestamptz NOT NULL DEFAULT now(), data jsonb NOT NULL)`);
 }
 
+// Bump this when the target-ranking algorithm changes so deployments do not
+// keep serving a pre-change score snapshot for the 24-hour cache window.
+const TRADE_FINDER_CACHE_ID = "guarded-v3";
+
 export async function refreshTradeFinderCache(): Promise<TradeFinderData | null> {
   const data = await buildTradeFinderData();
   if (!data) return null;
   await ensureTradeFinderCache();
-  await prisma.$executeRawUnsafe(`INSERT INTO "TradeFinderCache" (id, "computedAt", data) VALUES ('guarded-v2', now(), $1::jsonb) ON CONFLICT (id) DO UPDATE SET "computedAt"=now(), data=EXCLUDED.data`, JSON.stringify(data));
+  await prisma.$executeRawUnsafe(`INSERT INTO "TradeFinderCache" (id, "computedAt", data) VALUES ($1, now(), $2::jsonb) ON CONFLICT (id) DO UPDATE SET "computedAt"=now(), data=EXCLUDED.data`, TRADE_FINDER_CACHE_ID, JSON.stringify(data));
   return data;
 }
 
 export async function getTradeFinderData(): Promise<TradeFinderData | null> {
   await ensureTradeFinderCache();
-  const rows = await prisma.$queryRawUnsafe<Array<{ data: TradeFinderData; computedAt: Date }>>(`SELECT data, "computedAt" FROM "TradeFinderCache" WHERE id='guarded-v2' LIMIT 1`);
+  const rows = await prisma.$queryRawUnsafe<Array<{ data: TradeFinderData; computedAt: Date }>>(`SELECT data, "computedAt" FROM "TradeFinderCache" WHERE id=$1 LIMIT 1`, TRADE_FINDER_CACHE_ID);
   if (rows[0] && Date.now() - new Date(rows[0].computedAt).getTime() < 24 * 3600000) return { ...rows[0].data, computedAt: rows[0].computedAt.toISOString() };
   return refreshTradeFinderCache();
 }
