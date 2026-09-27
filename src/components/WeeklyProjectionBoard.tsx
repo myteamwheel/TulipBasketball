@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type {
   WeeklyProjectionRow,
   ProjectedStatLine,
@@ -11,6 +11,7 @@ type SortKey =
   | "player"
   | "projected"
   | "actual"
+  | "accuracy"
   | "error"
   | "confidence";
 
@@ -31,6 +32,24 @@ function statLine(position: string, stats: ProjectedStatLine | null) {
 
 function confidenceWeight(value: WeeklyProjectionRow["confidence"]) {
   return value === "HIGH" ? 3 : value === "MEDIUM" ? 2 : 1;
+}
+
+function accuracyPercent(row: WeeklyProjectionRow) {
+  if (row.actualFantasyPoints === null || row.absoluteError === null) return null;
+  const scale = Math.max(
+    Math.abs(row.actualFantasyPoints),
+    Math.abs(row.projectedFantasyPoints),
+    1,
+  );
+  return Math.max(0, Math.min(100, 100 - (row.absoluteError / scale) * 100));
+}
+
+function accuracyColor(value: number | null) {
+  if (value === null) return "text-neutral-500";
+  if (value >= 75) return "text-emerald-300";
+  if (value >= 50) return "text-amber-300";
+  if (value >= 25) return "text-orange-400";
+  return "text-red-400";
 }
 
 function oddsContext(row: WeeklyProjectionRow) {
@@ -55,7 +74,7 @@ export default function WeeklyProjectionBoard({
   const [query, setQuery] = useState("");
   const [position, setPosition] = useState("ALL");
   const [sort, setSort] = useState<SortKey>("projected");
-  const [historySort, setHistorySort] = useState<SortKey>("error");
+  const [historySort, setHistorySort] = useState<SortKey>("accuracy");
   const [historyWeek, setHistoryWeek] = useState("ALL");
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -74,6 +93,8 @@ export default function WeeklyProjectionBoard({
           return (b.actualFantasyPoints ?? -Infinity) - (a.actualFantasyPoints ?? -Infinity);
         if (key === "error")
           return (a.absoluteError ?? Infinity) - (b.absoluteError ?? Infinity);
+        if (key === "accuracy")
+          return (accuracyPercent(b) ?? -Infinity) - (accuracyPercent(a) ?? -Infinity);
         if (key === "confidence")
           return confidenceWeight(b.confidence) - confidenceWeight(a.confidence);
         return b.projectedFantasyPoints - a.projectedFantasyPoints;
@@ -81,11 +102,11 @@ export default function WeeklyProjectionBoard({
 
   const currentRows = filterRows(current, sort);
   const currentPageCount = Math.max(1, Math.ceil(currentRows.length / 25));
-  const visibleCurrentRows = currentRows.slice((currentPage - 1) * 25, currentPage * 25);
-  useEffect(() => setCurrentPage(1), [query, position, sort]);
-  useEffect(() => {
-    if (currentPage > currentPageCount) setCurrentPage(currentPageCount);
-  }, [currentPage, currentPageCount]);
+  const visibleCurrentPage = Math.min(currentPage, currentPageCount);
+  const visibleCurrentRows = currentRows.slice(
+    (visibleCurrentPage - 1) * 25,
+    visibleCurrentPage * 25,
+  );
   const currentIds = new Set(current.map((row) => row.playerId));
   const lockedIds = new Set(unavailable.filter((row) => row.status === "ALREADY_PLAYED").map((row) => row.playerId));
   const unavailableRows = unavailable
@@ -125,7 +146,10 @@ export default function WeeklyProjectionBoard({
       <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
         <input
           value={query}
-          onChange={(event) => setQuery(event.target.value)}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setCurrentPage(1);
+          }}
           placeholder="Search player or team…"
           aria-label="Search weekly projections"
           className="h-9 rounded-md border border-neutral-800 bg-neutral-950 px-3 text-xs text-neutral-200 outline-none focus:border-emerald-800"
@@ -134,7 +158,10 @@ export default function WeeklyProjectionBoard({
           {["ALL", "QB", "RB", "WR", "TE"].map((value) => (
             <button
               key={value}
-              onClick={() => setPosition(value)}
+              onClick={() => {
+                setPosition(value);
+                setCurrentPage(1);
+              }}
               aria-pressed={position === value}
               className={`rounded px-2 py-1 text-[10px] ${position === value ? "bg-neutral-700 text-neutral-100" : "text-neutral-500"}`}
             >
@@ -158,7 +185,10 @@ export default function WeeklyProjectionBoard({
           <select
             aria-label="Sort current projections"
             value={sort}
-            onChange={(event) => setSort(event.target.value as SortKey)}
+            onChange={(event) => {
+              setSort(event.target.value as SortKey);
+              setCurrentPage(1);
+            }}
             className="h-8 rounded-md border border-neutral-800 bg-neutral-950 px-2 text-[10px] text-neutral-300"
           >
             <option value="projected">Projected points</option>
@@ -232,7 +262,7 @@ export default function WeeklyProjectionBoard({
             </tbody>
           </table>
         </div>
-        {currentPageCount > 1 ? <nav aria-label="Current projection pages" className="flex items-center justify-between rounded-lg border border-neutral-800 bg-neutral-900 p-2.5 text-xs"><button disabled={currentPage === 1} onClick={() => setCurrentPage((page) => Math.max(1, page - 1))} className="rounded border border-neutral-700 px-3 py-1.5 text-neutral-200 disabled:border-neutral-800 disabled:text-neutral-600">Previous</button><span className="text-neutral-400">{(currentPage - 1) * 25 + 1}–{Math.min(currentPage * 25, currentRows.length)} of {currentRows.length}</span><button disabled={currentPage === currentPageCount} onClick={() => setCurrentPage((page) => Math.min(currentPageCount, page + 1))} className="rounded border border-neutral-700 px-3 py-1.5 text-neutral-200 disabled:border-neutral-800 disabled:text-neutral-600">Next</button></nav> : null}
+        {currentPageCount > 1 ? <nav aria-label="Current projection pages" className="flex items-center justify-between rounded-lg border border-neutral-800 bg-neutral-900 p-2.5 text-xs"><button disabled={visibleCurrentPage === 1} onClick={() => setCurrentPage((page) => Math.max(1, page - 1))} className="rounded border border-neutral-700 px-3 py-1.5 text-neutral-200 disabled:border-neutral-800 disabled:text-neutral-600">Previous</button><span className="text-neutral-400">{(visibleCurrentPage - 1) * 25 + 1}–{Math.min(visibleCurrentPage * 25, currentRows.length)} of {currentRows.length}</span><button disabled={visibleCurrentPage === currentPageCount} onClick={() => setCurrentPage((page) => Math.min(currentPageCount, page + 1))} className="rounded border border-neutral-700 px-3 py-1.5 text-neutral-200 disabled:border-neutral-800 disabled:text-neutral-600">Next</button></nav> : null}
       </section>
 
       {unavailableRows.length ? (
@@ -277,7 +307,7 @@ export default function WeeklyProjectionBoard({
           <div>
             <h2 className="text-sm font-semibold text-neutral-100">Projection accuracy history</h2>
             <p className="text-[10px] text-neutral-500">
-              Ranked by smallest error. MAE {mae === null ? "—" : mae.toFixed(2)} points · bias {bias === null ? "—" : `${bias > 0 ? "+" : ""}${bias.toFixed(2)}`} · within 5 points {withinFive === null ? "—" : `${withinFive.toFixed(1)}%`}.
+              Ranked by highest accuracy. Accuracy is closeness to the larger of projected or actual points. MAE {mae === null ? "—" : mae.toFixed(2)} points · bias {bias === null ? "—" : `${bias > 0 ? "+" : ""}${bias.toFixed(2)}`} · within 5 points {withinFive === null ? "—" : `${withinFive.toFixed(1)}%`}.
             </p>
           </div>
           <select
@@ -298,7 +328,8 @@ export default function WeeklyProjectionBoard({
             onChange={(event) => setHistorySort(event.target.value as SortKey)}
             className="h-8 rounded-md border border-neutral-800 bg-neutral-950 px-2 text-[10px] text-neutral-300"
           >
-            <option value="error">Smallest error</option>
+            <option value="accuracy">Highest accuracy</option>
+            <option value="error">Smallest raw error</option>
             <option value="projected">Projected points</option>
             <option value="actual">Actual points</option>
             <option value="player">Player</option>
@@ -313,6 +344,7 @@ export default function WeeklyProjectionBoard({
                 <th className="px-2 py-2 text-right">Week</th>
                 <th className="px-2 py-2 text-right">Projected</th>
                 <th className="px-2 py-2 text-right">Actual</th>
+                <th className="px-2 py-2 text-right">Accuracy</th>
                 <th className="px-2 py-2 text-right">Abs error</th>
                 <th className="px-2 py-2 text-right">Bias</th>
                 <th className="px-2 py-2 text-left">Projected vs actual stat line</th>
@@ -331,6 +363,9 @@ export default function WeeklyProjectionBoard({
                   </td>
                   <td className="px-2 py-2 text-right tabular-nums text-neutral-100">
                     {number(row.actualFantasyPoints)}
+                  </td>
+                  <td className={`px-2 py-2 text-right font-semibold tabular-nums ${accuracyColor(accuracyPercent(row))}`}>
+                    {accuracyPercent(row) === null ? "—" : `${accuracyPercent(row)!.toFixed(1)}%`}
                   </td>
                   <td className="px-2 py-2 text-right tabular-nums text-neutral-300">
                     {number(row.absoluteError)}
