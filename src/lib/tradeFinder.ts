@@ -1,7 +1,7 @@
 import { simulateDynastyBoys } from "@/lib/leagueSimulation";
 import { getDecisionGradePredictiveModels } from "@/lib/predictiveSafety";
 import { getProjectionDashboardData } from "@/lib/weeklyProjection";
-import { fitsRoster, windowMotive } from "@/lib/tradeEligibility";
+import { boundedTradeFitScore, fitsRoster, windowMotive } from "@/lib/tradeEligibility";
 import { prisma } from "@/lib/prisma";
 import { SLEEPER_LEAGUE_ID } from "@/lib/config";
 import {
@@ -454,7 +454,7 @@ export async function buildTradeFinderData(): Promise<TradeFinderData | null> {
               ktcStale,
               rankingComplete,
             ),
-            fitScore = Math.max(1, Math.min(confidence === "LOW" ? 59 : 92, Math.round(score))),
+            fitScore = boundedTradeFitScore(score),
             movementText =
               target.change30dPercent === null
                 ? "No decision-grade 30-day trend is available"

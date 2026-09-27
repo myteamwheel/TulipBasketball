@@ -2,6 +2,10 @@
 export function fitsRoster(current: number, outgoingActive: number, incomingPlayers: number, limit: number) {
   return current - outgoingActive + incomingPlayers <= limit;
 }
+export function boundedTradeFitScore(score: number) {
+  if (!Number.isFinite(score)) return 1;
+  return Math.max(1, Math.min(92, Math.round(score)));
+}
 type AssetEvidence = { isPick: boolean; age: number | null; position: string; hasProjection: boolean; value: number; needed: boolean };
 export function windowMotive(window: string, incoming: AssetEvidence[], outgoingValue: number): string | null {
   const meaningful = incoming.filter(a => a.value >= outgoingValue * .35);

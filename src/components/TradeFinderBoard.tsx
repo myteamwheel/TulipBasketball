@@ -351,7 +351,7 @@ export default function TradeFinderBoard({ data }: { data: TradeFinderData }) {
                 className="rounded-xl border border-neutral-800 bg-neutral-900 p-3 sm:p-4"
               >
                 <summary className="cursor-pointer list-none text-sm font-semibold text-neutral-100">
-                  {t.name} · {t.ownerName} · fit {t.fitScore} · {t.offers.length} offer{t.offers.length === 1 ? "" : "s"}
+                  {t.name} · {t.ownerName} · fit score {t.fitScore} · {t.offers.length} offer{t.offers.length === 1 ? "" : "s"}
                 </summary>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">

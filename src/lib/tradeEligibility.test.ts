@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fitsRoster, windowMotive } from './tradeEligibility';
+import { boundedTradeFitScore, fitsRoster, windowMotive } from './tradeEligibility';
 test('overfull rosters and incoming taxi players still need real space', () => {
  assert.equal(fitsRoster(25, 1, 3, 24), false);
  assert.equal(fitsRoster(24, 0, 1, 24), false);
@@ -13,4 +13,10 @@ test('window fit rejects old production for rebuilders and picks-only contender 
  assert.equal(windowMotive('CONTENDER', [{...veteran,isPick:true}], 5000), null);
  assert.ok(windowMotive('REBUILDER', [{...veteran,age:23}], 5000));
  assert.equal(windowMotive('REBUILDER', [{...veteran,age:23,value:300},veteran], 5000), null);
+});
+test('trade fit scores preserve target ordering instead of tying at the low-confidence ceiling', () => {
+ assert.equal(boundedTradeFitScore(67), 67);
+ assert.equal(boundedTradeFitScore(82), 82);
+ assert.ok(boundedTradeFitScore(82) > boundedTradeFitScore(67));
+ assert.equal(boundedTradeFitScore(120), 92);
 });
