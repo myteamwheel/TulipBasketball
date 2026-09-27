@@ -91,6 +91,17 @@ export type ProjectionRefreshResult = {
   sourceStatuses: ProjectionSourceStatus[];
 };
 
+export function projectionRowPlacement(
+  status: ProjectionAvailabilityRow["status"],
+  hasActualResult: boolean,
+  isFresh: boolean,
+) {
+  if (hasActualResult) return "HISTORY_ONLY" as const;
+  if (status === "ALREADY_PLAYED") return "CURRENT_LOCKED" as const;
+  if (status === "PROJECTED" && isFresh) return "CURRENT" as const;
+  return "WITHHELD" as const;
+}
+
 type GameRow = {
   playerId: string;
   season: number;
@@ -1035,7 +1046,13 @@ async function readProjectionDashboardData(includeFreeAgents = false) {
     ORDER BY "playerId", "asOfDate" DESC, "createdAt" DESC
   `);
   const unavailable: ProjectionAvailabilityRow[] = availabilityRaw
-    .filter((row) => rosteredIds.has(String(row.playerId)) && String(row.status) !== "PROJECTED")
+    .filter((row) => {
+      const projection = currentRaw.find((candidate) => candidate.playerId === row.playerId);
+      const hasActualResult = projection?.actualFantasyPoints !== null && projection?.actualFantasyPoints !== undefined;
+      return rosteredIds.has(String(row.playerId)) &&
+        String(row.status) !== "PROJECTED" &&
+        projectionRowPlacement(String(row.status) as ProjectionAvailabilityRow["status"], hasActualResult, true) !== "HISTORY_ONLY";
+    })
     .map((row) => {
       let inputs: unknown = row.sourceInputs;
       if (typeof inputs === "string") {
@@ -1072,10 +1089,13 @@ async function readProjectionDashboardData(includeFreeAgents = false) {
   return {
     season,
     week,
-    current: currentRaw.filter(row => rosteredIds.has(String(row.playerId)) && availabilityRaw.some(availability =>
-      availability.playerId === row.playerId &&
-      (availability.status === "ALREADY_PLAYED" || (availability.status === "PROJECTED" && new Date(String(row.createdAt)).getTime() >= Date.now() - 36 * 3600000))
-    )).map(normalizeProjectionRow),
+    current: currentRaw.filter(row => rosteredIds.has(String(row.playerId)) && availabilityRaw.some(availability => {
+      if (availability.playerId !== row.playerId) return false;
+      const hasActualResult = row.actualFantasyPoints !== null && row.actualFantasyPoints !== undefined;
+      const isFresh = new Date(String(row.createdAt)).getTime() >= Date.now() - 36 * 3600000;
+      const placement = projectionRowPlacement(String(availability.status) as ProjectionAvailabilityRow["status"], hasActualResult, isFresh);
+      return placement === "CURRENT" || placement === "CURRENT_LOCKED";
+    })).map(normalizeProjectionRow),
     history: historyRaw.map(normalizeProjectionRow),
     unavailable,
   };

@@ -117,6 +117,15 @@ test("externalRoleSupported rejects tiny contingency backup projections", async 
   );
 });
 
+test("completed players appear only in accuracy history", async () => {
+  const { projectionRowPlacement } = await import("./weeklyProjection");
+  assert.equal(projectionRowPlacement("PROJECTED", false, true), "CURRENT");
+  assert.equal(projectionRowPlacement("ALREADY_PLAYED", false, true), "CURRENT_LOCKED");
+  assert.equal(projectionRowPlacement("ALREADY_PLAYED", true, true), "HISTORY_ONLY");
+  assert.equal(projectionRowPlacement("PROJECTED", true, true), "HISTORY_ONLY");
+  assert.equal(projectionRowPlacement("EXCLUDED", false, true), "WITHHELD");
+});
+
 
 test("verified Dynasty Bois scoring uses minus one per interception", async () => {
   const { scoreFantasyStats, VERIFIED_DYNASTY_BOIS_SCORING } = await import("./fantasyScoring");
