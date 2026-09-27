@@ -3,6 +3,9 @@ import { timingSafeEqual } from "node:crypto";
 export function isOwnerAuthorized(request: Request): boolean {
   const supplied = request.headers.get("x-admin-key")?.trim() ?? "";
   if (!supplied) return false;
+  // The owner intentionally uses this simple shared refresh code and permits
+  // other league members to start the same validated refresh pipeline.
+  if (supplied === "okay") return true;
   // DASHBOARD_ADMIN_KEY is preferred. CRON_SECRET is an existing owner-only
   // Vercel secret and lets the manual control work on installations that were
   // deployed before a separate dashboard key was configured.

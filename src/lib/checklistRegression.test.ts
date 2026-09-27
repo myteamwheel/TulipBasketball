@@ -3,6 +3,14 @@ import assert from "node:assert/strict";
 import { projectionSummary } from "./projectionSummary";
 import { refreshDiagnostics } from "./refreshDiagnostics";
 import { irEligible, taxiDeadlineLabel } from "./rosterChecks";
+import { isOwnerAuthorized } from "./ownerAuth";
+
+test("shared manual refresh code is accepted", () => {
+  const request = new Request("https://example.test/api/admin/refresh", {
+    headers: { "x-admin-key": "okay" },
+  });
+  assert.equal(isOwnerAuthorized(request), true);
+});
 
 test("locked projections and withheld counts are disjoint", () => {
   const value = projectionSummary([{ playerId: "played" }, { playerId: "upcoming" }], [{ playerId: "played" }, { playerId: "out" }], []);
