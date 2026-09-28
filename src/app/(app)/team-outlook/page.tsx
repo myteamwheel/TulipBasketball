@@ -132,7 +132,7 @@ export default async function TeamOutlookPage() {
 
       <div className={`rounded-lg border p-3 text-sm leading-5 ${coverage < 75 ? "border-amber-900/70 bg-amber-950/20 text-amber-200" : "border-neutral-800 bg-neutral-900 text-neutral-300"}`}>
         <strong>{coverage < 75 ? "Provisional model estimates." : "Current model estimates."}</strong>{" "}
-        {simulation.projectionSeason} Week {simulation.projectionWeek} projection coverage is {coverage}%; simulation differences are shrunk {evidence}% toward league-neutral odds. Inputs use the latest completed refresh{simulation.inputRefreshAt ? ` (${formatDateTimeEastern(simulation.inputRefreshAt)})` : ""}{simulation.inputRefreshStatus && simulation.inputRefreshStatus !== "SUCCESS" ? `, which was ${simulation.inputRefreshStatus.toLowerCase().replaceAll("_", " ")}` : ""}. These are model probabilities, not betting odds.
+        {simulation.projectionSeason} Week {simulation.projectionWeek} projection coverage is {coverage}%; estimates retain {evidence}% of the simulation&apos;s team-specific signal, with {100 - evidence}% blended toward league-average probabilities. Inputs use the latest completed refresh{simulation.inputRefreshAt ? ` (${formatDateTimeEastern(simulation.inputRefreshAt)})` : ""}{simulation.inputRefreshStatus && simulation.inputRefreshStatus !== "SUCCESS" ? `, which was ${simulation.inputRefreshStatus.toLowerCase().replaceAll("_", " ")}` : ""}. These are model probabilities, not betting odds.
       </div>
 
       <section className="space-y-3">
