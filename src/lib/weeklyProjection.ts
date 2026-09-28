@@ -640,6 +640,8 @@ async function gradeExistingProjections(scoring: FantasyScoringSettings, schedul
       team: string;
       createdAt: Date;
       projectedFantasyPoints: number;
+      actualFantasyPoints: number | null;
+      actualStats: unknown;
       fantasyHalfPpr: number;
       completions: number;
       attempts: number;
@@ -656,7 +658,8 @@ async function gradeExistingProjections(scoring: FantasyScoringSettings, schedul
       fumblesLost: number;
     }>
   >(`
-    SELECT wp.id, wp.season, wp.week, gs.team, wp."createdAt", wp."projectedFantasyPoints", gs."fantasyHalfPpr",
+    SELECT wp.id, wp.season, wp.week, gs.team, wp."createdAt", wp."projectedFantasyPoints",
+      wp."actualFantasyPoints", wp."actualStats", gs."fantasyHalfPpr",
       gs.completions, gs.attempts, gs."passingYards", gs."passingTds",
       gs.interceptions, gs.carries, gs."rushingYards", gs."rushingTds",
       gs.targets, gs.receptions, gs."receivingYards", gs."receivingTds",
@@ -667,7 +670,6 @@ async function gradeExistingProjections(scoring: FantasyScoringSettings, schedul
       AND gs.season = wp.season
       AND gs.week = wp.week
       AND gs."seasonType" = 'REG'
-    WHERE wp."actualFantasyPoints" IS NULL
   `);
   let graded = 0;
   for (const row of rows) {
@@ -689,6 +691,13 @@ async function gradeExistingProjections(scoring: FantasyScoringSettings, schedul
       fumblesLost: Number(row.fumblesLost) || 0,
     };
     const actual = scoreFantasyStats(actualStats, scoring);
+    if (
+      row.actualFantasyPoints !== null &&
+      Math.abs(Number(row.actualFantasyPoints) - actual) < 0.0001 &&
+      statLinesMatch(row.actualStats, actualStats)
+    ) {
+      continue;
+    }
     const projected = Number(row.projectedFantasyPoints) || 0;
     const signedError = projected - actual;
     const absoluteError = Math.abs(signedError);
@@ -716,6 +725,18 @@ async function gradeExistingProjections(scoring: FantasyScoringSettings, schedul
     graded++;
   }
   return graded;
+}
+
+/** True only when every stored box-score field still matches the source row. */
+export function statLinesMatch(
+  stored: unknown,
+  current: ProjectedStatLine,
+) {
+  if (!stored || typeof stored !== "object") return false;
+  const record = stored as Record<string, unknown>;
+  return (Object.keys(current) as Array<keyof ProjectedStatLine>).every(
+    (key) => Number(record[key]) === current[key],
+  );
 }
 
 function confidence(

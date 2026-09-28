@@ -161,3 +161,13 @@ test("verified Dynasty Boys scoring uses minus one per interception", async () =
   );
   assert.equal(points, 21);
 });
+
+test("corrected official box scores invalidate a previously graded stat line", async () => {
+  const { statLinesMatch } = await import("./weeklyProjection");
+  const corrected = empty();
+  corrected.interceptions = 1;
+  const stale = { ...corrected, interceptions: 0 };
+
+  assert.equal(statLinesMatch(stale, corrected), false);
+  assert.equal(statLinesMatch(corrected, corrected), true);
+});

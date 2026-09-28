@@ -30,6 +30,20 @@ function num(value: unknown) {
   const n = Number(value);
   return Number.isFinite(n) ? n : 0;
 }
+
+/**
+ * NFLverse names this field `passing_interceptions`. Keep the source-boundary
+ * mapping explicit so a future schema change fails loudly instead of silently
+ * turning every quarterback's interceptions into zero.
+ */
+export function nflversePassingInterceptions(row: CsvRow) {
+  if (!("passing_interceptions" in row)) {
+    throw new Error(
+      "NFLverse weekly stats schema is missing passing_interceptions",
+    );
+  }
+  return num(row.passing_interceptions);
+}
 function optionalInt(value: unknown) {
   const n = Number(value);
   return Number.isInteger(n) && n > 0 ? n : null;
@@ -201,7 +215,7 @@ export async function refreshFootballUsageData(
       const receptions = num(row.receptions),
         passingYards = num(row.passing_yards),
         passingTds = num(row.passing_tds),
-        interceptions = num(row.interceptions),
+        interceptions = nflversePassingInterceptions(row),
         rushingYards = num(row.rushing_yards),
         rushingTds = num(row.rushing_tds),
         receivingYards = num(row.receiving_yards),
