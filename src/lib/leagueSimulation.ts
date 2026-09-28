@@ -13,6 +13,7 @@ import {
 import { getMatchups, getNflState } from "@/lib/sleeper";
 import { publicTeamName } from "@/lib/publicIdentity";
 import { projectOptimalWeeklyPoints } from "@/lib/lineupProjection";
+import { unstable_cache } from "next/cache";
 import {
   runLeagueSimulation,
   type SimulationContext,
@@ -39,6 +40,8 @@ export interface LeagueSimulationResult {
   iterations: number;
   scheduleSource: "SLEEPER" | "FALLBACK";
   completedWeeks: number;
+  projectionSeason: number;
+  projectionWeek: number;
   productionCoverage: number;
   weeklyProjectionCoverage: number;
   evidenceWeight: number;
@@ -277,7 +280,7 @@ export async function simulateDynastyBoys(iterations = 2500): Promise<LeagueSimu
   const neutralSeed = managers.length ? (managers.length + 1) / 2 : 1;
   const neutralRemainingWins = schedule.length * 0.5;
 
-  const rows: LeagueSimulationRow[] = (weeklyProjectionCoverage >= 0.75 ? teamInputs : [])
+  const rows: LeagueSimulationRow[] = teamInputs
     .map((team) => {
       const outcome = outcomeById.get(team.manager.id)!;
       const baseWinTotal = baseWins.get(team.manager.id) ?? 0;
@@ -320,8 +323,44 @@ export async function simulateDynastyBoys(iterations = 2500): Promise<LeagueSimu
     iterations,
     scheduleSource: hasSleeperSchedule ? "SLEEPER" : "FALLBACK",
     completedWeeks,
+    projectionSeason: weekly.season,
+    projectionWeek: weekly.week,
     productionCoverage,
     weeklyProjectionCoverage,
     evidenceWeight,
+  };
+}
+
+/**
+ * Cache the expensive league Monte Carlo against the latest completed refresh.
+ * A new full or partial run gets a new cache key, so a manual/daily refresh is
+ * reflected on the next request while ordinary tab navigation reuses the same
+ * simulation instead of recalculating 2,500 seasons.
+ */
+export async function getCachedDynastyBoysSimulation(): Promise<
+  LeagueSimulationResult & {
+    inputRefreshAt: string | null;
+    inputRefreshStatus: string | null;
+  }
+> {
+  const latestRun = await prisma.refreshRun.findFirst({
+    where: {
+      league: { sleeperId: SLEEPER_LEAGUE_ID },
+      finishedAt: { not: null },
+    },
+    orderBy: { finishedAt: "desc" },
+    select: { id: true, finishedAt: true, status: true },
+  });
+  const cacheKey = latestRun?.id ?? "unrefreshed";
+  const loadSimulation = unstable_cache(
+    () => simulateDynastyBoys(2500),
+    ["dynasty-boys-league-simulation-v2", cacheKey],
+    { revalidate: 60 * 60 },
+  );
+  const simulation = await loadSimulation();
+  return {
+    ...simulation,
+    inputRefreshAt: latestRun?.finishedAt?.toISOString() ?? null,
+    inputRefreshStatus: latestRun?.status ?? null,
   };
 }

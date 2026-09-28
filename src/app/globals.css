@@ -1,9 +1,9 @@
 @import "tailwindcss";
 
 :root {
-  --background: #09090b;
-  --foreground: #f5f5f5;
-  color-scheme: dark;
+  --background: #f7f8fa;
+  --foreground: #111827;
+  color-scheme: light;
 }
 
 @theme inline {
@@ -46,16 +46,55 @@ textarea {
   outline-offset: 2px;
 }
 
-/* Neutral 600/700 are used for explanatory text throughout the terminal. */
+/* The dashboard uses neutral utility classes; remap them to a readable light theme. */
+.bg-neutral-950 { background-color: #f7f8fa !important; }
+.bg-neutral-900 { background-color: #ffffff !important; }
+.bg-neutral-800 { background-color: #eef1f5 !important; }
+.bg-neutral-700 { background-color: #e2e8f0 !important; }
+.bg-neutral-500 { background-color: #64748b !important; }
+.bg-neutral-950\/40, .bg-neutral-950\/50, .bg-neutral-950\/60, .bg-neutral-950\/70 { background-color: rgba(248, 250, 252, .85) !important; }
+.bg-neutral-900\/40, .bg-neutral-900\/50, .bg-neutral-900\/60, .bg-neutral-900\/70 { background-color: rgba(255, 255, 255, .82) !important; }
+.bg-neutral-800\/30, .bg-neutral-800\/40 { background-color: rgba(238, 241, 245, .82) !important; }
+.border-neutral-900, .border-neutral-900\/90 { border-color: #e2e8f0 !important; }
+.border-neutral-800, .border-neutral-800\/70, .border-neutral-800\/80, .border-neutral-800\/90 { border-color: #d7dde5 !important; }
+.border-neutral-700 { border-color: #cbd5e1 !important; }
+.border-neutral-600 { border-color: #94a3b8 !important; }
+.text-neutral-100 { color: #111827 !important; }
+.text-neutral-200 { color: #1f2937 !important; }
+.text-neutral-300 { color: #374151 !important; }
+.text-neutral-400 { color: #4b5563 !important; }
+.text-neutral-500 { color: #4b5563 !important; }
 .text-neutral-600 {
-  color: #a3a3a3;
+  color: #4b5563 !important;
 }
 
 .text-neutral-700 {
-  color: #8a8a8a;
+  color: #374151 !important;
 }
 
-/* Keep compact dashboard labels readable on dark cards. */
+/* Preserve semantic colors while making them legible on white surfaces. */
+.text-emerald-100, .text-emerald-200, [class*="text-emerald-300"], .text-emerald-400, .text-emerald-500 { color: #047857 !important; }
+.text-red-200, [class*="text-red-300"], .text-red-400, .text-rose-200, .text-rose-300 { color: #b42318 !important; }
+.text-amber-100, .text-amber-200, .text-amber-300, .text-amber-400, .text-amber-500, .text-amber-600 { color: #92400e !important; }
+.text-blue-200, .text-blue-300 { color: #1d4ed8 !important; }
+.text-orange-400 { color: #9a3412 !important; }
+.text-purple-200, .text-purple-300, .text-violet-200, .text-violet-300 { color: #6d28d9 !important; }
+.text-sky-200, .text-sky-300, .text-sky-400 { color: #075985 !important; }
+[class*="bg-emerald-950"] { background-color: #ecfdf5 !important; }
+[class*="bg-amber-950"], [class*="bg-amber-900"] { background-color: #fffbeb !important; }
+[class*="bg-red-950"], [class*="bg-rose-950"] { background-color: #fef2f2 !important; }
+[class*="bg-blue-950"] { background-color: #eff6ff !important; }
+[class*="bg-sky-950"] { background-color: #f0f9ff !important; }
+[class*="bg-purple-950"], [class*="bg-violet-950"] { background-color: #f5f3ff !important; }
+[class*="border-emerald-800"], [class*="border-emerald-900"] { border-color: #86efac !important; }
+[class*="border-amber-700"], [class*="border-amber-800"], [class*="border-amber-900"] { border-color: #fcd34d !important; }
+[class*="border-red-800"], [class*="border-red-900"], [class*="border-rose-800"], [class*="border-rose-900"] { border-color: #fca5a5 !important; }
+[class*="border-sky-800"], [class*="border-sky-900"], [class*="border-violet-800"] { border-color: #bfdbfe !important; }
+.bg-neutral-500.text-white, .bg-neutral-700.text-white, .bg-neutral-800.text-white, .bg-neutral-900.text-white, .bg-neutral-950.text-white { color: #111827 !important; }
+.hover\:text-white:hover { color: #111827 !important; }
+header { background-color: rgba(255, 255, 255, .96) !important; }
+
+/* Keep compact dashboard labels readable on cards. */
 :where(main) :is(.text-\[8px\], .text-\[9px\], .text-\[10px\], .text-\[11px\]) {
   font-size: 0.75rem;
   line-height: 1rem;

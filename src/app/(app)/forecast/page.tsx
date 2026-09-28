@@ -14,7 +14,7 @@ import {
   getDecisionGradePredictiveModels as getPredictivePlayerModels,
   isDecisionGradeProductionSeason,
 } from "@/lib/predictiveSafety";
-import { simulateDynastyBoys } from "@/lib/leagueSimulation";
+import { getCachedDynastyBoysSimulation } from "@/lib/leagueSimulation";
 import { computeAllTeamValuations, getLatestSlotMap } from "@/lib/teamMetrics";
 import { publicTeamName } from "@/lib/publicIdentity";
 import { formatPoints, formatProbability } from "@/lib/format";
@@ -35,7 +35,7 @@ export default async function ForecastPage() {
   const ids = entries.map((e) => e.playerId),
     [models, simulation, projectionData] = await Promise.all([
       getPredictivePlayerModels(ids),
-      simulateDynastyBoys(2500),
+      getCachedDynastyBoysSimulation(),
       getProjectionDashboardData(),
     ]),
     weeklyProjectionByPlayer = new Map(
@@ -138,6 +138,12 @@ export default async function ForecastPage() {
               className="w-fit rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs text-neutral-300"
             >
               Weekly projections →
+            </Link>
+            <Link
+              href="/team-outlook"
+              className="w-fit rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs text-neutral-300"
+            >
+              Team Outlook →
             </Link>
             <Link
               href="/trade-finder"

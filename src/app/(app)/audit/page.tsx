@@ -64,12 +64,12 @@ function AuditTrend({
         aria-label="Orlando Oswalds total dynasty capital by audit snapshot"
       >
         {[38, 73, 108, 143, 178].map((y) => (
-          <line key={y} x1="18" x2="682" y1={y} y2={y} stroke="#262626" />
+          <line key={y} x1="18" x2="682" y1={y} y2={y} stroke="#e2e8f0" />
         ))}
         <polyline
           points={points}
           fill="none"
-          stroke="#34d399"
+          stroke="#047857"
           strokeWidth="3"
           strokeLinejoin="round"
           strokeLinecap="round"
@@ -79,13 +79,13 @@ function AuditTrend({
           const y = 178 - ((row.teamValue - min) / range) * 140;
           return (
             <g key={row.snapshotId ?? row.generatedAt}>
-              <circle cx={x} cy={y} r="4" fill="#34d399" />
+              <circle cx={x} cy={y} r="4" fill="#047857" />
               {(index === 0 || index === ordered.length - 1) && (
                 <text
                   x={x}
                   y={index === 0 ? Math.min(201, y + 18) : Math.max(18, y - 10)}
                   textAnchor={index === 0 ? "start" : "end"}
-                  fill="#a3a3a3"
+                  fill="#374151"
                   fontSize="10"
                 >
                   {formatPoints(row.teamValue)} · #{row.teamRank}
@@ -94,10 +94,10 @@ function AuditTrend({
             </g>
           );
         })}
-        <text x="18" y="207" fill="#737373" fontSize="9">
+        <text x="18" y="207" fill="#64748b" fontSize="9">
           {ordered[0]?.snapshotDate}
         </text>
-        <text x="682" y="207" textAnchor="end" fill="#737373" fontSize="9">
+        <text x="682" y="207" textAnchor="end" fill="#64748b" fontSize="9">
           {ordered.at(-1)?.snapshotDate}
         </text>
       </svg>
