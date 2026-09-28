@@ -523,9 +523,10 @@ export default async function AuditPage({
           The 8 a.m. refresh saves a new audit only after roster, current market,
           future-pick ownership, pick pricing and weekly projection checks pass.
           A failed run leaves the previous validated snapshot in place. Unknown
-          player values remain unknown, and forecast metrics stay hidden until at
-          least 75% of rostered skill players have current-week projection or
-          explicit withholding records.
+          player values remain unknown. For weekly coverage, live projections,
+          completed results and explicit withholding records count as classified;
+          forecast metrics stay hidden until at least 75% of rostered skill players
+          have decision-grade projections or explicit no-role exclusions.
         </p>
       </section>
     </div>

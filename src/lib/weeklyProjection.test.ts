@@ -129,6 +129,19 @@ test("completed players leave active projections and enter history only after st
   assert.equal(projectionRowPlacement("EXCLUDED", false, true), "WITHHELD");
 });
 
+test("completed current-week projections remain available as evidence without including other weeks", async () => {
+  const { completedProjectionRowsForWeek } = await import("./weeklyProjection");
+  const rows = [
+    { playerId: "played", season: 2026, week: 3, actualFantasyPoints: 8.4 },
+    { playerId: "ungraded", season: 2026, week: 3, actualFantasyPoints: null },
+    { playerId: "old-week", season: 2026, week: 2, actualFantasyPoints: 12.1 },
+  ];
+  assert.deepEqual(
+    completedProjectionRowsForWeek(rows, 2026, 3).map((row) => row.playerId),
+    ["played"],
+  );
+});
+
 
 test("verified Dynasty Boys scoring uses minus one per interception", async () => {
   const { scoreFantasyStats, VERIFIED_DYNASTY_BOIS_SCORING } = await import("./fantasyScoring");

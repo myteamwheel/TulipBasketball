@@ -1,4 +1,7 @@
-import { getProjectionDashboardData } from "@/lib/weeklyProjection";
+import {
+  completedProjectionRowsForWeek,
+  getProjectionDashboardData,
+} from "@/lib/weeklyProjection";
 import { prisma } from "@/lib/prisma";
 import { SLEEPER_LEAGUE_ID } from "@/lib/config";
 import { getAllCurrentRosterEntries, getAllManagers } from "@/lib/queries";
@@ -102,7 +105,19 @@ export async function simulateDynastyBoys(iterations = 2500): Promise<LeagueSimu
   const weekly = await getProjectionDashboardData();
   const weeklyProjectionRows = weekly.current;
   const weeklyAvailabilityRows = weekly.unavailable;
+  const completedThisWeek = completedProjectionRowsForWeek(
+    weekly.history,
+    weekly.season,
+    weekly.week,
+  );
   const weeklyProjectionByPlayer = new Map(weekly.current.map(row => [row.playerId, row.projectedFantasyPoints]));
+  // Completed players stay off the active weekly board, but their saved
+  // pregame projection remains useful evidence for season-strength estimates.
+  for (const row of completedThisWeek) {
+    if (!weeklyProjectionByPlayer.has(row.playerId)) {
+      weeklyProjectionByPlayer.set(row.playerId, row.projectedFantasyPoints);
+    }
+  }
   const weeklyAvailabilityByPlayer = new Map(weekly.unavailable.map(row => [row.playerId, row.status]));
 
   const byManager = new Map<string, typeof entries>();
@@ -234,14 +249,20 @@ export async function simulateDynastyBoys(iterations = 2500): Promise<LeagueSimu
     : 0;
 
   const skillIds = new Set(entries.filter(entry => ["QB", "RB", "WR", "TE"].includes(entry.player.position)).map(entry => entry.playerId));
-  const classifiedIds = new Set([...weeklyProjectionRows.map(row => row.playerId), ...weeklyAvailabilityRows.filter(row => row.status === "EXCLUDED").map(row => row.playerId)]);
+  const classifiedIds = new Set([
+    ...weeklyProjectionRows.map((row) => row.playerId),
+    ...completedThisWeek.map((row) => row.playerId),
+    ...weeklyAvailabilityRows
+      .filter((row) => row.status === "EXCLUDED")
+      .map((row) => row.playerId),
+  ]);
   const weeklyProjectionCoverage = skillIds.size ? [...skillIds].filter(id => classifiedIds.has(id)).length / skillIds.size : 0;
 
-  // The weekly consensus feed is now the preferred lineup input. Until it has
-  // classified most rostered players for the current week, keep season-outcome
-  // probabilities conservative and also retain the existing recent-production
-  // evidence gate. A player deliberately withheld for no current role counts as
-  // classified evidence, because the model knows not to invent fantasy volume.
+  // The weekly consensus feed is now the preferred lineup input. A saved
+  // pregame projection remains evidence after its game is graded, but completed
+  // players stay in the separate accuracy-history section. Keep season-outcome
+  // probabilities conservative until most rostered players have a projection
+  // or an explicit no-role exclusion, and retain the recent-production gate.
   const productionWeight = Math.max(0, Math.min(1, productionCoverage / 0.35));
   const projectionWeight = Math.max(
     0,

@@ -13,7 +13,10 @@ import {
   computeAllTeamValuations,
   getLatestSlotMap,
 } from "@/lib/teamMetrics";
-import { getProjectionDashboardData } from "@/lib/weeklyProjection";
+import {
+  completedProjectionRowsForWeek,
+  getProjectionDashboardData,
+} from "@/lib/weeklyProjection";
 
 export type AuditRosterPlayer = {
   playerId: string;
@@ -322,7 +325,7 @@ function auditChanges(
       category: "HEALTH",
       tone: "WARNING",
       title: "Projection coverage is below the decision-grade gate",
-      detail: "Forecast results are withheld until current-week classification recovers.",
+      detail: "Forecast results are withheld until current-week projections, completed results, or explicit withholdings classify enough rostered players.",
       magnitude: 1,
     });
   }
@@ -529,9 +532,15 @@ export async function buildLiveAuditData(
   const rosteredSkillPlayers = entries.filter((entry) =>
     POSITIONS.includes(entry.player.position as (typeof POSITIONS)[number]),
   ).length;
+  const completedThisWeek = completedProjectionRowsForWeek(
+    projection.history,
+    projection.season,
+    projection.week,
+  );
   const classified = new Set([
     ...projection.current.map((row) => row.playerId),
     ...projection.unavailable.map((row) => row.playerId),
+    ...completedThisWeek.map((row) => row.playerId),
   ]).size;
   const coverage = rosteredSkillPlayers ? classified / rosteredSkillPlayers : 0;
   const latestRefresh = await prisma.refreshRun.findFirst({
@@ -611,7 +620,7 @@ export async function recordAuditSnapshot(refreshRunId: string | null) {
   }
   if (!data.health.projectionReady) {
     throw new Error(
-      "Audit validation failed because current-week projection coverage is below 75%; the last good snapshot was retained.",
+      "Audit validation failed because current-week projection, completed-result, or withholding coverage is below 75%; the last good snapshot was retained.",
     );
   }
   await prisma.$executeRawUnsafe(

@@ -164,8 +164,8 @@ export default async function ForecastPage() {
         <div className="rounded-lg border border-amber-900/70 bg-amber-950/20 p-3 text-[11px] leading-5 text-amber-200">
           Weekly consensus coverage is currently{" "}
           {Math.round(simulation.weeklyProjectionCoverage * 100)}%. The forecast
-          remains intentionally conservative until the current-week projection
-          refresh has classified most rostered players.
+          remains hidden until pregame projections (including graded forecasts
+          kept in accuracy history) cover at least 75% of rostered skill players.
         </div>
       ) : null}
       <section>
@@ -207,17 +207,20 @@ export default async function ForecastPage() {
         ) : (
           <div className="rounded-lg border border-amber-900/70 bg-amber-950/20 p-4 text-sm text-amber-200">
             Weekly and season-outcome forecast cards are unavailable until the
-            current consensus pass classifies at least 75% of rostered skill
-            players. Current coverage is{" "}
+            current consensus pass has projections or explicit no-role exclusions
+            for at least 75% of rostered skill players. Graded pregame projections
+            count toward coverage but remain history-only. Current coverage is{" "}
             {Math.round(simulation.weeklyProjectionCoverage * 100)}%.
           </div>
         )}
         <details className="mt-2 text-xs text-neutral-400"><summary className="cursor-pointer">How the forecast works</summary>        <p className="mt-2 text-[9px] leading-4 text-neutral-600">
           Simulation probabilities are model outputs, not betting probabilities.
           The canonical weekly-consensus projection feed now drives lineup
-          strength when available, and players explicitly withheld for no current
-          role contribute zero rather than invented volume. Until the weekly feed
-          has classified most rostered players, season-outcome estimates remain
+          strength when available. Saved projections for completed games remain
+          available to the season model but are shown only in accuracy history;
+          players explicitly withheld for no current role contribute zero rather
+          than invented volume. Until the weekly feed has classified most rostered players,
+          season-outcome estimates remain
           conservatively shrunk toward league-neutral priors. Recent-production
           evidence remains a secondary fallback, not a competing projection
           system.

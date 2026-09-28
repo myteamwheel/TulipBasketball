@@ -140,7 +140,7 @@ function documentLines(
   out.push(...line("Method and health", 13, 5));
   out.push(
     ...line(
-      `This report is generated from validated dashboard database history. The current snapshot retains unknown values as unknown, includes future picks only when market and ownership data are available, and withholds weekly forecast output until at least 75% of rostered skill players are classified. Projection coverage is ${(data.projection.coverage * 100).toFixed(1)}%.`,
+      `This report is generated from validated dashboard database history. The current snapshot retains unknown values as unknown, includes future picks only when market and ownership data are available, and withholds weekly forecast output until at least 75% of rostered skill players are classified by a live projection, a completed result, or an explicit withholding record. Projection coverage is ${(data.projection.coverage * 100).toFixed(1)}%.`,
       8,
       4,
     ),

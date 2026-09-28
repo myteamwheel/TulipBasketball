@@ -91,6 +91,26 @@ export type ProjectionRefreshResult = {
   sourceStatuses: ProjectionSourceStatus[];
 };
 
+/** Keep graded pregame projections available to models that need a full-week
+ * baseline, while the projections page continues to show them only in history.
+ */
+export function completedProjectionRowsForWeek<
+  T extends Pick<WeeklyProjectionRow, "season" | "week" | "actualFantasyPoints"> & {
+    playerId: string;
+  },
+>(
+  rows: readonly T[],
+  season: number,
+  week: number,
+) {
+  return rows.filter(
+    (row) =>
+      row.season === season &&
+      row.week === week &&
+      row.actualFantasyPoints !== null,
+  );
+}
+
 export function projectionRowPlacement(
   status: ProjectionAvailabilityRow["status"],
   hasActualResult: boolean,
