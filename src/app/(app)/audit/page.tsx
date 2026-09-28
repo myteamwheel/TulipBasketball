@@ -5,7 +5,7 @@ import { AuditNotFoundError, isAuditSelector } from "@/lib/auditSelection";
 import Link from "next/link";
 import MetricCard from "@/components/MetricCard";
 import SectionHeader from "@/components/SectionHeader";
-import { getAuditDashboardData } from "@/lib/audit";
+import { getAuditDashboardData, getLatestAuditRefresh } from "@/lib/audit";
 import {
   formatDateEastern,
   formatDateTimeEastern,
@@ -113,10 +113,13 @@ export default async function AuditPage({
   const query = await searchParams;
   const requestedDate = Array.isArray(query.date) ? query.date[0] : query.date;
   if (!isAuditSelector(requestedDate)) notFound();
-  const { data, snapshots, isLivePreview } = await getAuditDashboardData(requestedDate).catch(error => {
-    if (error instanceof AuditNotFoundError) notFound();
-    throw error;
-  });
+  const [{ data, snapshots, isLivePreview }, latestRefresh] = await Promise.all([
+    getAuditDashboardData(requestedDate).catch(error => {
+      if (error instanceof AuditNotFoundError) notFound();
+      throw error;
+    }),
+    getLatestAuditRefresh(),
+  ]);
   const dateQuery = `?date=${encodeURIComponent(data.snapshotId ?? data.snapshotDate)}`;
   const allIncomplete = data.league.some((team) => !team.capitalComplete);
   const historicalFindings = [
@@ -133,6 +136,15 @@ export default async function AuditPage({
         "Orlando Oswalds' Dynasty Boys drops became top-150 assets less often than the league average in the source audit.",
     },
   ];
+  const lockedProjectionCount = data.projection.locked ?? 0;
+  const completedWeeklyStatuses = Math.max(
+    0,
+    data.projection.classified -
+      data.projection.projected -
+      lockedProjectionCount -
+      data.projection.withheld,
+  );
+  const latestRefreshCanDriveLiveData = latestRefresh?.status === "SUCCESS";
 
   return (
     <div className="min-w-0 space-y-7">
@@ -178,6 +190,18 @@ export default async function AuditPage({
         </div>
       ) : null}
 
+      {latestRefresh ? (
+        <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-3 text-[11px] leading-5 text-neutral-400">
+          <span className="font-semibold text-neutral-200">Freshness:</span>{" "}
+          this saved audit snapshot was generated {formatDateTimeEastern(data.generatedAt)}. The newest dashboard refresh is {latestRefresh.status.toLowerCase().replaceAll("_", " ")} from {formatDateTimeEastern((latestRefresh.finishedAt ?? latestRefresh.startedAt).toISOString())}.{" "}
+          {new Date(latestRefresh.finishedAt ?? latestRefresh.startedAt).getTime() > new Date(data.generatedAt).getTime()
+            ? latestRefreshCanDriveLiveData
+              ? "The newer successful refresh is used by live roster, market, projection, and team-outlook pages; this audit remains the last snapshot that passed its separate validation checks."
+              : "This newer attempt did not replace the last successful live dataset; this audit remains the last separately validated snapshot."
+            : "This snapshot reflects the newest recorded dashboard refresh."}
+        </div>
+      ) : null}
+
       <section>
         <SectionHeader
           title={`Snapshot ${formatDateEastern(`${data.snapshotDate}T12:00:00Z`)}`}
@@ -213,12 +237,23 @@ export default async function AuditPage({
             }
           />
           <MetricCard
-            label="Projection coverage"
+            label="Weekly status coverage"
             value={`${Math.round(data.projection.coverage * 100)}%`}
             tone={data.health.projectionReady ? "positive" : "warning"}
-            detail={`${data.projection.classified}/${data.projection.rosteredSkillPlayers} classified`}
+            detail={`${data.projection.classified}/${data.projection.rosteredSkillPlayers} QB/RB/WR/TE accounted`}
           />
         </div>
+      </section>
+
+      <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3 text-[11px] leading-5 text-neutral-500">
+        <div className="font-semibold text-neutral-300">Weekly forecast scope</div>
+        <p className="mt-1">
+          <span className="font-medium text-neutral-300">Live weekly-consensus forecasts:</span>{" "}
+          {data.projection.projected} active rostered QB/RB/WR/TE players.
+          {lockedProjectionCount ? <><span className="font-medium text-neutral-300"> Locked at kickoff:</span>{" "}{lockedProjectionCount} player{lockedProjectionCount === 1 ? "" : "s"}; their pregame forecasts are preserved until final stats move them to accuracy history.</> : null}
+          <span className="font-medium text-neutral-300"> Weekly status coverage:</span>{" "}
+          {data.projection.classified} accounted-for players, which includes those live forecasts, {data.projection.withheld} players explicitly withheld with a reason, and {completedWeeklyStatuses} completed player result{completedWeeklyStatuses === 1 ? "" : "s"} retained for accuracy history. It is not a claim that every accounted-for player has an active forecast. Kickers and D/ST are intentionally outside this QB/RB/WR/TE projection scope.
+        </p>
       </section>
 
       <section>
@@ -523,10 +558,11 @@ export default async function AuditPage({
           The 8 a.m. refresh saves a new audit only after roster, current market,
           future-pick ownership, pick pricing and weekly projection checks pass.
           A failed run leaves the previous validated snapshot in place. Unknown
-          player values remain unknown. For weekly coverage, live projections,
-          completed results and explicit withholding records count as classified;
-          forecast metrics stay hidden until at least 75% of rostered skill players
-          have decision-grade projections or explicit no-role exclusions.
+          player values remain unknown. Weekly status coverage evaluates only
+          rostered QB/RB/WR/TE players: active weekly-consensus forecasts,
+          kickoff-locked forecasts, completed results, and explicit no-role withholdings all count as
+          accounted for. K and D/ST are intentionally excluded. Forecast metrics
+          stay hidden until at least 75% of that scoped group is accounted for.
         </p>
       </section>
     </div>

@@ -1,41 +1,19 @@
 import Link from "next/link";
-import MetricCard from "@/components/MetricCard";
 import SectionHeader from "@/components/SectionHeader";
 import PredictiveBoard from "@/components/PredictiveBoard";
-import PredictiveTradeImpact, {
-  type PredictiveTradeAsset,
-} from "@/components/PredictiveTradeImpact";
-import {
-  getAllCurrentRosterEntries,
-  getAllManagers,
-  getPrimaryManager,
-} from "@/lib/queries";
+import { getAllCurrentRosterEntries } from "@/lib/queries";
 import {
   getDecisionGradePredictiveModels as getPredictivePlayerModels,
   isDecisionGradeProductionSeason,
 } from "@/lib/predictiveSafety";
-import { getCachedDynastyBoysSimulation } from "@/lib/leagueSimulation";
-import { computeAllTeamValuations, getLatestSlotMap } from "@/lib/teamMetrics";
-import { publicTeamName } from "@/lib/publicIdentity";
-import { formatPoints, formatProbability } from "@/lib/format";
+import { formatPoints } from "@/lib/format";
 import { getProjectionDashboardData } from "@/lib/weeklyProjection";
 export const dynamic = "force-dynamic";
 export default async function ForecastPage() {
-  const [entries, managers, primary, valuations, slotMap] = await Promise.all([
-    getAllCurrentRosterEntries(),
-    getAllManagers(),
-    getPrimaryManager(),
-    computeAllTeamValuations(),
-    getLatestSlotMap(),
-  ]);
-  if (!primary)
-    return (
-      <div className="text-sm text-neutral-500">Primary team unavailable.</div>
-    );
+  const entries = await getAllCurrentRosterEntries();
   const ids = entries.map((e) => e.playerId),
-    [models, simulation, projectionData] = await Promise.all([
+    [models, projectionData] = await Promise.all([
       getPredictivePlayerModels(ids),
-      getCachedDynastyBoysSimulation(),
       getProjectionDashboardData(),
     ]),
     weeklyProjectionByPlayer = new Map(
@@ -50,9 +28,6 @@ export default async function ForecastPage() {
         .map((row) => row.playerId),
     ),
     rows = [...models.values()],
-    mySim = simulation.rows.find((r) => r.managerId === primary.id),
-    weeklyForecastReady = simulation.weeklyProjectionCoverage >= 0.75,
-    managerById = new Map(managers.map((m) => [m.id, m])),
     liveWeeklyRows = rows.filter(
       (row) =>
         weeklyProjectionByPlayer.has(row.playerId) &&
@@ -83,43 +58,30 @@ export default async function ForecastPage() {
     productionCovered = rows.filter((r) =>
       isDecisionGradeProductionSeason(r.latestSeason, r.games),
     ).length,
-    assets: PredictiveTradeAsset[] = [];
-  for (const entry of entries) {
-    const model = models.get(entry.playerId);
-    if (!model) continue;
-    assets.push({
-      id: entry.playerId,
-      assetType: "player",
-      managerId: entry.managerId,
-      managerName: publicTeamName(entry.manager),
-      name: entry.player.fullName,
-      position: entry.player.position,
-      marketValue: model.currentValue,
-      modelValue: model.modelValue,
-      forecast1y: model.forecast1y.mean,
-      projectedPpg: weeklyWithheld.has(entry.playerId)
-        ? 0
-        : weeklyProjectionByPlayer.get(entry.playerId) ?? 0,
-      slot: slotMap.get(`${entry.managerId}:${entry.playerId}`) ?? "BENCH",
-    });
-  }
-  for (const valuation of valuations) {
-    for (const pick of valuation.draftPicks) {
-      assets.push({
-        id: pick.id,
-        assetType: "pick",
-        managerId: valuation.managerId,
-        managerName: valuation.teamName,
-        name: pick.label,
-        position: "PICK",
-        marketValue: pick.value,
-        modelValue: pick.value,
-        forecast1y: pick.value,
-        projectedPpg: 0,
-        slot: "PICK",
-      });
-    }
-  }
+    rosteredSkillPlayers = entries.filter((entry) =>
+      ["QB", "RB", "WR", "TE"].includes(entry.player.position),
+    ),
+    completedCurrentWeek = new Set(
+      projectionData.history
+        .filter(
+          (row) =>
+            row.season === projectionData.season &&
+            row.week === projectionData.week &&
+            row.actualFantasyPoints !== null,
+        )
+        .map((row) => row.playerId),
+    ),
+    classifiedCurrentWeek = new Set([
+      ...projectionData.current.map((row) => row.playerId),
+      ...projectionData.unavailable.map((row) => row.playerId),
+      ...completedCurrentWeek,
+    ]),
+    weeklyCoverage = rosteredSkillPlayers.length
+      ? classifiedCurrentWeek.size / rosteredSkillPlayers.length
+      : 0,
+    weeklyFallback = [...projectionData.current]
+      .sort((a, b) => b.projectedFantasyPoints - a.projectedFantasyPoints)
+      .slice(0, 6);
   return (
     <div className="min-w-0 space-y-6">
       <section>
@@ -129,7 +91,8 @@ export default async function ForecastPage() {
               Prediction Center
             </h1>
             <p className="mt-1 max-w-3xl text-sm leading-5 text-neutral-500">
-              Dynasty value, upside and team outlook. Open a player to see the evidence behind the model.
+              Player research for weekly decisions and dynasty value. Open a
+              player to see the evidence behind the model.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -146,15 +109,65 @@ export default async function ForecastPage() {
               Team Outlook →
             </Link>
             <Link
-              href="/trade-finder"
-              className="w-fit rounded-md border border-emerald-800 bg-emerald-950/30 px-3 py-1.5 text-xs text-emerald-300"
+              href="/team-outlook/trade-impact"
+              className="w-fit rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs text-neutral-300"
             >
-              Open Trade Lab →
+              Trade impact →
             </Link>
           </div>
         </div>
       </section>
       <p className="text-xs text-neutral-400">Usable current or prior-season production: {productionCovered}/{rows.length} valued players. A live weekly role is also required for actionable model edges.</p>
+      <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3">
+        <SectionHeader
+          title="This week’s usable signal"
+          description={
+            weeklyCoverage >= 0.75
+              ? `Current-role coverage is ${(weeklyCoverage * 100).toFixed(0)}% across rostered skill players.`
+              : `Current-role coverage is ${(weeklyCoverage * 100).toFixed(0)}% across rostered skill players, below the threshold for a fully validated weekly team forecast.`
+          }
+        />
+        <div className="grid gap-2 sm:grid-cols-4">
+          <div className="rounded-md bg-neutral-950 p-2.5">
+            <div className="text-[9px] uppercase tracking-wide text-neutral-600">Role-supported</div>
+            <div className="mt-1 text-lg font-semibold text-emerald-300">{projectionData.current.length}</div>
+          </div>
+          <div className="rounded-md bg-neutral-950 p-2.5">
+            <div className="text-[9px] uppercase tracking-wide text-neutral-600">Withheld with reason</div>
+            <div className="mt-1 text-lg font-semibold text-amber-300">{projectionData.unavailable.length}</div>
+          </div>
+          <div className="rounded-md bg-neutral-950 p-2.5">
+            <div className="text-[9px] uppercase tracking-wide text-neutral-600">Completed</div>
+            <div className="mt-1 text-lg font-semibold text-sky-300">{completedCurrentWeek.size}</div>
+          </div>
+          <div className="rounded-md bg-neutral-950 p-2.5">
+            <div className="text-[9px] uppercase tracking-wide text-neutral-600">Classified coverage</div>
+            <div className={`mt-1 text-lg font-semibold ${weeklyCoverage >= 0.75 ? "text-emerald-300" : "text-amber-300"}`}>{(weeklyCoverage * 100).toFixed(0)}%</div>
+          </div>
+        </div>
+        {weeklyCoverage < 0.75 ? (
+          <p className="mt-3 text-[11px] leading-5 text-amber-200">
+            The role-supported rows below are usable for player-level lineup decisions. Players without a verified role, completed games, or an identity check are held out rather than filled with estimates. Team Outlook keeps its league probabilities provisional until coverage reaches 75%; the daily audit does not publish a new weekly forecast as fully validated before then.
+          </p>
+        ) : null}
+        {weeklyFallback.length ? (
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {weeklyFallback.map((row) => (
+              <Link
+                key={row.playerId}
+                href={`/players/${row.playerId}`}
+                className="rounded-md border border-neutral-800 bg-neutral-950 p-2 text-xs text-neutral-300 hover:border-emerald-900"
+              >
+                <span className="font-medium text-neutral-100">{row.playerName}</span>
+                <span className="ml-1 text-neutral-600">{row.position}{row.nflTeam ? ` · ${row.nflTeam}` : ""}</span>
+                <span className="float-right font-semibold text-emerald-300">{row.projectedFantasyPoints.toFixed(1)}</span>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-3 text-[11px] text-amber-200">No role-supported weekly rows are available from the current feeds, so no team-level weekly output is presented as usable.</p>
+        )}
+      </section>
       {productionCovered < rows.length * 0.6 ? (
         <div className="rounded-lg border border-amber-900/70 bg-amber-950/20 p-3 text-[11px] leading-5 text-amber-200">
           Football-model coverage is still ramping: {productionCovered}/
@@ -165,127 +178,6 @@ export default async function ForecastPage() {
           is treated as unknown—not negative evidence—and low-confidence
           probability outputs are withheld.
         </div>
-      ) : null}
-      {simulation.weeklyProjectionCoverage < 0.75 ? (
-        <div className="rounded-lg border border-amber-900/70 bg-amber-950/20 p-3 text-[11px] leading-5 text-amber-200">
-          Weekly consensus coverage is currently{" "}
-          {Math.round(simulation.weeklyProjectionCoverage * 100)}%. The forecast
-          remains hidden until pregame projections (including graded forecasts
-          kept in accuracy history) cover at least 75% of rostered skill players.
-        </div>
-      ) : null}
-      <section>
-        <SectionHeader
-          title="Orlando Oswalds forecast"
-          description={`League simulation · ${simulation.iterations.toLocaleString("en-US")} seasons · ${simulation.scheduleSource === "SLEEPER" ? "Sleeper schedule" : "balanced fallback schedule"}.`}
-        />
-        {mySim && weeklyForecastReady ? (
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
-            <MetricCard
-              label="Weekly projection"
-              value={mySim.projectedWeeklyPoints.toFixed(1)}
-              detail={`power #${mySim.powerRank}/12`}
-            />
-            <MetricCard
-              label="Expected wins"
-              value={mySim.expectedWins.toFixed(1)}
-              detail={`expected seed ${mySim.expectedSeed.toFixed(1)}`}
-            />
-            <MetricCard
-              label="Playoff odds"
-              value={formatProbability(mySim.playoffProbability)}
-            />
-            <MetricCard
-              label="Title odds"
-              value={formatProbability(mySim.championshipProbability)}
-            />
-            <MetricCard
-              label="Player model capital"
-              value={formatPoints(mySim.modelCapital)}
-              detail={`market ${formatPoints(mySim.marketCapital)}`}
-            />
-            <MetricCard
-              label="Team window"
-              value={mySim.window}
-              detail={`${simulation.completedWeeks} completed weeks in model`}
-            />
-          </div>
-        ) : (
-          <div className="rounded-lg border border-amber-900/70 bg-amber-950/20 p-4 text-sm text-amber-200">
-            Weekly and season-outcome forecast cards are unavailable until the
-            current consensus pass has projections or explicit no-role exclusions
-            for at least 75% of rostered skill players. Graded pregame projections
-            count toward coverage but remain history-only. Current coverage is{" "}
-            {Math.round(simulation.weeklyProjectionCoverage * 100)}%.
-          </div>
-        )}
-        <details className="mt-2 text-xs text-neutral-400"><summary className="cursor-pointer">How the forecast works</summary>        <p className="mt-2 text-[9px] leading-4 text-neutral-600">
-          Simulation probabilities are model outputs, not betting probabilities.
-          The canonical weekly-consensus projection feed now drives lineup
-          strength when available. Saved projections for completed games remain
-          available to the season model but are shown only in accuracy history;
-          players explicitly withheld for no current role contribute zero rather
-          than invented volume. Until the weekly feed has classified most rostered players,
-          season-outcome estimates remain
-          conservatively shrunk toward league-neutral priors. Recent-production
-          evidence remains a secondary fallback, not a competing projection
-          system.
-        </p></details>
-      </section>
-      {weeklyForecastReady ? (
-      <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3 sm:p-4">
-        <SectionHeader
-          title="Dynasty Boys title race"
-          description="Projected start-eligible weekly points drive game simulation; completed Sleeper results are retained when the regular season is underway."
-        />
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] text-xs">
-            <caption className="sr-only">
-              Simulated weekly scoring, expected wins, playoff odds, and title
-              odds for every Dynasty Boys team
-            </caption>
-            <thead>
-              <tr className="text-[9px] uppercase tracking-wide text-neutral-600">
-                <th className="pb-2 text-left">Team</th>
-                <th className="pb-2 text-right">Power</th>
-                <th className="pb-2 text-right">Proj PPG</th>
-                <th className="pb-2 text-right">Exp wins</th>
-                <th className="pb-2 text-right">Playoffs</th>
-                <th className="pb-2 text-right">Title</th>
-                <th className="pb-2 text-right">Window</th>
-              </tr>
-            </thead>
-            <tbody>
-              {simulation.rows.map((team) => (
-                <tr
-                  key={team.managerId}
-                  className="border-t border-neutral-800"
-                >
-                  <td className="py-2 text-neutral-200">{team.teamName}</td>
-                  <td className="py-2 text-right text-neutral-500">
-                    #{team.powerRank}
-                  </td>
-                  <td className="py-2 text-right text-neutral-300">
-                    {team.projectedWeeklyPoints.toFixed(1)}
-                  </td>
-                  <td className="py-2 text-right text-neutral-300">
-                    {team.expectedWins.toFixed(1)}
-                  </td>
-                  <td className="py-2 text-right text-neutral-300">
-                    {formatProbability(team.playoffProbability)}
-                  </td>
-                  <td className="py-2 text-right font-medium text-emerald-300">
-                    {formatProbability(team.championshipProbability)}
-                  </td>
-                  <td className="py-2 text-right text-neutral-500">
-                    {team.window}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
       ) : null}
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3">
@@ -369,19 +261,6 @@ export default async function ForecastPage() {
           description="An evidence-first dynasty board. KTC and trusted market values stay visible beside recent NFL production, opportunity, model fair value and weekly role. Missing football data remains unknown rather than negative evidence."
         />
         <PredictiveBoard rows={rows} />
-      </section>
-      <section>
-        <PredictiveTradeImpact
-          assets={assets}
-          context={simulation.context}
-          primaryManagerId={primary.id}
-          primaryManagerName={publicTeamName(
-            managerById.get(primary.id) ?? primary,
-          )}
-          baselinePlayoff={mySim?.playoffProbability ?? 0}
-          baselineTitle={mySim?.championshipProbability ?? 0}
-          evidenceWeight={simulation.evidenceWeight}
-        />
       </section>
       <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3 text-[10px] leading-5 text-neutral-500">
         <div className="font-semibold text-neutral-300">

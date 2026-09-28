@@ -6,20 +6,9 @@ import {
   runLeagueSimulation,
   type SimulationContext,
 } from "@/lib/simulationCore";
+import type { PredictiveTradeAsset } from "@/lib/tradeImpact";
 
-export interface PredictiveTradeAsset {
-  id: string;
-  assetType: "player" | "pick";
-  managerId: string;
-  managerName: string;
-  name: string;
-  position: string;
-  marketValue: number;
-  modelValue: number;
-  forecast1y: number;
-  projectedPpg: number;
-  slot: string;
-}
+export type { PredictiveTradeAsset } from "@/lib/tradeImpact";
 
 interface Props {
   assets: PredictiveTradeAsset[];

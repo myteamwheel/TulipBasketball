@@ -102,14 +102,18 @@ export default function WeeklyProjectionBoard({
         return b.projectedFantasyPoints - a.projectedFantasyPoints;
       });
 
-  const currentRows = filterRows(current, sort);
+  // The server already removes final games from `current`; this client-side
+  // guard makes the active board fail closed if a stale response ever contains
+  // a row that has since been graded.
+  const activeCurrent = current.filter((row) => row.actualFantasyPoints === null);
+  const currentRows = filterRows(activeCurrent, sort);
   const currentPageCount = Math.max(1, Math.ceil(currentRows.length / 25));
   const visibleCurrentPage = Math.min(currentPage, currentPageCount);
   const visibleCurrentRows = currentRows.slice(
     (visibleCurrentPage - 1) * 25,
     visibleCurrentPage * 25,
   );
-  const currentIds = new Set(current.map((row) => row.playerId));
+  const currentIds = new Set(activeCurrent.map((row) => row.playerId));
   const lockedIds = new Set(unavailable.filter((row) => row.status === "ALREADY_PLAYED").map((row) => row.playerId));
   const totalWithheldCount = unavailable.filter((row) => !currentIds.has(row.playerId)).length;
   const unavailableRows = unavailable
@@ -117,7 +121,7 @@ export default function WeeklyProjectionBoard({
     .filter((row) => matchesSearch(row.playerName, row.nflTeam, row.position))
     .sort((a, b) => a.playerName.localeCompare(b.playerName));
   const accountedPlayerCount = new Set([
-    ...current.map((row) => row.playerId),
+    ...activeCurrent.map((row) => row.playerId),
     ...unavailable.map((row) => row.playerId),
     ...history
       .filter((row) => row.season === season && row.week === week && row.actualFantasyPoints !== null)
@@ -197,7 +201,7 @@ export default function WeeklyProjectionBoard({
               supported Week {week} role.
             </p>
             <p className="mt-1 text-[10px] text-neutral-400">
-              All {accountedPlayerCount} rostered QB/RB/WR/TE players are accounted for: {current.length} active projections, {totalWithheldCount} withheld with a reason, and {completedCurrentWeekCount} completed players shown only in accuracy history.
+              All {accountedPlayerCount} rostered QB/RB/WR/TE players are accounted for: {activeCurrent.length} active projections, {totalWithheldCount} withheld with a reason, and {completedCurrentWeekCount} completed players shown only in accuracy history.
             </p>
             {!scheduleStatusAvailable ? (
               <p role="status" className="mt-1 text-[10px] text-amber-300">
@@ -219,17 +223,67 @@ export default function WeeklyProjectionBoard({
             <option value="confidence">Confidence</option>
           </select>
         </div>
-        <div className="space-y-2 md:hidden">
+        <div className="space-y-2 lg:hidden">
           {visibleCurrentRows.map((row) => (
-            <article key={row.id} className="rounded-lg border border-neutral-800 bg-neutral-900 p-3">
-              <div className="flex items-start justify-between gap-3"><div><div className="font-semibold text-neutral-100">{row.playerName}{lockedIds.has(row.playerId) ? <span className="ml-1 rounded bg-amber-950 px-1.5 py-0.5 text-[10px] text-amber-300">LOCKED</span> : null}</div><div className="text-xs text-neutral-400">{row.position}{row.nflTeam ? ` · ${row.nflTeam}` : ""} · {row.confidence} confidence</div></div><div className="text-xl font-semibold text-emerald-300">{row.projectedFantasyPoints.toFixed(1)}</div></div>
-              <div className="mt-3 text-xs text-neutral-300">Sleeper {number(row.sourceBreakdown.sleeperPoints)} · CBS {number(row.sourceBreakdown.cbsPoints)} · Model {number(row.sourceBreakdown.localModelPoints)}</div>
-              <div className="mt-1 text-xs text-sky-300">Odds: {oddsContext(row)}</div>
-              <div className="mt-3 rounded bg-neutral-950 p-2 text-xs text-neutral-300">{statLine(row.position, row.projectedStats)}</div>
+            <article
+              key={row.id}
+              className="rounded-lg border border-neutral-800 bg-neutral-900 p-3"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="font-semibold text-neutral-100">
+                    {row.playerName}
+                    {lockedIds.has(row.playerId) ? (
+                      <span className="ml-1 rounded bg-amber-950 px-1.5 py-0.5 text-[10px] text-amber-300">
+                        LOCKED
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="text-xs text-neutral-400">
+                    {row.position}
+                    {row.nflTeam ? ` · ${row.nflTeam}` : ""} · {row.confidence} confidence
+                  </div>
+                </div>
+                <div className="shrink-0 text-right">
+                  <div className="text-[10px] font-medium uppercase tracking-wide text-neutral-500">
+                    Final FP
+                  </div>
+                  <div className="text-xl font-semibold tabular-nums text-emerald-300">
+                    {row.projectedFantasyPoints.toFixed(1)}
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                <div className="rounded-md bg-neutral-950 px-2 py-1.5 text-neutral-300">
+                  <div className="text-[10px] uppercase tracking-wide text-neutral-500">
+                    Source blend
+                  </div>
+                  <div className="mt-1 tabular-nums">
+                    Sleeper {number(row.sourceBreakdown.sleeperPoints)} · CBS {number(row.sourceBreakdown.cbsPoints)} · Model {number(row.sourceBreakdown.localModelPoints)}
+                  </div>
+                </div>
+                <div className="rounded-md bg-neutral-950 px-2 py-1.5 text-sky-300">
+                  <div className="text-[10px] uppercase tracking-wide text-neutral-500">
+                    Odds context
+                  </div>
+                  <div className="mt-1">{oddsContext(row)}</div>
+                </div>
+              </div>
+              <details className="mt-2 rounded-md bg-neutral-950 px-2 py-1.5 text-xs text-neutral-300">
+                <summary className="cursor-pointer font-medium text-neutral-400">
+                  Projected stat line
+                </summary>
+                <p className="mt-1 leading-5">{statLine(row.position, row.projectedStats)}</p>
+              </details>
+              {lockedIds.has(row.playerId) ? (
+                <p className="mt-2 text-[10px] text-amber-300">
+                  Game has started. This pregame forecast is locked until final stats move it to accuracy history.
+                </p>
+              ) : null}
             </article>
           ))}
         </div>
-        <div className="hidden overflow-x-auto rounded-lg border border-neutral-800 md:block">
+        <div className="hidden overflow-x-auto rounded-lg border border-neutral-800 lg:block">
           <table className="w-full min-w-[1520px] text-xs">
             <thead>
               <tr className="bg-neutral-950 text-[9px] uppercase tracking-wide text-neutral-600">
@@ -359,7 +413,87 @@ export default function WeeklyProjectionBoard({
           </select>
         </div>
 
-        <div className="overflow-x-auto rounded-lg border border-neutral-800">
+        <div className="space-y-2 lg:hidden">
+          {historyRows.map((row) => {
+            const accuracy = accuracyPercent(row);
+            return (
+              <article
+                key={row.id}
+                className="rounded-lg border border-neutral-800 bg-neutral-900 p-3"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="font-semibold text-neutral-100">
+                      {row.playerName}
+                    </div>
+                    <div className="text-xs text-neutral-400">
+                      {row.position}
+                      {row.nflTeam ? ` · ${row.nflTeam}` : ""} · {row.season} Week {row.week}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-[10px] uppercase tracking-wide text-neutral-500">
+                      Accuracy
+                    </div>
+                    <div className={`text-lg font-semibold tabular-nums ${accuracyColor(accuracy)}`}>
+                      {accuracy === null ? "—" : `${accuracy.toFixed(1)}%`}
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <div className="rounded-md border border-sky-900/60 bg-sky-950/20 p-2">
+                    <div className="text-[10px] font-medium uppercase tracking-wide text-sky-400">
+                      Projected
+                    </div>
+                    <div className="mt-1 text-lg font-semibold tabular-nums text-sky-200">
+                      {row.projectedFantasyPoints.toFixed(1)} FP
+                    </div>
+                  </div>
+                  <div className="rounded-md border border-emerald-900/60 bg-emerald-950/20 p-2">
+                    <div className="text-[10px] font-medium uppercase tracking-wide text-emerald-400">
+                      Actual
+                    </div>
+                    <div className="mt-1 text-lg font-semibold tabular-nums text-emerald-200">
+                      {number(row.actualFantasyPoints)} FP
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                  <div className="rounded-md bg-neutral-950 px-2 py-1.5 text-neutral-400">
+                    Absolute error <span className="float-right font-medium tabular-nums text-neutral-200">{number(row.absoluteError)}</span>
+                  </div>
+                  <div className={`rounded-md bg-neutral-950 px-2 py-1.5 ${row.signedError === null ? "text-neutral-500" : Math.abs(row.signedError) <= 5 ? "text-emerald-300" : Math.abs(row.signedError) <= 10 ? "text-amber-300" : "text-red-400"}`}>
+                    Bias <span className="float-right font-medium tabular-nums">{row.signedError === null ? "—" : `${row.signedError > 0 ? "+" : ""}${row.signedError.toFixed(1)}`}</span>
+                  </div>
+                </div>
+                <details className="mt-2 rounded-md bg-neutral-950 px-2 py-1.5 text-xs">
+                  <summary className="cursor-pointer font-medium text-neutral-400">
+                    Compare stat lines
+                  </summary>
+                  <div className="mt-2 rounded border border-sky-900/60 bg-sky-950/20 px-2 py-1.5 leading-5 text-sky-200">
+                    <span className="mr-1 font-semibold uppercase tracking-wide text-sky-400">
+                      Projected
+                    </span>
+                    {statLine(row.position, row.projectedStats)}
+                  </div>
+                  <div className="mt-1 rounded border border-emerald-900/60 bg-emerald-950/20 px-2 py-1.5 leading-5 text-emerald-200">
+                    <span className="mr-1 font-semibold uppercase tracking-wide text-emerald-400">
+                      Actual
+                    </span>
+                    {statLine(row.position, row.actualStats)}
+                  </div>
+                </details>
+              </article>
+            );
+          })}
+          {!historyRows.length ? (
+            <div className="rounded-lg border border-neutral-800 bg-neutral-900 px-3 py-8 text-center text-xs text-neutral-600">
+              No completed projections match these filters.
+            </div>
+          ) : null}
+        </div>
+
+        <div className="hidden overflow-x-auto rounded-lg border border-neutral-800 lg:block">
           <table className="w-full min-w-[1040px] text-xs">
             <thead>
               <tr className="bg-neutral-950 text-[9px] uppercase tracking-wide text-neutral-600">
@@ -402,6 +536,13 @@ export default function WeeklyProjectionBoard({
                   </td>
                 </tr>
               ))}
+              {!historyRows.length ? (
+                <tr>
+                  <td colSpan={8} className="px-3 py-8 text-center text-xs text-neutral-600">
+                    No completed projections match these filters.
+                  </td>
+                </tr>
+              ) : null}
             </tbody>
           </table>
         </div>

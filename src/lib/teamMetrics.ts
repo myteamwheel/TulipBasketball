@@ -19,6 +19,7 @@ import {
 } from "@/lib/pickValuation";
 import { getProjectionDashboardData } from "@/lib/weeklyProjection";
 import { projectOptimalWeeklyPoints } from "@/lib/lineupProjection";
+import { unstable_cache } from "next/cache";
 
 export interface TeamDraftPickValue {
   id: string;
@@ -154,7 +155,7 @@ function ordinalRound(round: number) {
         ? "3rd"
         : `${round}th`;
 }
-export async function computeAllTeamValuations(): Promise<TeamValuation[]> {
+async function computeAllTeamValuationsUncached(): Promise<TeamValuation[]> {
   const [managers, entries, league, pickState, pickOwnershipState, slotMap] =
     await Promise.all([
       getAllManagers(),
@@ -405,4 +406,29 @@ export async function computeAllTeamValuations(): Promise<TeamValuation[]> {
       changeSinceBaselineCoverage,
     };
   });
+}
+
+/**
+ * League valuation is shared by the home, league, trade, waiver and audit
+ * surfaces. It only changes after an ingestion run, so key the short-lived
+ * cache by that run instead of recomputing the same full-roster market joins
+ * for every route transition. A newly recorded run naturally receives a new
+ * cache key, while the five-minute window protects the site from a burst of
+ * repeated navigation during the week.
+ */
+export async function computeAllTeamValuations(): Promise<TeamValuation[]> {
+  const latest = await prisma.refreshRun.findFirst({
+    where: {
+      sleeperSyncOk: true,
+      league: { sleeperId: SLEEPER_LEAGUE_ID },
+    },
+    orderBy: { startedAt: "desc" },
+    select: { id: true },
+  });
+  const cached = unstable_cache(
+    computeAllTeamValuationsUncached,
+    ["team-valuations", latest?.id ?? "no-refresh-run"],
+    { revalidate: 300 },
+  );
+  return cached();
 }

@@ -98,6 +98,8 @@ export type AuditSnapshotData = {
     season: number;
     week: number;
     projected: number;
+    /** Older stored snapshots predate kickoff-lock accounting. */
+    locked?: number;
     withheld: number;
     classified: number;
     rosteredSkillPlayers: number;
@@ -513,6 +515,17 @@ export async function buildLiveAuditData(
           POSITIONS.indexOf(b.position as (typeof POSITIONS)[number]) ||
         (b.value ?? -1) - (a.value ?? -1),
     );
+  const lockedCurrentIds = new Set(
+    projection.unavailable
+      .filter((row) => row.status === "ALREADY_PLAYED")
+      .map((row) => row.playerId),
+  );
+  const activeCurrent = projection.current.filter(
+    (row) => !lockedCurrentIds.has(row.playerId),
+  );
+  const explicitlyWithheld = projection.unavailable.filter(
+    (row) => row.status !== "ALREADY_PLAYED",
+  );
   const projectedByPlayer = new Map(
     projection.current.map((row) => [row.playerId, row.projectedFantasyPoints]),
   );
@@ -574,8 +587,9 @@ export async function buildLiveAuditData(
     projection: {
       season: projection.season,
       week: projection.week,
-      projected: projection.current.length,
-      withheld: projection.unavailable.length,
+      projected: activeCurrent.length,
+      locked: lockedCurrentIds.size,
+      withheld: explicitlyWithheld.length,
       classified,
       rosteredSkillPlayers,
       coverage,
@@ -684,6 +698,21 @@ export async function getAuditSnapshot(snapshotDate?: string | null) {
         LIMIT 1
       `);
   return rows[0] ? parseData(rows[0].data) : null;
+}
+
+/**
+ * The saved audit and the dashboard refresh are intentionally separate
+ * artifacts: a refresh can succeed while a new audit snapshot is withheld for
+ * validation (most commonly incomplete weekly-projection coverage). Pages use
+ * this metadata to state that distinction instead of presenting an older
+ * snapshot as if it were rebuilt by the latest pass.
+ */
+export async function getLatestAuditRefresh() {
+  return prisma.refreshRun.findFirst({
+    where: { league: { sleeperId: SLEEPER_LEAGUE_ID } },
+    orderBy: { startedAt: "desc" },
+    select: { id: true, status: true, startedAt: true, finishedAt: true },
+  });
 }
 
 export async function getAuditDashboardData(snapshotDate?: string | null) {

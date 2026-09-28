@@ -58,6 +58,18 @@ export default function PredictiveBoard({
         }),
     [rows, query, position, sort, includeContextRows],
   );
+  const sortLabel =
+    sort === "edge"
+      ? "model-edge value, highest first"
+      : sort === "edgePercent"
+        ? "model-edge percentage, highest first"
+        : sort === "market"
+          ? "KTC market value, highest first"
+          : sort === "model"
+            ? "model fair value, highest first"
+            : sort === "recent"
+              ? "recent NFL PPG, highest first"
+              : "opportunity per game, highest first";
 
   return (
     <div className="space-y-3">
@@ -104,6 +116,9 @@ export default function PredictiveBoard({
           Show context rows
         </label>
       </div>
+      <p aria-live="polite" className="text-[10px] text-neutral-500">
+        Sorted by {sortLabel}.
+      </p>
 
       <div className="overflow-x-auto rounded-lg border border-neutral-800">
         <table className="w-full min-w-[960px] text-xs">
@@ -118,9 +133,25 @@ export default function PredictiveBoard({
               <th className="px-2 py-2 text-right">Model fair</th>
               <th className="px-2 py-2 text-right">
                 <span className="inline-flex items-center gap-1">
-                  <button type="button" onClick={() => setSort("edge")} aria-pressed={sort === "edge"} className={sort === "edge" ? "text-emerald-300" : "hover:text-neutral-300"}>Edge value</button>
+                  <button
+                    type="button"
+                    onClick={() => setSort("edge")}
+                    aria-label="Sort by model-edge value"
+                    aria-pressed={sort === "edge"}
+                    className={sort === "edge" ? "text-emerald-300" : "hover:text-neutral-300"}
+                  >
+                    Edge value{sort === "edge" ? " ↓" : ""}
+                  </button>
                   <span aria-hidden="true">/</span>
-                  <button type="button" onClick={() => setSort("edgePercent")} aria-pressed={sort === "edgePercent"} className={sort === "edgePercent" ? "text-emerald-300" : "hover:text-neutral-300"}>%</button>
+                  <button
+                    type="button"
+                    onClick={() => setSort("edgePercent")}
+                    aria-label="Sort by model-edge percentage"
+                    aria-pressed={sort === "edgePercent"}
+                    className={sort === "edgePercent" ? "text-emerald-300" : "hover:text-neutral-300"}
+                  >
+                    %{sort === "edgePercent" ? " ↓" : ""}
+                  </button>
                 </span>
               </th>
               <th className="px-2 py-2 text-right">Recent NFL PPG</th>

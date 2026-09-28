@@ -38,8 +38,31 @@ export default async function LeaguePage() {
   const rosterChange = new Map<string, number>();
   for (const tx of transactions) for (const [kind, record] of [[1, parseRecord(tx.adds)], [-1, parseRecord(tx.drops)]] as const) for (const [sleeperId, rosterId] of Object.entries(record)) { const playerId = playerBySleeper.get(sleeperId); const managerId = managerByRoster.get(Number(rosterId)); const value = playerId ? txMarket.get(playerId)?.currentValue : null; if (managerId && value !== null && value !== undefined) rosterChange.set(managerId, (rosterChange.get(managerId) ?? 0) + kind * value); }
 
-  const rangeEligible = entries.map((entry) => ({ entry, market: marketData.get(entry.playerId)! })).filter(({ market }) => !market.isStale && market.high && market.low && market.distanceFromHigh !== null && market.low.value > 0 && (market.high.value - market.low.value) / market.low.value >= .05);
-  const nearHigh = [...rangeEligible].sort((a, b) => (b.market.distanceFromHigh?.percent ?? -999) - (a.market.distanceFromHigh?.percent ?? -999)).slice(0, 8);
+  const rangeEligible = entries
+    .map((entry) => {
+      const market = marketData.get(entry.playerId)!;
+      const high = market.high?.value ?? null;
+      const low = market.low?.value ?? null;
+      const rangePercent = high !== null && low !== null && low > 0
+        ? ((high - low) / low) * 100
+        : null;
+      return { entry, market, rangePercent };
+    })
+    .filter(({ market, rangePercent }) =>
+      !market.isStale &&
+      market.high &&
+      market.low &&
+      market.distanceFromHigh !== null &&
+      rangePercent !== null &&
+      rangePercent >= 5,
+    );
+  const nearHigh = [...rangeEligible]
+    .sort(
+      (a, b) =>
+        Math.abs(a.market.distanceFromHigh?.percent ?? Infinity) -
+        Math.abs(b.market.distanceFromHigh?.percent ?? Infinity),
+    )
+    .slice(0, 8);
   const drawdowns = [...rangeEligible].filter(({ market }) => (market.distanceFromHigh?.percent ?? 0) < 0).sort((a, b) => (a.market.distanceFromHigh?.percent ?? 0) - (b.market.distanceFromHigh?.percent ?? 0)).slice(0, 8);
 
   return <div className="min-w-0 space-y-7">
@@ -48,6 +71,6 @@ export default async function LeaguePage() {
     <section><SectionHeader title="League movers" description="Only changes between consecutive fresh readings count as movement."/><RiserFallerTabs rows={moverRows}/></section>
     <section><SectionHeader title={draftAvailable ? "Known dynasty capital" : "Known player capital"} description="Seven-day market movement and roster-composition change from trades/adds are shown separately."/><div className="space-y-2">{capitalOrder.map((value) => { const marketChange = value.change7dCoverage / Math.max(1, value.playerCount) >= .75 ? value.change7d : null; const capital = draftAvailable ? value.totalDynastyValue : value.playerCapital; return <Link href={value.managerId === primary?.id ? "/#capital" : `/league/${value.managerId}`} key={value.managerId} className="block rounded-lg border border-neutral-800 bg-neutral-900 p-3"><div className="flex justify-between"><div><div className="font-semibold">#{(draftAvailable ? ranks.total : ranks.players).get(value.managerId)} · {value.teamName}</div><div className="text-xs text-neutral-400">{value.lastKnownPlayerCount}/{value.playerCount} known · {value.draftPickCount} picks</div></div><div className="text-lg font-semibold">{value.managerId === primary?.id ? "View My Team capital →" : formatPoints(capital)}</div></div><div className="mt-3 grid grid-cols-3 gap-2 text-center sm:grid-cols-6">{[["Players", ranks.players.get(value.managerId)], ["Picks", draftAvailable ? ranks.picks.get(value.managerId) : "—"], ["Lineup", ranks.lineup.get(value.managerId)], ["Depth", ranks.depth.get(value.managerId)]].map(([label, value]) => <div key={String(label)} className="rounded bg-neutral-950 p-2"><div className="text-xs text-neutral-400">{label}</div><div>#{value}</div></div>)}<div className="rounded bg-neutral-950 p-2"><div className="text-xs text-neutral-400">7d market</div><div className={trendColorClass(marketChange)}>{formatSigned(marketChange)}</div></div><div className="rounded bg-neutral-950 p-2"><div className="text-xs text-neutral-400">7d roster</div><div className={trendColorClass(rosterChange.get(value.managerId) ?? 0)}>{formatSigned(rosterChange.get(value.managerId) ?? 0)}</div></div></div></Link>; })}</div></section>
     <section><SectionHeader title="Start-eligible position leaders" description="The top five plus Orlando Oswalds when outside the top five."/><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{POSITIONS.map((position) => { const all = [...valuations].sort((a, b) => (b.positionalStarterValue[position] ?? 0) - (a.positionalStarterValue[position] ?? 0)); const top = all.slice(0, 5); const own = all.find((value) => value.managerId === primary?.id); const shown = own && !top.some((value) => value.managerId === own.managerId) ? [...top, own] : top; return <div key={position} className="rounded-lg border border-neutral-800 bg-neutral-900 p-3"><h3 className="font-semibold">{position}</h3><ol className="mt-2 space-y-2">{shown.map((value) => { const index = all.findIndex((row) => row.managerId === value.managerId); return <li key={value.managerId} className={`flex justify-between text-xs ${value.managerId === primary?.id ? "rounded bg-emerald-950/30 p-1 text-emerald-300" : ""}`}><Link href={`/league/${value.managerId}`}>#{index + 1} {value.teamName}{value.managerId === primary?.id ? " · You" : ""}</Link><span>{formatPoints(value.positionalStarterValue[position])}</span></li>; })}</ol></div>; })}</div></section>
-    {rangeEligible.length ? <section><SectionHeader title="Decision-grade tracked range" description="Requires a tracked high at least 5% above the low; flat prices are excluded."/><div className="grid gap-3 lg:grid-cols-2"><div className="rounded-lg border border-neutral-800 bg-neutral-900 p-3"><h3 className="mb-2 font-semibold">Closest to tracked high</h3>{nearHigh.map(({ entry, market }) => <Link key={entry.playerId} href={`/players/${entry.playerId}`} className="flex justify-between px-2 py-2 text-xs"><span>{entry.player.fullName}</span><span>{formatPercent(market.distanceFromHigh?.percent)}</span></Link>)}</div><div className="rounded-lg border border-neutral-800 bg-neutral-900 p-3"><h3 className="mb-2 font-semibold">Largest drawdowns</h3>{drawdowns.map(({ entry, market }) => <Link key={entry.playerId} href={`/players/${entry.playerId}`} className="flex justify-between px-2 py-2 text-xs"><span>{entry.player.fullName}</span><span className="text-red-300">{formatPercent(market.distanceFromHigh?.percent)}</span></Link>)}</div></div></section> : null}
+    {rangeEligible.length ? <section><SectionHeader title="Decision-grade tracked range" description="Requires a meaningful multi-state range: the tracked high must be at least 5% above the low. Flat prices are excluded; a player currently at a genuine tracked high is labeled explicitly instead of shown as a confusing 0%."/><div className="grid gap-3 lg:grid-cols-2"><div className="rounded-lg border border-neutral-800 bg-neutral-900 p-3"><h3 className="mb-2 font-semibold">Closest to tracked high</h3>{nearHigh.map(({ entry, market, rangePercent }) => { const distance = market.distanceFromHigh?.percent ?? null; return <Link key={entry.playerId} href={`/players/${entry.playerId}`} className="flex items-center justify-between gap-3 px-2 py-2 text-xs"><span>{entry.player.fullName}</span><span className="shrink-0 text-right text-neutral-500">{distance === 0 ? "At tracked high" : `${formatPercent(distance)} from high`} · {formatPercent(rangePercent)} range</span></Link>; })}</div><div className="rounded-lg border border-neutral-800 bg-neutral-900 p-3"><h3 className="mb-2 font-semibold">Largest drawdowns</h3>{drawdowns.map(({ entry, market, rangePercent }) => <Link key={entry.playerId} href={`/players/${entry.playerId}`} className="flex items-center justify-between gap-3 px-2 py-2 text-xs"><span>{entry.player.fullName}</span><span className="shrink-0 text-right text-red-300">{formatPercent(market.distanceFromHigh?.percent)} from high · {formatPercent(rangePercent)} range</span></Link>)}</div></div></section> : null}
   </div>;
 }

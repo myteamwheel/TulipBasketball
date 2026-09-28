@@ -70,9 +70,12 @@ const sortLabels: Array<[SortKey, string]> = [
 export default function PlayerTable({
   rows,
   showOwner = false,
+  perspectiveTeamName = "Orlando Oswalds",
 }: {
   rows: PlayerRow[];
   showOwner?: boolean;
+  /** The roster whose recommendations and table label are being shown. */
+  perspectiveTeamName?: string;
 }) {
   const [sortKey, setSortKey] = useState<SortKey>("currentValue");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
@@ -168,13 +171,13 @@ export default function PlayerTable({
     <div className="min-w-0 overflow-hidden rounded-lg border border-neutral-800 bg-neutral-900">
       <details className="border-b border-neutral-800 px-3 py-2 text-xs text-neutral-400">
         <summary className="cursor-pointer font-medium text-neutral-300">Signal legend and perspective</summary>
-        <p className="mt-2 leading-5">SELL HIGH: within 10% of a tracked high, up more than 5% in 7 days or 10% in 30 days, signal score at least 66, and surplus/bench/taxi or an older player on a rebuilding team. BUY LOW: at least 30% below the high, value at least 800, a positional need and no injury flag. WATCH: stale, short or volatile evidence. HIGH DATA: at least six observations, three in 14 days, a seven-day span and daily volatility below 12%. Team windows come from the league simulation; an older player&apos;s position and age also affect the score. {showOwner ? "League-player signals are advice for that player's current owner." : "These signals are from the Orlando Oswalds perspective."}</p>
+        <p className="mt-2 leading-5">SELL HIGH: within 10% of a tracked high, up more than 5% in 7 days or 10% in 30 days, signal score at least 66, and surplus/bench/taxi or an older player on a rebuilding team. BUY LOW: at least 30% below the high, value at least 800, a positional need and no injury flag. WATCH: stale, short or volatile evidence. HIGH DATA: at least six observations, three in 14 days, a seven-day span and daily volatility below 12%. Team windows come from the league simulation; an older player&apos;s position and age also affect the score. {showOwner ? "League-player signals are advice for that player's current owner." : `These signals are from the ${perspectiveTeamName} perspective.`}</p>
       </details>
       <div className="border-b border-neutral-800 p-3 space-y-2">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <input
             aria-label={
-              showOwner ? "Search league players" : "Search Orlando Oswalds roster"
+              showOwner ? "Search league players" : `Search ${perspectiveTeamName} roster`
             }
             value={search}
             onChange={(event) => {
@@ -184,7 +187,7 @@ export default function PlayerTable({
             placeholder={
               showOwner
                 ? "Search player, team or NFL team…"
-                : "Search player or NFL team…"
+              : `Search ${perspectiveTeamName} player or NFL team…`
             }
             className="h-9 min-w-0 flex-1 rounded-md border border-neutral-700 bg-neutral-950 px-3 text-xs text-neutral-100"
           />
@@ -367,7 +370,7 @@ export default function PlayerTable({
           <caption className="sr-only">
             {showOwner
               ? "All rostered league players"
-              : "Orlando Oswalds roster players"}
+              : `${perspectiveTeamName} roster players`}
           </caption>
           <thead>
             <tr className="border-b border-neutral-800 text-[10px] uppercase tracking-wide text-neutral-500">

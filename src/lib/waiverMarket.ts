@@ -21,6 +21,7 @@ export interface WaiverMarketRow {
   change30dPercent: number | null;
   projectedPoints: number | null;
   projectedRole: string;
+  isKickoffLocked: boolean;
   need: string;
 }
 
@@ -56,6 +57,11 @@ export async function getWaiverMarket(): Promise<{ rows: WaiverMarketRow[]; valu
     computeAllTeamValuations(), getRosters(SLEEPER_LEAGUE_ID).catch(() => []), getLeague(SLEEPER_LEAGUE_ID),
   ]);
   const projectionByPlayer = new Map((projection?.current ?? []).map((item) => [item.playerId, item.projectedFantasyPoints]));
+  const kickoffLocked = new Set(
+    (projection?.unavailable ?? [])
+      .filter((row) => row.status === "ALREADY_PLAYED")
+      .map((row) => row.playerId),
+  );
   const needRank = new Map(["QB", "RB", "WR", "TE"].map(position => {
     const ranked = [...teams].sort((a, b) => (b.positionalStarterValue[position] ?? 0) - (a.positionalStarterValue[position] ?? 0));
     return [position, ranked.findIndex(team => team.managerId === primary?.id) + 1] as const;
@@ -78,7 +84,16 @@ export async function getWaiverMarket(): Promise<{ rows: WaiverMarketRow[]; valu
       change30dPoints: data.change30d?.points ?? null,
       change30dPercent: data.change30d?.percent ?? null,
       projectedPoints,
-      projectedRole: projectedPoints === null ? (availability.get(row.id) ?? "No current forecast") : projectedPoints >= 12 ? "Weekly starter" : projectedPoints >= 7 ? "Flex / matchup" : "Depth",
+      projectedRole: kickoffLocked.has(row.id)
+        ? "Kickoff locked"
+        : projectedPoints === null
+          ? (availability.get(row.id) ?? "No current forecast")
+          : projectedPoints >= 12
+            ? "Weekly starter"
+            : projectedPoints >= 7
+              ? "Flex / matchup"
+              : "Depth",
+      isKickoffLocked: kickoffLocked.has(row.id),
       need: `${(needRank.get(row.position) ?? 0) > teams.length / 2 ? "Priority" : "Depth"} · your ${row.position} rank #${needRank.get(row.position) ?? "—"}/${teams.length}`,
     } satisfies WaiverMarketRow;
   }).sort((a,b)=>b.currentValue-a.currentValue);

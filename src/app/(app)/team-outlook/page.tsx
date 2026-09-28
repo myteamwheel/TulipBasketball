@@ -127,7 +127,11 @@ export default async function TeamOutlookPage() {
             Playoff and title estimates, each roster&apos;s strongest and thinnest position groups, and a strategy tied to the team&apos;s modeled window.
           </p>
         </div>
-        <Link href="/forecast" className="w-fit rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-xs text-neutral-300 hover:bg-neutral-800">Open Predictions →</Link>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/team-outlook/trade-impact" className="w-fit rounded-md border border-emerald-800 bg-emerald-950/30 px-3 py-2 text-xs text-emerald-300 hover:bg-emerald-950/50">Trade impact →</Link>
+          <Link href="/trade-finder" className="w-fit rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-xs text-neutral-300 hover:bg-neutral-800">Trade targets →</Link>
+          <Link href="/forecast" className="w-fit rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-xs text-neutral-300 hover:bg-neutral-800">Open Predictions →</Link>
+        </div>
       </section>
 
       <div className={`rounded-lg border p-3 text-sm leading-5 ${coverage < 75 ? "border-amber-900/70 bg-amber-950/20 text-amber-200" : "border-neutral-800 bg-neutral-900 text-neutral-300"}`}>

@@ -155,6 +155,7 @@ type PlayerRow = {
   position: string;
   nflTeam: string | null;
   status: string | null;
+  mappingStatus: "MAPPED" | "NEEDS_REVIEW" | "UNMAPPED";
   currentValue: number | null;
 };
 
@@ -496,6 +497,13 @@ function availabilityReason(
   catalogPlayer: Awaited<ReturnType<typeof getPlayerCatalog>>[string] | undefined,
   external: ExternalWeeklyProjection[],
 ) {
+  // Weekly feeds are joined to Sleeper players through the same cross-provider
+  // identity that powers market data. Do not turn an unresolved or ambiguous
+  // identity into an actionable forecast just because a similarly named player
+  // has a source row.
+  if (player.mappingStatus !== "MAPPED") {
+    return "Identity mapping needs review; weekly projection is withheld until the cross-provider player identity is verified";
+  }
   const team = catalogPlayer ? (catalogPlayer.team ?? null) : player.nflTeam;
   const status = String(catalogPlayer?.status ?? player.status ?? "").toLowerCase();
   const injury = String(catalogPlayer?.injury_status ?? "").toLowerCase();
@@ -556,7 +564,7 @@ async function upsertAvailability(
 
 async function currentPlayers(includeFreeAgents = false): Promise<PlayerRow[]> {
   return prisma.$queryRawUnsafe<PlayerRow[]>(`
-    SELECT p.id, p."sleeperId", p."fullName", p.position, p."nflTeam", p.status,
+    SELECT p.id, p."sleeperId", p."fullName", p.position, p."nflTeam", p.status, p."mappingStatus",
       (
         SELECT k.value
         FROM "KtcObservation" k
@@ -1064,7 +1072,11 @@ async function readProjectionDashboardData(includeFreeAgents = false) {
         game.completed &&
         game.teams.some((gameTeam) => scheduleTeam(gameTeam) === scheduleTeam(team)),
     ) === true;
-  const rosteredIds = new Set((await currentPlayers(includeFreeAgents)).map(player => player.id));
+  const rosteredPlayers = await currentPlayers(includeFreeAgents);
+  const rosteredById = new Map(
+    rosteredPlayers.map((player) => [player.id, player]),
+  );
+  const rosteredIds = new Set(rosteredPlayers.map((player) => player.id));
   const currentRaw = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(`
     SELECT DISTINCT ON ("playerId") *
     FROM "WeeklyProjection"
@@ -1086,8 +1098,30 @@ async function readProjectionDashboardData(includeFreeAgents = false) {
       AND "createdAt" >= now() - interval '36 hours'
     ORDER BY "playerId", "asOfDate" DESC, "createdAt" DESC
   `);
-  const unavailable: ProjectionAvailabilityRow[] = availabilityRaw
+  // Protect the active board immediately, including forecasts written before
+  // an identity was later marked for review. The next refresh also persists
+  // the same explicit EXCLUDED reason through availabilityReason above.
+  const identityWithheld: ProjectionAvailabilityRow[] = rosteredPlayers
+    .filter((player) => player.mappingStatus !== "MAPPED")
+    .map((player) => ({
+      playerId: player.id,
+      playerName: player.fullName,
+      position: player.position,
+      nflTeam: player.nflTeam,
+      season,
+      week,
+      asOfDate: easternDate(),
+      status: "EXCLUDED" as const,
+      reason:
+        "Identity mapping needs review; weekly projection is withheld until the cross-provider player identity is verified",
+      sourceNames: [],
+    }));
+  const unavailable: ProjectionAvailabilityRow[] = [
+    ...identityWithheld,
+    ...availabilityRaw
     .filter((row) => {
+      const player = rosteredById.get(String(row.playerId));
+      if (!player || player.mappingStatus !== "MAPPED") return false;
       const projection = currentRaw.find((candidate) => candidate.playerId === row.playerId);
       const hasActualResult = projection?.actualFantasyPoints !== null && projection?.actualFantasyPoints !== undefined;
       const isFresh = projection
@@ -1137,17 +1171,35 @@ async function readProjectionDashboardData(includeFreeAgents = false) {
             ]
           : [],
       };
-    });
+    }),
+  ];
   return {
     season,
     week,
-    current: currentRaw.filter(row => rosteredIds.has(String(row.playerId)) && availabilityRaw.some(availability => {
-      if (availability.playerId !== row.playerId) return false;
-      const hasActualResult = row.actualFantasyPoints !== null && row.actualFantasyPoints !== undefined;
-      const isFresh = new Date(String(row.createdAt)).getTime() >= Date.now() - 36 * 3600000;
-      const placement = projectionRowPlacement(String(availability.status) as ProjectionAvailabilityRow["status"], hasActualResult, isFresh);
-      return placement === "CURRENT" || placement === "CURRENT_LOCKED";
-    })).filter(row => !isGameComplete(row.nflTeam)).map(normalizeProjectionRow),
+    current: currentRaw
+      .filter(
+        (row) =>
+          rosteredById.get(String(row.playerId))?.mappingStatus === "MAPPED" &&
+          availabilityRaw.some((availability) => {
+            if (availability.playerId !== row.playerId) return false;
+            const hasActualResult =
+              row.actualFantasyPoints !== null &&
+              row.actualFantasyPoints !== undefined;
+            const isFresh =
+              new Date(String(row.createdAt)).getTime() >=
+              Date.now() - 36 * 3600000;
+            const placement = projectionRowPlacement(
+              String(
+                availability.status,
+              ) as ProjectionAvailabilityRow["status"],
+              hasActualResult,
+              isFresh,
+              isGameComplete(row.nflTeam),
+            );
+            return placement === "CURRENT" || placement === "CURRENT_LOCKED";
+          }),
+      )
+      .map(normalizeProjectionRow),
     history: historyRaw.map(normalizeProjectionRow),
     unavailable,
     scheduleStatusAvailable: schedule !== null,
