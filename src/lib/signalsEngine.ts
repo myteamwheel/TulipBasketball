@@ -4,7 +4,8 @@ import { computeMarketDataForPlayers, type PlayerMarketData } from "@/lib/metric
 import { computeSignal, type RosterContext, type SignalResult } from "@/lib/signals";
 import { getAllCurrentRosterEntries } from "@/lib/queries";
 import { getLatestSlotMap } from "@/lib/teamMetrics";
-import { POSITION_STARTER_COUNTS } from "@/lib/config";
+import { POSITION_STARTER_COUNTS, SLEEPER_LEAGUE_ID } from "@/lib/config";
+import { materializeStoredSignalResults } from "@/lib/signalSnapshots";
 
 export async function computeSignalsForCurrentRoster(): Promise<Map<string, { result: SignalResult; market: PlayerMarketData }>> {
   const [entries, slotMap, simulation] = await Promise.all([getAllCurrentRosterEntries(), getLatestSlotMap(), simulateDynastyBoys()]);
@@ -55,6 +56,91 @@ export async function computeSignalsForCurrentRoster(): Promise<Map<string, { re
     result.set(entry.playerId, { result: computeSignal(market, ctx), market });
   }
   return result;
+}
+
+/**
+ * Reuse the signal calculation saved by the latest successful full refresh.
+ * Recomputing it during every page render also reruns the league simulation
+ * and pulls a full season of Sleeper matchups, even though refresh already
+ * stored the exact player signals. If the saved snapshot is incomplete for
+ * today's roster, safely recalculate just as the previous page path did.
+ */
+export async function getCurrentSignalResults(
+  playerIds: string[],
+): Promise<Map<string, SignalResult>> {
+  const requestedIds = [...new Set(playerIds)];
+  if (!requestedIds.length) return new Map();
+
+  const [currentOwnership, latestSuccessfulRun] = await Promise.all([
+    prisma.ownershipInterval.findMany({
+      where: {
+        validTo: null,
+        manager: {
+          isActive: true,
+          league: { sleeperId: SLEEPER_LEAGUE_ID },
+        },
+      },
+      select: { playerId: true, managerId: true },
+    }),
+    prisma.refreshRun.findFirst({
+      where: {
+        status: "SUCCESS",
+        league: { sleeperId: SLEEPER_LEAGUE_ID },
+      },
+      orderBy: { startedAt: "desc" },
+      select: { id: true },
+    }),
+  ]);
+  const currentPlayers = new Set(currentOwnership.map(({ playerId }) => playerId));
+  const requestedCurrentIds = requestedIds.filter((id) => currentPlayers.has(id));
+  if (!requestedCurrentIds.length) return new Map();
+
+  if (latestSuccessfulRun) {
+    const snapshotRoster = await prisma.rosterSnapshot.findMany({
+      where: { refreshRunId: latestSuccessfulRun.id },
+      select: { playerId: true, managerId: true },
+    });
+    const currentOwnershipKeys = new Set(
+      currentOwnership.map(({ playerId, managerId }) => `${managerId}:${playerId}`),
+    );
+    const snapshotOwnershipKeys = new Set(
+      snapshotRoster.map(({ playerId, managerId }) => `${managerId}:${playerId}`),
+    );
+    const rosterMatchesRefresh =
+      currentOwnershipKeys.size === currentOwnership.length &&
+      snapshotOwnershipKeys.size === snapshotRoster.length &&
+      currentOwnershipKeys.size === snapshotOwnershipKeys.size &&
+      [...currentOwnershipKeys].every((key) => snapshotOwnershipKeys.has(key));
+
+    if (rosterMatchesRefresh) {
+      const savedRows = await prisma.signal.findMany({
+        where: {
+          refreshRunId: latestSuccessfulRun.id,
+          playerId: { in: requestedCurrentIds },
+        },
+        select: {
+          playerId: true,
+          signal: true,
+          score: true,
+          confidence: true,
+          reasonCodes: true,
+        },
+      });
+      const saved = materializeStoredSignalResults(
+        requestedCurrentIds,
+        savedRows,
+      );
+      if (saved) return saved;
+    }
+  }
+
+  const recalculated = await computeSignalsForCurrentRoster();
+  return new Map(
+    requestedCurrentIds.flatMap((playerId) => {
+      const result = recalculated.get(playerId)?.result;
+      return result ? [[playerId, result] as const] : [];
+    }),
+  );
 }
 
 export async function persistSignalsForRun(refreshRunId: string): Promise<void> {

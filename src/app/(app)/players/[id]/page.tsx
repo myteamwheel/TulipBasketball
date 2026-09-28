@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { computeMarketDataForPlayer } from "@/lib/metrics";
-import { computeSignalsForCurrentRoster } from "@/lib/signalsEngine";
+import { getCurrentSignalResults } from "@/lib/signalsEngine";
 import { getFreshCurrentMarketMix } from "@/lib/currentMarket";
 import { getPlayerFootballData } from "@/lib/playerFootball";
 import { ORLANDO_BASELINE_DATE, SLEEPER_LEAGUE_ID } from "@/lib/config";
@@ -25,10 +25,10 @@ export default async function PlayerDetailPage({ params }: { params: Promise<{ i
     prisma.ownershipInterval.findMany({ where: { playerId: id, manager: { league: { sleeperId: SLEEPER_LEAGUE_ID } } }, include: { manager: true }, orderBy: { validFrom: "desc" } }),
     computeMarketDataForPlayer(id),
     getFreshCurrentMarketMix([id]),
-    computeSignalsForCurrentRoster(),
+    getCurrentSignalResults([id]),
     getPlayerFootballData(id),
   ]);
-  const signal = signals.get(id)?.result ?? null;
+  const signal = signals.get(id) ?? null;
   const mix = mixMap.get(id)!;
   const current = !market.isStale && market.currentValue !== null;
   const baselineLabel = formatDateEastern(ORLANDO_BASELINE_DATE);

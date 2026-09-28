@@ -9,7 +9,7 @@ import {
   getLatestRefreshRun,
   getLatestSuccessfulSleeperSyncTime,
 } from "@/lib/refresh";
-import { computeSignalsForCurrentRoster } from "@/lib/signalsEngine";
+import { getCurrentSignalResults } from "@/lib/signalsEngine";
 import { getVerifiedCheckpointChange } from "@/lib/verifiedCheckpoint";
 import PlayerTable, { type PlayerRow } from "@/components/PlayerTable";
 import DataBadge from "@/components/DataBadge";
@@ -100,12 +100,12 @@ export default async function HomePage() {
     computeMarketDataForPlayers(playerIds),
     getFreshCurrentMarketMix(playerIds),
     getLatestMarketSourceStatuses(),
-    computeSignalsForCurrentRoster(),
+    getCurrentSignalResults(playerIds),
   ]);
   const rows: PlayerRow[] = roster.map((player) => {
       const market = marketData.get(player.id)!,
         mix = marketMix.get(player.id)!,
-        signal = signals.get(player.id)?.result ?? null;
+        signal = signals.get(player.id) ?? null;
       return {
         id: player.id,
         fullName: player.fullName,
