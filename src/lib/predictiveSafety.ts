@@ -1,4 +1,7 @@
-import { getProjectionDashboardData } from "@/lib/weeklyProjection";
+import {
+  completedProjectionRowsForWeek,
+  getProjectionDashboardData,
+} from "@/lib/weeklyProjection";
 import { cache } from "react";
 import {
   getPredictivePlayerModels,
@@ -51,10 +54,29 @@ async function computeDecisionGradePredictiveModels(requestedIds?:string[]):Prom
     pool.market.push(row.currentValue);recentPeers.set(row.position,pool);
   }
   const weekly = await getProjectionDashboardData();
-  const liveRoles = new Set(weekly.current.filter(row => row.projectedFantasyPoints > 0).map(row => row.playerId));
+  const explicitlyWithheldWeeklyIds = new Set(
+    weekly.unavailable
+      .filter((row) => row.status === "EXCLUDED")
+      .map((row) => row.playerId),
+  );
+  // A completed game is no longer a lineup decision, but its saved pregame
+  // forecast is still current-week role evidence for the dynasty board. Keep
+  // explicit identity/source exclusions fail-closed in both cases.
+  const currentWeekRoleEvidence = new Set(
+    [
+      ...weekly.current,
+      ...completedProjectionRowsForWeek(weekly.history, weekly.season, weekly.week),
+    ]
+      .filter(
+        (row) =>
+          row.projectedFantasyPoints > 0 &&
+          !explicitlyWithheldWeeklyIds.has(row.playerId),
+      )
+      .map((row) => row.playerId),
+  );
   const guarded=new Map<string,PredictivePlayerModel>();
   for(const[playerId,row]of models){
-    const hasProfileEvidence=row.age!==null||row.draftYear!==null||row.draftRound!==null,hasProduction=row.games>=3,hasRecentProduction=isDecisionGradeProductionSeason(row.latestSeason,row.games,currentYear),productionIsStale=hasProduction&&!hasRecentProduction,positionalPeerCount=peerCounts.get(row.position)??0,peerSampleAdequate=positionalPeerCount>=MIN_POSITIONAL_FOOTBALL_PEERS,hasTrustedBlend=row.consensusValue!==null,hasActionableEvidence=hasRecentProduction&&peerSampleAdequate&&hasTrustedBlend&&hasCurrentRoleEvidence(row)&&liveRoles.has(playerId);
+    const hasProfileEvidence=row.age!==null||row.draftYear!==null||row.draftRound!==null,hasProduction=row.games>=3,hasRecentProduction=isDecisionGradeProductionSeason(row.latestSeason,row.games,currentYear),productionIsStale=hasProduction&&!hasRecentProduction,positionalPeerCount=peerCounts.get(row.position)??0,peerSampleAdequate=positionalPeerCount>=MIN_POSITIONAL_FOOTBALL_PEERS,hasTrustedBlend=row.consensusValue!==null,hasActionableEvidence=hasRecentProduction&&peerSampleAdequate&&hasTrustedBlend&&hasCurrentRoleEvidence(row)&&currentWeekRoleEvidence.has(playerId);
     let next=row;
     if(hasRecentProduction&&peerSampleAdequate){
       const pool=recentPeers.get(row.position);
@@ -81,11 +103,11 @@ async function computeDecisionGradePredictiveModels(requestedIds?:string[]):Prom
       const missing=[];
       if(!hasRecentProduction)missing.push("current or prior-season production");
       if(!hasTrustedBlend)missing.push("fresh trusted-market blend");
-      if(!hasCurrentRoleEvidence(row)||!liveRoles.has(playerId))missing.push("current role volume");
+      if(!hasCurrentRoleEvidence(row)||!currentWeekRoleEvidence.has(playerId))missing.push("current-week role evidence");
       if(!peerSampleAdequate)missing.push("adequate same-position peer sample");
       next={...next,fundamentalValue:row.currentValue,fundamentalScore:.5,productionScore:.5,usageScore:.5,efficiencyScore:.5,modelValue,modelEdge,modelEdgePercent,forecast30d:recenterForecast(next.forecast30d,modelValue),forecastRos:recenterForecast(next.forecastRos,modelValue),forecast1y:recenterForecast(next.forecast1y,modelValue),forecast3y:recenterForecast(next.forecast3y,modelValue),confidence:"LOW",mispricingQuadrant:"MARKET_ONLY",reasons:[`Model edge is withheld until ${missing.join(", ")} is available; the displayed value is market-anchored rather than an actionable recommendation.`,...next.reasons.filter(reason=>!reason.startsWith("Football peer value")&&!reason.startsWith("Independent football valuation is withheld")).slice(0,3)]};
     }else{
-      next={...next,confidence:decisionGradeConfidence(row.games),reasons:[`The edge is anchored 70% to fresh dynasty-market disagreement; football evidence is reduced for sample size and multi-year age/role risk.`, `Actionable edge requires current or prior-season production, a current role, a fresh trusted-market blend, and ${MIN_POSITIONAL_FOOTBALL_PEERS}+ same-position peers.`,...next.reasons].slice(0,4)};
+      next={...next,confidence:decisionGradeConfidence(row.games),reasons:[`The edge is anchored 70% to fresh dynasty-market disagreement; football evidence is reduced for sample size and multi-year age/role risk.`, `Actionable edge requires current or prior-season production, current-week role evidence, a fresh trusted-market blend, and ${MIN_POSITIONAL_FOOTBALL_PEERS}+ same-position peers.`,...next.reasons].slice(0,4)};
     }
     guarded.set(playerId,next);
   }

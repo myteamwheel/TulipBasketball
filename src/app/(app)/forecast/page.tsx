@@ -7,31 +7,86 @@ import {
   isDecisionGradeProductionSeason,
 } from "@/lib/predictiveSafety";
 import { formatPoints } from "@/lib/format";
-import { getProjectionDashboardData } from "@/lib/weeklyProjection";
+import {
+  completedProjectionRowsForWeek,
+  getProjectionDashboardData,
+} from "@/lib/weeklyProjection";
 export const dynamic = "force-dynamic";
 export default async function ForecastPage() {
   const entries = await getAllCurrentRosterEntries();
+  const rosteredSkillPlayerIds = new Set(
+    entries
+      .filter((entry) => ["QB", "RB", "WR", "TE"].includes(entry.player.position))
+      .map((entry) => entry.playerId),
+  );
   const ids = entries.map((e) => e.playerId),
     [models, projectionData] = await Promise.all([
       getPredictivePlayerModels(ids),
       getProjectionDashboardData(),
     ]),
-    weeklyProjectionByPlayer = new Map(
-      projectionData.current.map((row) => [
-        row.playerId,
-        row.projectedFantasyPoints,
-      ]),
-    ),
-    weeklyWithheld = new Set(
+    excludedWeeklyIds = new Set(
       projectionData.unavailable
         .filter((row) => row.status === "EXCLUDED")
         .map((row) => row.playerId),
+    ),
+    completedCurrentWeekRows = completedProjectionRowsForWeek(
+      projectionData.history,
+      projectionData.season,
+      projectionData.week,
+    ).filter((row) => rosteredSkillPlayerIds.has(row.playerId)),
+    completedCurrentWeekIds = new Set(
+      completedCurrentWeekRows.map((row) => row.playerId),
+    ),
+    kickoffLockedIds = new Set(
+      projectionData.unavailable
+        .filter((row) => row.status === "ALREADY_PLAYED")
+        .map((row) => row.playerId),
+    ),
+    currentRows = projectionData.current.filter(
+      (row) => !excludedWeeklyIds.has(row.playerId),
+    ),
+    activeWeeklyRows = currentRows.filter(
+      (row) =>
+        rosteredSkillPlayerIds.has(row.playerId) &&
+        !kickoffLockedIds.has(row.playerId) &&
+        !completedCurrentWeekIds.has(row.playerId),
+    ),
+    kickoffLockedRows = currentRows.filter(
+      (row) =>
+        rosteredSkillPlayerIds.has(row.playerId) &&
+        kickoffLockedIds.has(row.playerId) &&
+        !completedCurrentWeekIds.has(row.playerId),
+    ),
+    activeWeeklyIds = new Set(activeWeeklyRows.map((row) => row.playerId)),
+    kickoffLockedCurrentIds = new Set(
+      kickoffLockedRows.map((row) => row.playerId),
+    ),
+    withheldRows = projectionData.unavailable.filter(
+      (row) =>
+        rosteredSkillPlayerIds.has(row.playerId) &&
+        !activeWeeklyIds.has(row.playerId) &&
+        !kickoffLockedCurrentIds.has(row.playerId) &&
+        !completedCurrentWeekIds.has(row.playerId),
+    ),
+    withheldIds = new Set(withheldRows.map((row) => row.playerId)),
+    // Dynasty research may keep a current week's saved pregame forecast after
+    // kickoff or completion. It is role evidence only: the active weekly
+    // lineup cards below deliberately use `activeWeeklyRows` alone.
+    dynastyRoleEvidenceRows = [
+      ...activeWeeklyRows,
+      ...kickoffLockedRows,
+      ...completedCurrentWeekRows,
+    ],
+    weeklyProjectionByPlayer = new Map(
+      dynastyRoleEvidenceRows
+        .filter((row) => !excludedWeeklyIds.has(row.playerId))
+        .map((row) => [row.playerId, row.projectedFantasyPoints]),
     ),
     rows = [...models.values()],
     liveWeeklyRows = rows.filter(
       (row) =>
         weeklyProjectionByPlayer.has(row.playerId) &&
-        !weeklyWithheld.has(row.playerId),
+        !excludedWeeklyIds.has(row.playerId),
     ),
     modelGaps = liveWeeklyRows
       .filter(
@@ -58,28 +113,19 @@ export default async function ForecastPage() {
     productionCovered = rows.filter((r) =>
       isDecisionGradeProductionSeason(r.latestSeason, r.games),
     ).length,
-    rosteredSkillPlayers = entries.filter((entry) =>
-      ["QB", "RB", "WR", "TE"].includes(entry.player.position),
-    ),
-    completedCurrentWeek = new Set(
-      projectionData.history
-        .filter(
-          (row) =>
-            row.season === projectionData.season &&
-            row.week === projectionData.week &&
-            row.actualFantasyPoints !== null,
-        )
-        .map((row) => row.playerId),
-    ),
     classifiedCurrentWeek = new Set([
-      ...projectionData.current.map((row) => row.playerId),
-      ...projectionData.unavailable.map((row) => row.playerId),
-      ...completedCurrentWeek,
+      ...activeWeeklyIds,
+      ...kickoffLockedCurrentIds,
+      ...withheldIds,
+      ...completedCurrentWeekIds,
     ]),
-    weeklyCoverage = rosteredSkillPlayers.length
-      ? classifiedCurrentWeek.size / rosteredSkillPlayers.length
+    accountabilityCoverage = rosteredSkillPlayerIds.size
+      ? classifiedCurrentWeek.size / rosteredSkillPlayerIds.size
       : 0,
-    weeklyFallback = [...projectionData.current]
+    lineupReadyCoverage = rosteredSkillPlayerIds.size
+      ? activeWeeklyIds.size / rosteredSkillPlayerIds.size
+      : 0,
+    weeklyFallback = [...activeWeeklyRows]
       .sort((a, b) => b.projectedFantasyPoints - a.projectedFantasyPoints)
       .slice(0, 6);
   return (
@@ -117,39 +163,48 @@ export default async function ForecastPage() {
           </div>
         </div>
       </section>
-      <p className="text-xs text-neutral-400">Usable current or prior-season production: {productionCovered}/{rows.length} valued players. A live weekly role is also required for actionable model edges.</p>
+      <p className="text-xs text-neutral-400">Usable current or prior-season production: {productionCovered}/{rows.length} valued players. A current-week role is also required for actionable model edges; saved pregame forecasts remain role evidence after a game finishes.</p>
       <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3">
         <SectionHeader
           title="This week’s usable signal"
-          description={
-            weeklyCoverage >= 0.75
-              ? `Current-role coverage is ${(weeklyCoverage * 100).toFixed(0)}% across rostered skill players.`
-              : `Current-role coverage is ${(weeklyCoverage * 100).toFixed(0)}% across rostered skill players, below the threshold for a fully validated weekly team forecast.`
-          }
+          description={`Forecast accountability has a recorded status for ${(accountabilityCoverage * 100).toFixed(0)}% of rostered QB/RB/WR/TE players. Team Outlook separately evaluates its usable weekly model coverage.`}
         />
-        <div className="grid gap-2 sm:grid-cols-4">
+        <div className="grid gap-2 sm:grid-cols-5">
           <div className="rounded-md bg-neutral-950 p-2.5">
-            <div className="text-[9px] uppercase tracking-wide text-neutral-600">Role-supported</div>
-            <div className="mt-1 text-lg font-semibold text-emerald-300">{projectionData.current.length}</div>
+            <div className="text-[9px] uppercase tracking-wide text-neutral-600">Lineup-ready</div>
+            <div className="mt-1 text-lg font-semibold text-emerald-300">{activeWeeklyRows.length}</div>
+          </div>
+          <div className="rounded-md bg-neutral-950 p-2.5">
+            <div className="text-[9px] uppercase tracking-wide text-neutral-600">Kickoff-locked</div>
+            <div className="mt-1 text-lg font-semibold text-violet-300">{kickoffLockedRows.length}</div>
           </div>
           <div className="rounded-md bg-neutral-950 p-2.5">
             <div className="text-[9px] uppercase tracking-wide text-neutral-600">Withheld with reason</div>
-            <div className="mt-1 text-lg font-semibold text-amber-300">{projectionData.unavailable.length}</div>
+            <div className="mt-1 text-lg font-semibold text-amber-300">{withheldRows.length}</div>
           </div>
           <div className="rounded-md bg-neutral-950 p-2.5">
             <div className="text-[9px] uppercase tracking-wide text-neutral-600">Completed</div>
-            <div className="mt-1 text-lg font-semibold text-sky-300">{completedCurrentWeek.size}</div>
+            <div className="mt-1 text-lg font-semibold text-sky-300">{completedCurrentWeekIds.size}</div>
           </div>
           <div className="rounded-md bg-neutral-950 p-2.5">
-            <div className="text-[9px] uppercase tracking-wide text-neutral-600">Classified coverage</div>
-            <div className={`mt-1 text-lg font-semibold ${weeklyCoverage >= 0.75 ? "text-emerald-300" : "text-amber-300"}`}>{(weeklyCoverage * 100).toFixed(0)}%</div>
+            <div className="text-[9px] uppercase tracking-wide text-neutral-600">Accountability</div>
+            <div className={`mt-1 text-lg font-semibold ${accountabilityCoverage >= 0.75 ? "text-emerald-300" : "text-amber-300"}`}>{(accountabilityCoverage * 100).toFixed(0)}%</div>
           </div>
         </div>
-        {weeklyCoverage < 0.75 ? (
-          <p className="mt-3 text-[11px] leading-5 text-amber-200">
-            The role-supported rows below are usable for player-level lineup decisions. Players without a verified role, completed games, or an identity check are held out rather than filled with estimates. Team Outlook keeps its league probabilities provisional until coverage reaches 75%; the daily audit does not publish a new weekly forecast as fully validated before then.
-          </p>
-        ) : null}
+        <p className="mt-2 text-[10px] leading-4 text-neutral-500">
+          Accountability means every rostered QB/RB/WR/TE is in exactly one
+          state: lineup-ready, kickoff-locked, explicitly withheld, or
+          completed and moved to accuracy history. It is not a claim that every
+          player has a usable live projection.
+        </p>
+        <p className="mt-3 text-[11px] leading-5 text-neutral-400">
+          {`${(lineupReadyCoverage * 100).toFixed(0)}% of rostered QB/RB/WR/TE players have a lineup-ready current-week forecast. `}
+          Only those rows are usable for player-level lineup decisions. Players
+          without a verified role or identity check are held out rather than
+          filled with estimates; kickoff-locked and completed forecasts are
+          retained for accountability and dynasty research, not lineup
+          decisions.
+        </p>
         {weeklyFallback.length ? (
           <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {weeklyFallback.map((row) => (
@@ -165,7 +220,7 @@ export default async function ForecastPage() {
             ))}
           </div>
         ) : (
-          <p className="mt-3 text-[11px] text-amber-200">No role-supported weekly rows are available from the current feeds, so no team-level weekly output is presented as usable.</p>
+          <p className="mt-3 text-[11px] text-amber-200">No lineup-ready weekly rows are available from the current feeds, so no team-level weekly output is presented as usable.</p>
         )}
       </section>
       {productionCovered < rows.length * 0.6 ? (
@@ -183,7 +238,7 @@ export default async function ForecastPage() {
         <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3">
           <SectionHeader
             title="Largest live-role model disagreements"
-            description="Decision-grade review flags where recent football evidence and the current dynasty market disagree most among players with a current role-supported weekly projection. These are not automatic buy or sell signals."
+            description="Decision-grade review flags where recent football evidence and the current dynasty market disagree most among players with current-week role evidence. Saved pregame forecasts remain eligible after a game finishes; they are not automatic buy or sell signals."
           />
           <div className="space-y-2">
             {modelGaps.length ? (
@@ -219,8 +274,8 @@ export default async function ForecastPage() {
         </section>
         <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3">
           <SectionHeader
-            title="Recent production leaders with live weekly roles"
-            description="The strongest recent regular-season fantasy production among players with a decision-grade sample and a current role-supported weekly projection. This is descriptive football evidence, not a dynasty ranking."
+            title="Recent production leaders with current-week role evidence"
+            description="The strongest recent regular-season fantasy production among players with a decision-grade sample and current-week role evidence, including saved pregame forecasts after a game finishes. This is descriptive football evidence, not a dynasty ranking."
           />
           <div className="space-y-2">
             {productionLeaders.length ? (
@@ -258,7 +313,7 @@ export default async function ForecastPage() {
       <section>
         <SectionHeader
           title="Predictive player board"
-          description="An evidence-first dynasty board. KTC and trusted market values stay visible beside recent NFL production, opportunity, model fair value and weekly role. Missing football data remains unknown rather than negative evidence."
+          description="An evidence-first dynasty board. KTC and trusted market values stay visible beside recent NFL production, opportunity, model fair value and current-week role evidence. A completed game keeps its saved pregame forecast here for dynasty context, while the weekly page moves it to accuracy history. Missing football data remains unknown rather than negative evidence."
         />
         <PredictiveBoard rows={rows} />
       </section>

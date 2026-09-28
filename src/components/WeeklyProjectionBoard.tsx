@@ -79,6 +79,7 @@ export default function WeeklyProjectionBoard({
   const [historySort, setHistorySort] = useState<SortKey>("accuracy");
   const [historyWeek, setHistoryWeek] = useState("ALL");
   const [currentPage, setCurrentPage] = useState(1);
+  const [historyPage, setHistoryPage] = useState(1);
 
   const matchesSearch = (name: string, team: string | null, pos: string) =>
     (position === "ALL" || pos === position) &&
@@ -105,23 +106,25 @@ export default function WeeklyProjectionBoard({
   // The server already removes final games from `current`; this client-side
   // guard makes the active board fail closed if a stale response ever contains
   // a row that has since been graded.
-  const activeCurrent = current.filter((row) => row.actualFantasyPoints === null);
-  const currentRows = filterRows(activeCurrent, sort);
+  const currentForecasts = current.filter((row) => row.actualFantasyPoints === null);
+  const lockedIds = new Set(unavailable.filter((row) => row.status === "ALREADY_PLAYED").map((row) => row.playerId));
+  const lockedCurrent = currentForecasts.filter((row) => lockedIds.has(row.playerId));
+  const activeCurrent = currentForecasts.filter((row) => !lockedIds.has(row.playerId));
+  const currentRows = filterRows(currentForecasts, sort);
   const currentPageCount = Math.max(1, Math.ceil(currentRows.length / 25));
   const visibleCurrentPage = Math.min(currentPage, currentPageCount);
   const visibleCurrentRows = currentRows.slice(
     (visibleCurrentPage - 1) * 25,
     visibleCurrentPage * 25,
   );
-  const currentIds = new Set(activeCurrent.map((row) => row.playerId));
-  const lockedIds = new Set(unavailable.filter((row) => row.status === "ALREADY_PLAYED").map((row) => row.playerId));
+  const currentIds = new Set(currentForecasts.map((row) => row.playerId));
   const totalWithheldCount = unavailable.filter((row) => !currentIds.has(row.playerId)).length;
   const unavailableRows = unavailable
     .filter((row) => !currentIds.has(row.playerId))
     .filter((row) => matchesSearch(row.playerName, row.nflTeam, row.position))
     .sort((a, b) => a.playerName.localeCompare(b.playerName));
   const accountedPlayerCount = new Set([
-    ...activeCurrent.map((row) => row.playerId),
+    ...currentForecasts.map((row) => row.playerId),
     ...unavailable.map((row) => row.playerId),
     ...history
       .filter((row) => row.season === season && row.week === week && row.actualFantasyPoints !== null)
@@ -138,6 +141,14 @@ export default function WeeklyProjectionBoard({
       ? history
       : history.filter((row) => `${row.season}-${row.week}` === historyWeek);
   const historyRows = filterRows(filteredHistory, historySort);
+  const historyPageCount = Math.max(1, Math.ceil(historyRows.length / 25));
+  const visibleHistoryPage = Math.min(historyPage, historyPageCount);
+  const visibleHistoryRows = historyRows.slice(
+    (visibleHistoryPage - 1) * 25,
+    visibleHistoryPage * 25,
+  );
+  const historyPageStart = historyRows.length ? (visibleHistoryPage - 1) * 25 + 1 : 0;
+  const historyPageEnd = Math.min(visibleHistoryPage * 25, historyRows.length);
 
   const weekOptions = [
     ...new Set(history.map((row) => `${row.season}-${row.week}`)),
@@ -168,6 +179,7 @@ export default function WeeklyProjectionBoard({
           onChange={(event) => {
             setQuery(event.target.value);
             setCurrentPage(1);
+            setHistoryPage(1);
           }}
           placeholder="Search player or team…"
           aria-label="Search weekly projections"
@@ -180,6 +192,7 @@ export default function WeeklyProjectionBoard({
               onClick={() => {
                 setPosition(value);
                 setCurrentPage(1);
+                setHistoryPage(1);
               }}
               aria-pressed={position === value}
               className={`rounded px-2 py-1 text-[10px] ${position === value ? "bg-neutral-700 text-neutral-100" : "text-neutral-500"}`}
@@ -201,7 +214,7 @@ export default function WeeklyProjectionBoard({
               supported Week {week} role.
             </p>
             <p className="mt-1 text-[10px] text-neutral-400">
-              All {accountedPlayerCount} rostered QB/RB/WR/TE players are accounted for: {activeCurrent.length} active projections, {totalWithheldCount} withheld with a reason, and {completedCurrentWeekCount} completed players shown only in accuracy history.
+              All {accountedPlayerCount} rostered QB/RB/WR/TE players are accounted for: {activeCurrent.length} active forecasts, {lockedCurrent.length} locked at kickoff while final stats arrive, {totalWithheldCount} withheld with a reason, and {completedCurrentWeekCount} completed players shown only in accuracy history.
             </p>
             {!scheduleStatusAvailable ? (
               <p role="status" className="mt-1 text-[10px] text-amber-300">
@@ -390,7 +403,10 @@ export default function WeeklyProjectionBoard({
           <select
             aria-label="Filter accuracy history by week"
             value={historyWeek}
-            onChange={(event) => setHistoryWeek(event.target.value)}
+            onChange={(event) => {
+              setHistoryWeek(event.target.value);
+              setHistoryPage(1);
+            }}
             className="h-8 rounded-md border border-neutral-800 bg-neutral-950 px-2 text-[10px] text-neutral-300"
           >
             <option value="ALL">All graded weeks</option>
@@ -402,7 +418,10 @@ export default function WeeklyProjectionBoard({
           <select
             aria-label="Sort projection accuracy history"
             value={historySort}
-            onChange={(event) => setHistorySort(event.target.value as SortKey)}
+            onChange={(event) => {
+              setHistorySort(event.target.value as SortKey);
+              setHistoryPage(1);
+            }}
             className="h-8 rounded-md border border-neutral-800 bg-neutral-950 px-2 text-[10px] text-neutral-300"
           >
             <option value="accuracy">Highest accuracy</option>
@@ -414,7 +433,7 @@ export default function WeeklyProjectionBoard({
         </div>
 
         <div className="space-y-2 lg:hidden">
-          {historyRows.map((row) => {
+          {visibleHistoryRows.map((row) => {
             const accuracy = accuracyPercent(row);
             return (
               <article
@@ -497,18 +516,18 @@ export default function WeeklyProjectionBoard({
           <table className="w-full min-w-[1040px] text-xs">
             <thead>
               <tr className="bg-neutral-950 text-[9px] uppercase tracking-wide text-neutral-600">
-                <th className="px-2.5 py-2 text-left"><button type="button" onClick={() => setHistorySort("player")} className={historySort === "player" ? "text-emerald-300" : "hover:text-neutral-300"}>Player</button></th>
+                <th className="px-2.5 py-2 text-left"><button type="button" onClick={() => { setHistorySort("player"); setHistoryPage(1); }} className={historySort === "player" ? "text-emerald-300" : "hover:text-neutral-300"}>Player</button></th>
                 <th className="px-2 py-2 text-right">Week</th>
-                <th className="px-2 py-2 text-right"><button type="button" onClick={() => setHistorySort("projected")} className={historySort === "projected" ? "text-emerald-300" : "hover:text-neutral-300"}>Projected</button></th>
-                <th className="px-2 py-2 text-right"><button type="button" onClick={() => setHistorySort("actual")} className={historySort === "actual" ? "text-emerald-300" : "hover:text-neutral-300"}>Actual</button></th>
-                <th className="px-2 py-2 text-right"><button type="button" onClick={() => setHistorySort("accuracy")} className={historySort === "accuracy" ? "text-emerald-300" : "hover:text-neutral-300"}>Accuracy % ↓</button></th>
-                <th className="px-2 py-2 text-right"><button type="button" onClick={() => setHistorySort("error")} className={historySort === "error" ? "text-emerald-300" : "hover:text-neutral-300"}>Abs error</button></th>
+                <th className="px-2 py-2 text-right"><button type="button" onClick={() => { setHistorySort("projected"); setHistoryPage(1); }} className={historySort === "projected" ? "text-emerald-300" : "hover:text-neutral-300"}>Projected</button></th>
+                <th className="px-2 py-2 text-right"><button type="button" onClick={() => { setHistorySort("actual"); setHistoryPage(1); }} className={historySort === "actual" ? "text-emerald-300" : "hover:text-neutral-300"}>Actual</button></th>
+                <th className="px-2 py-2 text-right"><button type="button" onClick={() => { setHistorySort("accuracy"); setHistoryPage(1); }} className={historySort === "accuracy" ? "text-emerald-300" : "hover:text-neutral-300"}>Accuracy % ↓</button></th>
+                <th className="px-2 py-2 text-right"><button type="button" onClick={() => { setHistorySort("error"); setHistoryPage(1); }} className={historySort === "error" ? "text-emerald-300" : "hover:text-neutral-300"}>Abs error</button></th>
                 <th className="px-2 py-2 text-right">Bias</th>
                 <th className="px-2 py-2 text-left">Projected vs actual stat line</th>
               </tr>
             </thead>
             <tbody>
-              {historyRows.map((row) => (
+              {visibleHistoryRows.map((row) => (
                 <tr key={row.id} className="border-t border-neutral-800 bg-neutral-900/50">
                   <td className="px-2.5 py-2">
                     <div className="font-medium text-neutral-100">{row.playerName}</div>
@@ -546,6 +565,16 @@ export default function WeeklyProjectionBoard({
             </tbody>
           </table>
         </div>
+        {historyRows.length > 0 && historyPageCount > 1 ? (
+          <nav aria-label="Projection accuracy history pages" className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2 text-[10px] text-neutral-500">
+            <span>Showing {historyPageStart}–{historyPageEnd} of {historyRows.length}</span>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => setHistoryPage((value) => Math.max(1, value - 1))} disabled={visibleHistoryPage === 1} className="rounded border border-neutral-700 px-2 py-1 text-neutral-300 disabled:cursor-not-allowed disabled:opacity-40">Previous</button>
+              <span>Page {visibleHistoryPage} of {historyPageCount}</span>
+              <button type="button" onClick={() => setHistoryPage((value) => Math.min(historyPageCount, value + 1))} disabled={visibleHistoryPage === historyPageCount} className="rounded border border-neutral-700 px-2 py-1 text-neutral-300 disabled:cursor-not-allowed disabled:opacity-40">Next</button>
+            </div>
+          </nav>
+        ) : null}
       </section>
     </div>
   );

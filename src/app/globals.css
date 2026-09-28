@@ -1,8 +1,14 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f7f8fa;
-  --foreground: #111827;
+  --background: #f6f8fb;
+  --foreground: #172033;
+  --surface: #ffffff;
+  --surface-muted: #f1f5f9;
+  --surface-hover: #eaf0f6;
+  --border: #d8e0ea;
+  --border-strong: #c5d0dd;
+  --muted: #5f6d80;
   color-scheme: light;
 }
 
@@ -32,6 +38,7 @@ body {
   color: var(--foreground);
   overflow-x: hidden;
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  text-rendering: optimizeLegibility;
 }
 
 button,
@@ -39,6 +46,17 @@ input,
 select,
 textarea {
   font: inherit;
+  color: inherit;
+}
+
+button:not(:disabled) {
+  cursor: pointer;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #7a8798;
+  opacity: 1;
 }
 
 :where(a, button, input, select, textarea):focus-visible {
@@ -46,30 +64,39 @@ textarea {
   outline-offset: 2px;
 }
 
-/* The dashboard uses neutral utility classes; remap them to a readable light theme. */
-.bg-neutral-950 { background-color: #f7f8fa !important; }
-.bg-neutral-900 { background-color: #ffffff !important; }
-.bg-neutral-800 { background-color: #eef1f5 !important; }
-.bg-neutral-700 { background-color: #e2e8f0 !important; }
+/*
+ * The application started as a dark terminal. Its components still use the
+ * neutral Tailwind scale, so map that scale to a deliberate light hierarchy
+ * instead of mixing a white page with dark control fragments.
+ */
+.bg-neutral-950 { background-color: var(--background) !important; }
+.bg-neutral-900 { background-color: var(--surface) !important; }
+.bg-neutral-800 { background-color: var(--surface-muted) !important; }
+.bg-neutral-700 { background-color: #e3eaf2 !important; }
 .bg-neutral-500 { background-color: #64748b !important; }
-.bg-neutral-950\/40, .bg-neutral-950\/50, .bg-neutral-950\/60, .bg-neutral-950\/70 { background-color: rgba(248, 250, 252, .85) !important; }
-.bg-neutral-900\/40, .bg-neutral-900\/50, .bg-neutral-900\/60, .bg-neutral-900\/70 { background-color: rgba(255, 255, 255, .82) !important; }
-.bg-neutral-800\/30, .bg-neutral-800\/40 { background-color: rgba(238, 241, 245, .82) !important; }
+.bg-neutral-950\/40, .bg-neutral-950\/50, .bg-neutral-950\/60, .bg-neutral-950\/70, .bg-neutral-950\/95 { background-color: rgba(246, 248, 251, .9) !important; }
+.bg-neutral-900\/40, .bg-neutral-900\/50, .bg-neutral-900\/60, .bg-neutral-900\/70 { background-color: rgba(255, 255, 255, .86) !important; }
+.bg-neutral-800\/30, .bg-neutral-800\/40 { background-color: rgba(241, 245, 249, .88) !important; }
 .border-neutral-900, .border-neutral-900\/90 { border-color: #e2e8f0 !important; }
-.border-neutral-800, .border-neutral-800\/70, .border-neutral-800\/80, .border-neutral-800\/90 { border-color: #d7dde5 !important; }
-.border-neutral-700 { border-color: #cbd5e1 !important; }
-.border-neutral-600 { border-color: #94a3b8 !important; }
-.text-neutral-100 { color: #111827 !important; }
-.text-neutral-200 { color: #1f2937 !important; }
-.text-neutral-300 { color: #374151 !important; }
-.text-neutral-400 { color: #4b5563 !important; }
-.text-neutral-500 { color: #4b5563 !important; }
-.text-neutral-600 {
-  color: #4b5563 !important;
+.border-neutral-800, .border-neutral-800\/70, .border-neutral-800\/80, .border-neutral-800\/90 { border-color: var(--border) !important; }
+.border-neutral-700 { border-color: var(--border-strong) !important; }
+.border-neutral-600 { border-color: #a9b6c5 !important; }
+.text-neutral-100 { color: var(--foreground) !important; }
+.text-neutral-200 { color: #263348 !important; }
+.text-neutral-300 { color: #3b4a60 !important; }
+.text-neutral-400 { color: #4d5d73 !important; }
+.text-neutral-500 { color: #58687d !important; }
+.text-neutral-600 { color: var(--muted) !important; }
+.text-neutral-700 { color: #68788c !important; }
+
+/* Cards retain enough separation to scan dense tables without heavy chrome. */
+.rounded-lg.bg-neutral-900,
+.rounded-xl.bg-neutral-900 {
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .035);
 }
 
-.text-neutral-700 {
-  color: #374151 !important;
+[class*="hover:bg-neutral-800"]:hover {
+  background-color: var(--surface-hover) !important;
 }
 
 /* Preserve semantic colors while making them legible on white surfaces. */
@@ -90,9 +117,12 @@ textarea {
 [class*="border-amber-700"], [class*="border-amber-800"], [class*="border-amber-900"] { border-color: #fcd34d !important; }
 [class*="border-red-800"], [class*="border-red-900"], [class*="border-rose-800"], [class*="border-rose-900"] { border-color: #fca5a5 !important; }
 [class*="border-sky-800"], [class*="border-sky-900"], [class*="border-violet-800"] { border-color: #bfdbfe !important; }
-.bg-neutral-500.text-white, .bg-neutral-700.text-white, .bg-neutral-800.text-white, .bg-neutral-900.text-white, .bg-neutral-950.text-white { color: #111827 !important; }
+.bg-neutral-500.text-white, .bg-neutral-700.text-white, .bg-neutral-800.text-white, .bg-neutral-900.text-white, .bg-neutral-950.text-white { color: #172033 !important; }
 .hover\:text-white:hover { color: #111827 !important; }
-header { background-color: rgba(255, 255, 255, .96) !important; }
+header {
+  background-color: rgba(255, 255, 255, .96) !important;
+  box-shadow: 0 1px 0 rgba(15, 23, 42, .035);
+}
 
 /* Keep compact dashboard labels readable on cards. */
 :where(main) :is(.text-\[8px\], .text-\[9px\], .text-\[10px\], .text-\[11px\]) {

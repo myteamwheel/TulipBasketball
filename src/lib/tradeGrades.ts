@@ -7,7 +7,7 @@ import {
 /**
  * A transaction grade is deliberately computed from recorded market values,
  * rather than stored as a mutable database field. The historical grade stays
- * tied to the nearest verified observation around the transaction and the
+ * tied to a verified, pre-trade observation whenever one is available. The
  * current grade naturally changes after each successful market refresh.
  */
 export type TradeGradeAsset = {
@@ -37,6 +37,62 @@ export type TradeSideGradeInput = {
   /** FAAB has no KTC market price. Do not score a partial trade as complete. */
   hasUnpricedAssets?: boolean;
 };
+
+export const TRADE_SNAPSHOT_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+export type TradeSnapshotTiming = "AT_OR_BEFORE" | "NEXT_DAY_APPROXIMATION";
+
+export type TradeSnapshotSelection<T> = {
+  snapshot: T;
+  timing: TradeSnapshotTiming;
+};
+
+/**
+ * Select a stable historical valuation for a transaction. Prefer the latest
+ * verified snapshot at or before the trade, within one day. Only when that is
+ * absent can the first verified snapshot after the trade stand in, and callers
+ * must surface that it is an approximation. Later refreshes can never replace
+ * an already-selected pre-trade value.
+ */
+export function selectTradeSnapshot<T extends { observedAt: Date }>(
+  snapshots: readonly T[],
+  tradeAt: Date,
+  isVerified: (snapshot: T) => boolean = () => true,
+  windowMs = TRADE_SNAPSHOT_WINDOW_MS,
+): TradeSnapshotSelection<T> | null {
+  const tradeTime = tradeAt.getTime();
+  let latestAtOrBefore: T | null = null;
+  let firstAfter: T | null = null;
+
+  for (const snapshot of snapshots) {
+    if (!isVerified(snapshot)) continue;
+    const observedAt = snapshot.observedAt.getTime();
+    if (!Number.isFinite(observedAt)) continue;
+
+    if (observedAt <= tradeTime && tradeTime - observedAt <= windowMs) {
+      if (
+        !latestAtOrBefore ||
+        observedAt > latestAtOrBefore.observedAt.getTime()
+      ) {
+        latestAtOrBefore = snapshot;
+      }
+      continue;
+    }
+
+    if (observedAt > tradeTime && observedAt - tradeTime <= windowMs) {
+      if (!firstAfter || observedAt < firstAfter.observedAt.getTime()) {
+        firstAfter = snapshot;
+      }
+    }
+  }
+
+  if (latestAtOrBefore) {
+    return { snapshot: latestAtOrBefore, timing: "AT_OR_BEFORE" };
+  }
+  return firstAfter
+    ? { snapshot: firstAfter, timing: "NEXT_DAY_APPROXIMATION" }
+    : null;
+}
 
 function isUsableValue(value: number | null): value is number {
   return value !== null && Number.isFinite(value) && value > 0;

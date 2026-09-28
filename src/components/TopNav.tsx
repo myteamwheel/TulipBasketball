@@ -71,7 +71,14 @@ export default function TopNav() {
   const [openMenu, setOpenMenu] = useState<{
     label: string;
     pathname: string;
-  } | null>(null);
+    } | null>(null);
+  const openGroup =
+    openMenu?.pathname === pathname
+      ? groups.find((group) => group.label === openMenu.label)
+      : undefined;
+  const openMenuId = openGroup
+    ? `nav-menu-${openGroup.label.toLowerCase().replaceAll(" ", "-")}`
+    : undefined;
 
   // An outside click or Escape clears the menu. The state also records the
   // pathname it was opened on, so a route change hides it without a second
@@ -95,79 +102,81 @@ export default function TopNav() {
     <nav
       ref={navRef}
       aria-label="Primary"
-      className="flex gap-1 overflow-x-auto py-1.5 no-scrollbar"
+      className="relative py-1.5"
     >
-      {groups.map((group) => {
-        const active = isActive(pathname, group);
-        const itemClass = `inline-flex min-h-9 items-center justify-center px-3 text-xs font-medium transition-colors ${
-          active
-            ? "bg-neutral-800 text-white"
-            : "text-neutral-500 hover:bg-neutral-800 hover:text-neutral-100"
-        }`;
-        const menuId = `nav-menu-${group.label
-          .toLowerCase()
-          .replaceAll(" ", "-")}`;
+      <div className="flex flex-wrap gap-1">
+        {groups.map((group) => {
+          const active = isActive(pathname, group);
+          const itemClass = `inline-flex min-h-9 items-center justify-center px-3 text-xs font-medium transition-colors ${
+            active
+              ? "bg-emerald-700 text-white shadow-sm"
+              : "text-neutral-500 hover:bg-neutral-800 hover:text-neutral-100"
+          }`;
+          const menuId = `nav-menu-${group.label
+            .toLowerCase()
+            .replaceAll(" ", "-")}`;
 
-        if (!group.links?.length) {
-          return (
-            <Link
-              key={group.label}
-              href={group.href}
-              aria-current={active ? "page" : undefined}
-              onClick={() => setOpenMenu(null)}
-              className={`shrink-0 rounded-md ${itemClass}`}
-            >
-              {group.label}
-            </Link>
-          );
-        }
-
-        const isOpen =
-          openMenu?.label === group.label && openMenu.pathname === pathname;
-        return (
-          <div key={group.label} className="relative flex shrink-0">
-            <Link
-              href={group.href}
-              aria-current={active ? "page" : undefined}
-              onClick={() => setOpenMenu(null)}
-              className={`rounded-l-md ${itemClass}`}
-            >
-              {group.label}
-            </Link>
-            <button
-              type="button"
-              aria-label={`Open ${group.label} menu`}
-              aria-expanded={isOpen}
-              aria-controls={menuId}
-              onClick={() =>
-                setOpenMenu(isOpen ? null : { label: group.label, pathname })
-              }
-              className={`rounded-r-md border-l border-neutral-700 px-2 text-[10px] ${itemClass}`}
-            >
-              <span aria-hidden="true">▾</span>
-            </button>
-            {isOpen ? (
-              <div
-                id={menuId}
-                role="menu"
-                className="absolute left-0 top-full z-50 mt-1 min-w-48 rounded-lg border border-neutral-700 bg-neutral-900 p-1 shadow-xl"
+          if (!group.links?.length) {
+            return (
+              <Link
+                key={group.label}
+                href={group.href}
+                aria-current={active ? "page" : undefined}
+                onClick={() => setOpenMenu(null)}
+                className={`shrink-0 rounded-md ${itemClass}`}
               >
-                {group.links.map((link) => (
-                  <Link
-                    key={link.href}
-                    href={link.href}
-                    role="menuitem"
-                    onClick={() => setOpenMenu(null)}
-                    className="block rounded-md px-3 py-2 text-xs text-neutral-500 hover:bg-neutral-800 hover:text-neutral-100"
-                  >
-                    {link.label}
-                  </Link>
-                ))}
-              </div>
-            ) : null}
-          </div>
-        );
-      })}
+                {group.label}
+              </Link>
+            );
+          }
+
+          const isOpen = openGroup?.label === group.label;
+          return (
+            <div key={group.label} className="flex shrink-0">
+              <Link
+                href={group.href}
+                aria-current={active ? "page" : undefined}
+                onClick={() => setOpenMenu(null)}
+                className={`rounded-l-md ${itemClass}`}
+              >
+                {group.label}
+              </Link>
+              <button
+                type="button"
+                aria-label={`Open ${group.label} menu`}
+                aria-expanded={isOpen}
+                aria-controls={menuId}
+                onClick={() =>
+                  setOpenMenu(isOpen ? null : { label: group.label, pathname })
+                }
+                className={`rounded-r-md border-l border-neutral-700 px-2 text-[10px] ${itemClass}`}
+              >
+                <span aria-hidden="true">▾</span>
+              </button>
+            </div>
+          );
+        })}
+      </div>
+      {openGroup?.links?.length ? (
+        <div
+          id={openMenuId}
+          role="menu"
+          aria-label={`${openGroup.label} menu`}
+          className="absolute inset-x-0 top-full z-50 mt-1 flex flex-wrap gap-1 rounded-lg border border-neutral-700 bg-neutral-900 p-1.5 shadow-xl"
+        >
+          {openGroup.links.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              role="menuitem"
+              onClick={() => setOpenMenu(null)}
+              className="rounded-md px-3 py-2 text-xs text-neutral-500 hover:bg-neutral-800 hover:text-neutral-100"
+            >
+              {link.label}
+            </Link>
+          ))}
+        </div>
+      ) : null}
     </nav>
   );
 }

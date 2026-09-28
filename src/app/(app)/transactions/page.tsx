@@ -1,23 +1,23 @@
 import Link from "next/link";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
-import { computeMarketDataForPlayers, getObservationSeries, nearestObservation } from "@/lib/metrics";
+import { computeMarketDataForPlayers, getObservationSeries } from "@/lib/metrics";
 import { SLEEPER_LEAGUE_ID } from "@/lib/config";
 import { publicTeamName } from "@/lib/publicIdentity";
 import { formatDateTimeEastern, formatPercent, formatPoints, formatSigned, trendColorClass } from "@/lib/format";
 import { fetchFreshDraftPickMarketValues } from "@/lib/pickMarket";
 import { currentPickMarketValue } from "@/lib/pickValuation";
-import { calculateTradeSideGrades, tradeGradeTone, type TradeGradeAsset, type TradeGradePhase } from "@/lib/tradeGrades";
+import { calculateTradeSideGrades, selectTradeSnapshot, tradeGradeTone, TRADE_SNAPSHOT_WINDOW_MS, type TradeGradeAsset, type TradeGradePhase, type TradeSnapshotTiming } from "@/lib/tradeGrades";
 import type { DraftPickMarketValue } from "@/lib/marketSources";
 
 export const dynamic = "force-dynamic";
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 15;
 type TxFilter = "all" | "trade" | "moves";
 type TradedPick = { season: string; round: number; roster_id: number; previous_owner_id: number; owner_id: number };
 type FaabTransfer = { amount: number; sender: number; receiver: number };
-type Asset = TradeGradeAsset & { playerId: string | null; atMoveObservedAt: Date | null };
+type Asset = TradeGradeAsset & { playerId: string | null; atMoveObservedAt: Date | null; atMoveTiming: TradeSnapshotTiming | null };
 type PickSnapshot = { observedAt: Date; rows: DraftPickMarketValue[] };
-const HISTORICAL_MARKET_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+const HISTORICAL_MARKET_WINDOW_MS = TRADE_SNAPSHOT_WINDOW_MS;
 
 function record(value: string | null): Record<string, number> {
   try { const parsed = JSON.parse(value ?? "{}"); return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {}; } catch { return {}; }
@@ -45,18 +45,6 @@ function storedPickSnapshots(runs: { startedAt: Date; finishedAt: Date | null; s
     } catch {}
   }
   return snapshots;
-}
-function closestPickSnapshot(snapshots: PickSnapshot[], date: Date): PickSnapshot | null {
-  let closest: PickSnapshot | null = null;
-  let distance = Infinity;
-  for (const snapshot of snapshots) {
-    const nextDistance = Math.abs(snapshot.observedAt.getTime() - date.getTime());
-    if (nextDistance <= HISTORICAL_MARKET_WINDOW_MS && nextDistance < distance) {
-      closest = snapshot;
-      distance = nextDistance;
-    }
-  }
-  return closest;
 }
 function phaseLabel(phase: TradeGradePhase, label: string) {
   if (phase.status === "INCOMPLETE") return `${label}: ${phase.valuedAssets}/${phase.totalAssets} assets priced`;
@@ -107,23 +95,28 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
 
   function playerAsset(sleeperId: string, date: Date): Asset {
     const player = playerBySleeper.get(sleeperId);
-    if (!player) return { id: `player:${sleeperId}`, playerId: null, label: `Sleeper player ${sleeperId}`, assetType: "player", atTradeValue: null, currentValue: null, atMoveObservedAt: null };
-    const atMove = nearestObservation(series.get(player.id) ?? [], date);
+    if (!player) return { id: `player:${sleeperId}`, playerId: null, label: `Sleeper player ${sleeperId}`, assetType: "player", atTradeValue: null, currentValue: null, atMoveObservedAt: null, atMoveTiming: null };
+    const atMove = selectTradeSnapshot(
+      series.get(player.id) ?? [],
+      date,
+      (observation) => observation.validationStatus === "VALID",
+    );
     const market = currentMarket.get(player.id);
     return {
       id: player.id,
       playerId: player.id,
       label: `${player.fullName} (${player.position})`,
       assetType: "player",
-      atTradeValue: atMove?.value ?? null,
+      atTradeValue: atMove?.snapshot.value ?? null,
       currentValue: market && !market.isStale ? market.currentValue : null,
-      atMoveObservedAt: atMove?.observedAt ?? null,
+      atMoveObservedAt: atMove?.snapshot.observedAt ?? null,
+      atMoveTiming: atMove?.timing ?? null,
     };
   }
   function pickAsset(pick: TradedPick, date: Date): Asset {
-    const snapshot = closestPickSnapshot(pickSnapshots, date);
+    const snapshot = selectTradeSnapshot(pickSnapshots, date);
     const atTradeValue = snapshot
-      ? currentPickMarketValue(snapshot.rows, Number(pick.season), pick.round, null)
+      ? currentPickMarketValue(snapshot.snapshot.rows, Number(pick.season), pick.round, null)
       : null;
     return {
       id: `pick:${pick.season}:${pick.round}:${pick.roster_id}`,
@@ -132,7 +125,8 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
       assetType: "pick",
       atTradeValue,
       currentValue: currentPickMarketValue(pickMarket, Number(pick.season), pick.round, null),
-      atMoveObservedAt: snapshot?.observedAt ?? null,
+      atMoveObservedAt: snapshot?.snapshot.observedAt ?? null,
+      atMoveTiming: snapshot?.timing ?? null,
     };
   }
   const rows = transactions.map((tx) => {
@@ -160,7 +154,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
 
   const renderAsset = (item: Asset, tone: "got" | "gave") => <li key={`${tone}:${item.label}`} className="rounded-md border border-neutral-800 bg-neutral-950 px-2.5 py-2">
     <div className={`text-xs font-medium ${tone === "got" ? "text-emerald-300" : "text-red-300"}`}>{item.playerId ? <Link href={`/players/${item.playerId}`} className="hover:text-white">{item.label}</Link> : item.label}</div>
-    {item.atTradeValue !== null || item.currentValue !== null ? <div className="mt-1 text-xs text-neutral-400">near trade {formatPoints(item.atTradeValue)}{item.atMoveObservedAt ? ` (${formatDateTimeEastern(item.atMoveObservedAt.toISOString())})` : ""} · now {formatPoints(item.currentValue)}{item.atTradeValue !== null && item.currentValue !== null ? <span className={`ml-1 ${trendColorClass(item.currentValue - item.atTradeValue)}`}>({formatSigned(item.currentValue - item.atTradeValue)})</span> : null}</div> : null}
+    {item.atTradeValue !== null || item.currentValue !== null ? <div className="mt-1 text-xs text-neutral-400">at trade {formatPoints(item.atTradeValue)}{item.atMoveObservedAt ? ` (${formatDateTimeEastern(item.atMoveObservedAt.toISOString())})` : ""}{item.atMoveTiming === "NEXT_DAY_APPROXIMATION" ? " · next-day approximation" : ""} · now {formatPoints(item.currentValue)}{item.atTradeValue !== null && item.currentValue !== null ? <span className={`ml-1 ${trendColorClass(item.currentValue - item.atTradeValue)}`}>({formatSigned(item.currentValue - item.atTradeValue)})</span> : null}</div> : null}
   </li>;
 
   return <div className="space-y-4">
@@ -172,7 +166,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
       {faab.length ? <p className="mb-3 rounded-md border border-amber-900/60 bg-amber-950/20 px-3 py-2 text-xs text-amber-300">FAAB transfer: {faab.map((row) => `${teamName(row.sender)} → ${teamName(row.receiver)} $${row.amount}`).join(" · ")}</p> : null}
       {tx.type === "trade" && sides.length ? <section className="mb-3 rounded-lg border border-indigo-300 bg-indigo-50 p-3">
         <div className="flex flex-wrap items-baseline justify-between gap-2"><h2 className="text-sm font-semibold text-slate-950">Market trade grades</h2><span className="text-[10px] text-slate-700">Player KTC plus recorded draft-pick snapshots</span></div>
-        <p className="mt-1 text-[11px] text-slate-700">At trade uses the nearest verified snapshot within seven days. Now updates whenever fresh KTC and draft-pick market data are recorded. A grade is withheld when any recorded asset cannot be priced.</p>
+        <p className="mt-1 text-[11px] text-slate-700">At trade uses the latest verified snapshot at or before the transaction within 24 hours. Only when that is absent can the first verified next-day snapshot stand in, and it is labeled as an approximation. Now updates whenever fresh KTC and draft-pick market data are recorded. A grade is withheld when any recorded asset cannot be priced.</p>
         <div className="mt-3 grid gap-2 lg:grid-cols-2">{sides.map((side) => side.grades ? <div key={`grade:${side.rosterId}`} className="rounded-md border border-slate-300 bg-white p-2.5">
           <div className="mb-2 flex items-center justify-between gap-2"><h3 className="text-xs font-semibold text-slate-950">{side.name}</h3>{side.grades.current.status === "READY" && (side.grades.current.grade === "A" || side.grades.current.grade === "A+") ? <span aria-label="Strong current market win" className="text-base">🎉</span> : null}</div>
           <div className="grid gap-2 sm:grid-cols-2">{([ ["At trade", side.grades.atTrade], ["Now", side.grades.current] ] as const).map(([label, phase]) => <div key={label} className={`rounded border p-2 ${gradeClass(phase)}`}>

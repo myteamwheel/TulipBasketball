@@ -144,7 +144,14 @@ export default async function TeamOutlookPage() {
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {teams
             .filter((team) => team.simulation)
-            .sort((a, b) => (b.simulation?.championshipProbability ?? 0) - (a.simulation?.championshipProbability ?? 0))
+            .sort((a, b) =>
+              (a.simulation?.powerRank ?? Number.POSITIVE_INFINITY) -
+                (b.simulation?.powerRank ?? Number.POSITIVE_INFINITY) ||
+              (b.simulation?.playoffProbability ?? 0) -
+                (a.simulation?.playoffProbability ?? 0) ||
+              (b.simulation?.championshipProbability ?? 0) -
+                (a.simulation?.championshipProbability ?? 0),
+            )
             .map((team) => {
               const result = team.simulation!;
               const own = team.managerId === primary?.id;

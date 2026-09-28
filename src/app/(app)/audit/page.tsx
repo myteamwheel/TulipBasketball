@@ -194,10 +194,10 @@ export default async function AuditPage({
         <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-3 text-[11px] leading-5 text-neutral-400">
           <span className="font-semibold text-neutral-200">Freshness:</span>{" "}
           this saved audit snapshot was generated {formatDateTimeEastern(data.generatedAt)}. The newest dashboard refresh is {latestRefresh.status.toLowerCase().replaceAll("_", " ")} from {formatDateTimeEastern((latestRefresh.finishedAt ?? latestRefresh.startedAt).toISOString())}.{" "}
-          {new Date(latestRefresh.finishedAt ?? latestRefresh.startedAt).getTime() > new Date(data.generatedAt).getTime()
+          {new Date(latestRefresh.startedAt).getTime() > new Date(data.generatedAt).getTime()
             ? latestRefreshCanDriveLiveData
               ? "The newer successful refresh is used by live roster, market, projection, and team-outlook pages; this audit remains the last snapshot that passed its separate validation checks."
-              : "This newer attempt did not replace the last successful live dataset; this audit remains the last separately validated snapshot."
+              : "This attempt did not publish a new validated audit. Individual sources may have updated; this page retains the last separately validated snapshot."
             : "This snapshot reflects the newest recorded dashboard refresh."}
         </div>
       ) : null}

@@ -14,7 +14,17 @@ export default async function ProjectionsPage() {
   const omittedScoring = unsupportedNonzeroScoring(league.scoring_settings);
   const summary = projectionSummary(data.current, data.unavailable, data.history);
   const { mae, bias, withinFive } = summary;
-  const highConfidence = data.current.filter((row) => row.confidence === "HIGH").length;
+  // Forecasts are locked at kickoff while the results feed catches up. Keep
+  // them visible in the table, but do not describe them as actionable.
+  const lockedIds = new Set(
+    data.unavailable
+      .filter((row) => row.status === "ALREADY_PLAYED")
+      .map((row) => row.playerId),
+  );
+  const currentForecasts = data.current.filter((row) => row.actualFantasyPoints === null);
+  const lockedCurrent = currentForecasts.filter((row) => lockedIds.has(row.playerId));
+  const activeCurrent = currentForecasts.filter((row) => !lockedIds.has(row.playerId));
+  const highConfidence = activeCurrent.filter((row) => row.confidence === "HIGH").length;
   const completedCurrentWeek = new Set(data.history.filter((row) => row.season === data.season && row.week === data.week && row.actualFantasyPoints !== null).map((row) => row.playerId)).size;
 
   return (
@@ -37,10 +47,16 @@ export default async function ProjectionsPage() {
           title={`${data.season} Week ${data.week}`}
           description="Every row shows the Sleeper and CBS player projections, the local recency model, their player-level blend, DraftKings game-market context through ESPN, and the final scoring-adjusted fantasy projection. Game odds are a bounded team-environment adjustment, not an invented individual player projection."
         />
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-7">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-8">
           <MetricCard
-            label="Players projected"
-            value={data.current.length.toLocaleString("en-US")}
+            label="Active forecasts"
+            value={activeCurrent.length.toLocaleString("en-US")}
+            detail="actionable this week"
+          />
+          <MetricCard
+            label="Locked at kickoff"
+            value={lockedCurrent.length.toLocaleString("en-US")}
+            detail="awaiting final stats"
           />
           <MetricCard
             label="Withheld"

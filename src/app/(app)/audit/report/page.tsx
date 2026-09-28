@@ -25,7 +25,7 @@ export default async function AuditReportPage({ searchParams }: { searchParams: 
           {refreshIsNewer
             ? refreshCanDriveLiveData
               ? "Live roster, market, projections, and Team Outlook already use that newer successful run; the research bundle remains visibly dated until a new full research publication is generated."
-              : "This newer attempt did not replace the last successful live dataset; the research bundle remains dated to its verified publication."
+              : "This attempt did not publish a new validated research bundle. Individual sources may have updated; this report remains dated to its verified publication."
             : "This bundle reflects the newest recorded dashboard refresh."}
         </div>
       ) : null}
