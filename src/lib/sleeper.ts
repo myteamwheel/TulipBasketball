@@ -7,6 +7,8 @@ import os from "node:os";
 const BASE = "https://api.sleeper.app/v1";
 const PLAYER_CACHE_PATH = path.join(os.tmpdir(), "dynasty-boys-sleeper-players.json");
 const PLAYER_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+let playerCatalogPromise: Promise<Record<string, SleeperPlayer>> | null = null;
+let playerCatalogExpiresAt = 0;
 
 export interface SleeperLeague { league_id:string; name:string; season:string; status:string; roster_positions:string[]; scoring_settings:Record<string,number>; settings:Record<string,number|string>; previous_league_id:string|null; }
 export interface SleeperUser { user_id:string; display_name:string; metadata:{team_name?:string}|null; }
@@ -25,4 +27,31 @@ export async function getNflState(){return getJson<SleeperNflState>(`${BASE}/sta
 export async function getTradedPicks(leagueId:string){return getJson<SleeperTradedPick[]>(`${BASE}/league/${leagueId}/traded_picks`)}
 export async function getMatchups(leagueId:string,week:number){return getJson<SleeperMatchup[]>(`${BASE}/league/${leagueId}/matchups/${week}`)}
 export async function getAllTransactions(leagueId:string,throughWeek:number):Promise<SleeperTransaction[]>{const weeks=Array.from({length:throughWeek},(_,i)=>i+1),results=await Promise.all(weeks.map(w=>getJson<SleeperTransaction[]>(`${BASE}/league/${leagueId}/transactions/${w}`).catch(()=>[] as SleeperTransaction[])));return results.flat();}
-export async function getPlayerCatalog():Promise<Record<string,SleeperPlayer>>{try{const stat=await fs.stat(PLAYER_CACHE_PATH);if(Date.now()-stat.mtimeMs<PLAYER_CACHE_MAX_AGE_MS){const cached=await fs.readFile(PLAYER_CACHE_PATH,"utf-8");return JSON.parse(cached)}}catch{}const catalog=await getJson<Record<string,SleeperPlayer>>(`${BASE}/players/nfl`);await fs.mkdir(path.dirname(PLAYER_CACHE_PATH),{recursive:true});await fs.writeFile(PLAYER_CACHE_PATH,JSON.stringify(catalog));return catalog;}
+export async function getPlayerCatalog():Promise<Record<string,SleeperPlayer>>{
+  if(playerCatalogPromise&&Date.now()<playerCatalogExpiresAt)return playerCatalogPromise;
+  const request=(async()=>{
+    try{
+      const stat=await fs.stat(PLAYER_CACHE_PATH);
+      if(Date.now()-stat.mtimeMs<PLAYER_CACHE_MAX_AGE_MS){
+        const cached=await fs.readFile(PLAYER_CACHE_PATH,"utf-8");
+        const parsed:unknown=JSON.parse(cached);
+        if(parsed&&typeof parsed==="object"&&!Array.isArray(parsed))return parsed as Record<string,SleeperPlayer>;
+      }
+    }catch{}
+    const catalog=await getJson<Record<string,SleeperPlayer>>(`${BASE}/players/nfl`);
+    try{
+      await fs.mkdir(path.dirname(PLAYER_CACHE_PATH),{recursive:true});
+      await fs.writeFile(PLAYER_CACHE_PATH,JSON.stringify(catalog));
+    }catch{}
+    return catalog;
+  })();
+  playerCatalogPromise=request;
+  playerCatalogExpiresAt=Date.now()+PLAYER_CACHE_MAX_AGE_MS;
+  void request.catch(()=>{
+    if(playerCatalogPromise===request){
+      playerCatalogPromise=null;
+      playerCatalogExpiresAt=0;
+    }
+  });
+  return request;
+}
