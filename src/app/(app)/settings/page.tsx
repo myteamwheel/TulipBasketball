@@ -324,7 +324,7 @@ export default async function SettingsPage() {
                 {football.rosteredPlayers}
               </div>
               <div className="text-[10px] text-neutral-600">
-                latest available season has ≥3 games ·{" "}
+                current/prior season with ≥3 games ·{" "}
                 {pct(football.decisionGradeCoverage)} coverage
               </div>
             </div>

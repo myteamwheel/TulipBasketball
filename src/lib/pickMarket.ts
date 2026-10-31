@@ -1,4 +1,5 @@
-import { MARKET_SOURCE_MAX_AGE_MS, SLEEPER_LEAGUE_ID } from "@/lib/config";
+import { SLEEPER_LEAGUE_ID } from "@/lib/config";
+import { freshPickRows } from "@/lib/pickFreshness";
 import { prisma } from "@/lib/prisma";
 import { fetchCurrentDraftPickMarketValues, type DraftPickMarketValue } from "@/lib/marketSources";
 
@@ -16,9 +17,9 @@ function stateFromRows(rows: DraftPickMarketValue[], origin: DraftPickMarketStat
     .map((row) => row.sourceUpdatedAt ? new Date(row.sourceUpdatedAt) : null)
     .filter((date): date is Date => !!date && Number.isFinite(date.getTime()));
   if (!timestamps.length) throw new Error("Draft-pick market has no verifiable provider timestamp.");
-  const newest = Math.max(...timestamps.map((date) => date.getTime()));
-  const ageMs = Math.max(0, Date.now() - newest);
-  return { rows, sourceUpdatedAt: new Date(newest).toISOString(), ageMs, stale: ageMs > MARKET_SOURCE_MAX_AGE_MS, origin };
+  const oldest = Math.min(...timestamps.map((date) => date.getTime()));
+  const ageMs = Math.max(0, Date.now() - oldest);
+  return { rows, sourceUpdatedAt: new Date(oldest).toISOString(), ageMs, stale: freshPickRows(rows).length !== rows.length, origin };
 }
 
 /** Fetch the provider's latest verifiably timestamped pick board, even if it has aged out. */
@@ -35,7 +36,7 @@ export async function fetchFreshDraftPickMarketValues(): Promise<DraftPickMarket
   if (state.stale) {
     throw new Error(`Draft-pick market is ${(state.ageMs / 3600000).toFixed(1)}h old and is excluded from current trade math.`);
   }
-  return state.rows;
+  return freshPickRows(state.rows);
 }
 
 function parseStoredState(summary: string | null): DraftPickMarketState | null {

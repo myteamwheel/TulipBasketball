@@ -14,6 +14,7 @@ type NavGroup = {
 // the league race, player decisions, then possible deals and league activity.
 const groups: NavGroup[] = [
   { label: "My Team", href: "/" },
+  { label: "Trade Review", href: "/trade-review" },
   {
     label: "Team Outlook",
     href: "/team-outlook",
@@ -104,10 +105,10 @@ export default function TopNav() {
       aria-label="Primary"
       className="relative py-1.5"
     >
-      <div className="flex flex-wrap gap-1">
+      <div className="flex gap-1 overflow-x-auto pb-1">
         {groups.map((group) => {
           const active = isActive(pathname, group);
-          const itemClass = `inline-flex min-h-9 items-center justify-center px-3 text-xs font-medium transition-colors ${
+          const itemClass = `inline-flex min-h-11 items-center justify-center px-3 text-xs font-medium transition-colors ${
             active
               ? "bg-emerald-700 text-white shadow-sm"
               : "text-neutral-500 hover:bg-neutral-800 hover:text-neutral-100"
@@ -160,7 +161,7 @@ export default function TopNav() {
       {openGroup?.links?.length ? (
         <div
           id={openMenuId}
-          role="menu"
+          role="navigation"
           aria-label={`${openGroup.label} menu`}
           className="absolute inset-x-0 top-full z-50 mt-1 flex flex-wrap gap-1 rounded-lg border border-neutral-700 bg-neutral-900 p-1.5 shadow-xl"
         >
@@ -168,7 +169,6 @@ export default function TopNav() {
             <Link
               key={link.href}
               href={link.href}
-              role="menuitem"
               onClick={() => setOpenMenu(null)}
               className="rounded-md px-3 py-2 text-xs text-neutral-500 hover:bg-neutral-800 hover:text-neutral-100"
             >

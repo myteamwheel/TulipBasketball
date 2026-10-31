@@ -49,7 +49,7 @@ export async function getFootballCoverage(): Promise<FootballCoverage> {
       (SELECT COUNT(*) FROM current_roster) AS rostered,
       (SELECT COUNT(*) FROM current_roster cr JOIN "PlayerFootballProfile" pfp ON pfp."playerId" = cr."playerId") AS profiled,
       (SELECT COUNT(*) FROM current_roster cr WHERE EXISTS (SELECT 1 FROM "PlayerGameStat" pgs WHERE pgs."playerId" = cr."playerId" AND pgs."seasonType" = 'REG')) AS "withGames",
-      (SELECT COUNT(*) FROM current_roster cr JOIN latest_season_games lsg ON lsg."playerId" = cr."playerId" WHERE lsg.season >= ${minimumDecisionGradeSeason}) AS "decisionGrade",
+      (SELECT COUNT(*) FROM current_roster cr JOIN latest_season_games lsg ON lsg."playerId" = cr."playerId" WHERE lsg.season >= ${minimumDecisionGradeSeason} AND lsg.season <= ${currentYear} AND lsg.games >= 3) AS "decisionGrade",
       (SELECT MAX(pgs."observedAt") FROM "PlayerGameStat" pgs JOIN current_roster cr ON cr."playerId" = pgs."playerId") AS "latestGameObservedAt",
       (SELECT MAX(pfp."sourceUpdatedAt") FROM "PlayerFootballProfile" pfp JOIN current_roster cr ON cr."playerId" = pfp."playerId") AS "latestProfileSourceUpdatedAt"
   `;

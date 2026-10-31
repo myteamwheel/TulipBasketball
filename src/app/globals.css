@@ -142,3 +142,7 @@ header {
 ::selection {
   background: rgba(16, 185, 129, 0.28);
 }
+
+@keyframes trade-value-reveal { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.trade-value-bar { transform-origin: left; animation: trade-value-reveal 650ms cubic-bezier(.2,.7,.2,1) both; }
+@media (prefers-reduced-motion: reduce) { .trade-value-bar { animation: none; } }

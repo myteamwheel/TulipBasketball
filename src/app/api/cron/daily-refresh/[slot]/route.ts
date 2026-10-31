@@ -8,11 +8,7 @@ export const dynamic = "force-dynamic";
 
 function authorized(request: NextRequest): boolean {
   const secret = process.env.CRON_SECRET?.trim();
-  if (secret) return request.headers.get("authorization") === `Bearer ${secret}`;
-  // Compatibility fallback for projects that have not yet provisioned
-  // CRON_SECRET. Exact Vercel cron UA is accepted only together with the
-  // time-window and once-per-day guards below.
-  return request.headers.get("user-agent") === "vercel-cron/1.0";
+  return Boolean(secret) && request.headers.get("authorization") === `Bearer ${secret}`;
 }
 
 function easternParts(date: Date): { date: string; hour: number } {

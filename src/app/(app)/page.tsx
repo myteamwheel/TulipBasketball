@@ -208,7 +208,7 @@ export default async function HomePage() {
     lineupProblems = rows.filter((row) => row.slot === "STARTER" && /out|ir|pup|doubt/i.test(row.status ?? "")),
     illegalIr = rows.filter((row) => row.slot === "IR" && irEligible(catalog[roster.find(player => player.id === row.id)!.sleeperId]?.injury_status || row.status, league.settings) === false),
     taxi = taxiDeadlineLabel(Number(league.settings.taxi_deadline), league.status === "in_season"),
-    topSell = rows.filter((row) => row.signal === "SELL_HIGH").sort((a, b) => (b.signalScore ?? 0) - (a.signalScore ?? 0))[0],
+    topSell = rows.filter((row) => row.signal === "SELL_HIGH" && row.signalConfidence !== "LOW").sort((a, b) => (b.signalScore ?? 0) - (a.signalScore ?? 0))[0],
     topBuy = [...predictionModels.values()].filter(row => !playerIds.includes(row.playerId) && row.confidence === "HIGH" && row.modelEdgePercent > 0).sort((a, b) => b.modelEdgePercent - a.modelEdgePercent)[0],
     faabUsed = sleeperRosters.find((roster) => roster.roster_id === manager.sleeperRosterId)?.settings?.waiver_budget_used,
     faabRemaining = Number.isFinite(faabUsed) ? Math.max(0, Number(league.settings.waiver_budget ?? 100) - Number(faabUsed)) : null,
@@ -235,7 +235,7 @@ export default async function HomePage() {
           <div className="rounded bg-neutral-950 p-3"><div className="text-xs text-neutral-400">Lineup issues</div><div className={`mt-1 text-lg font-semibold ${lineupProblems.length ? "text-red-300" : "text-emerald-300"}`}>{lineupProblems.length}</div><div className="text-xs text-neutral-400">{lineupProblems.map((row) => row.fullName).join(", ") || "No injured starters"}</div></div>
           <div className="rounded bg-neutral-950 p-3"><div className="text-xs text-neutral-400">Illegal IR</div><div className={`mt-1 text-lg font-semibold ${illegalIr.length ? "text-red-300" : "text-emerald-300"}`}>{illegalIr.length}</div><div className="text-xs text-neutral-400">{illegalIr.map((row) => row.fullName).join(", ") || "IR slots valid"}</div></div>
           <div className="rounded bg-neutral-950 p-3"><div className="text-xs text-neutral-400">Taxi check</div><div className="mt-1 font-semibold text-neutral-100">{taxi.locked ? "Additions locked" : taxi.label}</div><div className="text-xs text-neutral-400">{taxi.locked ? `${taxi.label}; promotions out are allowed` : "Promotions out are always allowed"}</div></div>
-          <div className="rounded bg-neutral-950 p-3"><div className="text-xs text-neutral-400">Top decisions</div><div className="mt-1 text-sm text-neutral-100">Sell: {topSell?.fullName ?? "None"}</div><div className="text-sm text-neutral-100">Buy: {topBuy?.fullName ?? "None"}</div></div>
+          <div className="rounded bg-neutral-950 p-3"><div className="text-xs text-neutral-400">Decision signals</div><div className="mt-1 text-sm text-neutral-100">Roster sell-high: {topSell?.fullName ?? "No qualified signal"}</div><div className="text-sm text-neutral-100">External buy target: {topBuy?.fullName ?? "None meets the model evidence gates"}</div></div>
           <div className="rounded bg-neutral-950 p-3"><div className="text-xs text-neutral-400">FAAB left</div><div className="mt-1 text-lg font-semibold text-emerald-300">{faabRemaining === null ? "—" : `$${faabRemaining}`}</div><Link href="/waivers" className="text-xs text-emerald-400">Open waivers →</Link></div>
         </div>
       </section>

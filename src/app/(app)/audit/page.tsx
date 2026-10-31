@@ -435,7 +435,7 @@ export default async function AuditPage({
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="text-xs font-medium text-neutral-200">{pick.label}</div>
-                      <div className="mt-1 text-[9px] text-neutral-600">projected slot {pick.projectedSlot} · original {pick.originTeamName}</div>
+                      <div className="mt-1 text-[9px] text-neutral-600">estimated order {pick.projectedSlot} (not a confirmed draft slot) · original {pick.originTeamName}</div>
                     </div>
                     <div className="text-sm font-semibold text-neutral-200">{formatPoints(pick.value)}</div>
                   </div>
