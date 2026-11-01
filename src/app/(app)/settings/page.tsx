@@ -14,7 +14,8 @@ import { getLatestMarketSourceStatuses } from "@/lib/marketSources";
 import { fetchDraftPickMarketForCapital } from "@/lib/pickMarket";
 import { fetchTradedPickOwnershipState } from "@/lib/pickOwnership";
 import { getFootballCoverage } from "@/lib/footballCoverage";
-import { getLatestRefreshRun } from "@/lib/refresh";
+import { getLatestRefreshRun, getLatestSuccessfulSleeperSyncTime } from "@/lib/refresh";
+import { sourceHealth } from "@/lib/sourceHealth";
 import { getProjectionDashboardData } from "@/lib/weeklyProjection";
 import { formatDateEastern, formatDateTimeEastern, timeAgo } from "@/lib/format";
 
@@ -36,6 +37,7 @@ export default async function SettingsPage() {
     football,
     latestRun,
     projectionData,
+    lastSleeperSync,
   ] = await Promise.all([
     getPlayersNeedingMappingReview(),
     getLatestMarketSourceStatuses(),
@@ -45,6 +47,7 @@ export default async function SettingsPage() {
     getFootballCoverage().catch(() => null),
     getLatestRefreshRun(),
     getProjectionDashboardData().catch(() => null),
+    getLatestSuccessfulSleeperSyncTime(),
   ]);
   const ids = entries.map((entry) => entry.playerId);
   const [market, mix] = await Promise.all([
@@ -68,7 +71,9 @@ export default async function SettingsPage() {
           ? "identity mapping needs review"
           : !entry.player.nflTeam
             ? "no current NFL team"
-            : row?.isStale
+            : row?.currentValue == null
+              ? "no recorded KTC value"
+            : row.isStale
               ? "KTC observation is stale"
               : "no current KTC value";
       return {
@@ -137,13 +142,13 @@ export default async function SettingsPage() {
       <section className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-3">
           <div className="text-[9px] uppercase tracking-wide text-neutral-600">
-            League ownership
+            Synced roster entries
           </div>
           <div className="mt-1 text-lg font-semibold text-neutral-100">
-            {owned}/{owned}
+            {owned}
           </div>
           <div className="text-[10px] text-neutral-600">
-            current Sleeper roster entries
+            last confirmed Sleeper sync {timeAgo(lastSleeperSync)}
           </div>
         </div>
         <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-3">
@@ -385,21 +390,11 @@ export default async function SettingsPage() {
           usable observation.
         </p>
         <div className="mt-4 space-y-2">
-          {sources.filter(source => !source.status.stale && source.covered > 0).map((source) => {
+          {sources.map((source) => {
             const runStatus = latestSourceStatus.get(source.key);
             const disabled = runStatus?.enabled === false;
-            const label = disabled
-              ? "Disabled"
-              : source.status.stale
-                ? runStatus?.ok === false
-                  ? "Refresh failed"
-                  : "Unavailable"
-                : "Fresh";
-            const labelClass = disabled
-              ? "text-neutral-500"
-              : source.status.stale
-                ? "text-amber-300"
-                : "text-emerald-300";
+            const health = sourceHealth(source.status.stale, source.covered, runStatus);
+            const labelClass = health.tone === "neutral" ? "text-neutral-500" : health.tone === "warning" ? "text-amber-300" : "text-emerald-300";
             return (
               <div
                 key={source.key}
@@ -431,7 +426,7 @@ export default async function SettingsPage() {
                     </p>
                   </div>
                   <span className={`text-[10px] font-medium ${labelClass}`}>
-                    {label}
+                    {health.label}
                   </span>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-neutral-600">
@@ -458,21 +453,13 @@ export default async function SettingsPage() {
                       : "never"}
                   </span>
                 </div>
-                {disabled ? (
-                  <p className="mt-2 text-[10px] leading-4 text-neutral-500">
-                    {runStatus?.message ?? "Optional source disabled by configuration."}
-                  </p>
-                ) : source.status.stale && runStatus?.ok === false ? (
-                  <p className="mt-2 text-[10px] leading-4 text-amber-300">
-                    {runStatus.message}
-                  </p>
-                ) : null}
+                {health.message ? <p className={`mt-2 text-[10px] leading-4 ${disabled ? "text-neutral-500" : "text-amber-300"}`}>{health.message}</p> : null}
               </div>
             );
           })}
         </div>
         <p className="mt-3 text-[10px] text-neutral-600">
-          Only fresh sources with usable coverage appear here. The blend excludes unavailable or stale values and renormalizes weights across qualifying sources.
+          All configured sources appear here, including failed, stale, disabled, and zero-coverage feeds. The blend excludes unavailable or stale values and renormalizes weights across qualifying sources.
         </p>
       </section>
 

@@ -22,7 +22,7 @@ test('incomplete trade reviewer withholds a winner instead of grading the known 
  const html=renderToStaticMarkup(React.createElement(TradeReviewCard,{sides:sides(true)}));
  assert.match(html,/Winner withheld/);
  assert.doesNotMatch(html,/has the market edge/);
- assert.match(html,/Missing price/);
+ assert.match(html,/Missing player\/pick prices/);
 });
 test('player-for-FAAB reviewer shows a market edge and displays FAAB outside the rating',()=>{
  const player=[asset('Reggie Virgil',805)];
@@ -42,6 +42,15 @@ test('FAAB-only transfers are not labeled incomplete',()=>{
  const html=renderToStaticMarkup(React.createElement(TradeReviewCard,{sides:rows}));
  assert.match(html,/FAAB-only transfer/);
  assert.doesNotMatch(html,/Winner withheld|Grade unavailable/);
+});
+test('an absent historical price does not claim the current grade was excluded',()=>{
+ const rows=sides();
+ rows[0].got[0].atTradeValue=null;
+ for(const side of rows) side.grades=calculateTradeSideGrades(side);
+ const html=renderToStaticMarkup(React.createElement(TradeReviewCard,{sides:rows}));
+ assert.match(html,/Team One has the market edge/);
+ assert.match(html,/Missing historical price; at-trade grade withheld/);
+ assert.doesNotMatch(html,/excluded from grades/);
 });
 test('Excel export round-trip remains compatible with the UUID override',async()=>{
  const ExcelJS=await import('exceljs');

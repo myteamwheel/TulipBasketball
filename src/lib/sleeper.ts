@@ -3,6 +3,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { LEAGUE_TEAM_COUNT } from "@/lib/config";
 
 const BASE = "https://api.sleeper.app/v1";
 const PLAYER_CACHE_PATH = path.join(os.tmpdir(), "dynasty-boys-sleeper-players.json");
@@ -10,7 +11,7 @@ const PLAYER_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 let playerCatalogPromise: Promise<Record<string, SleeperPlayer>> | null = null;
 let playerCatalogExpiresAt = 0;
 
-export interface SleeperLeague { league_id:string; name:string; season:string; status:string; roster_positions:string[]; scoring_settings:Record<string,number>; settings:Record<string,number|string>; previous_league_id:string|null; }
+export interface SleeperLeague { total_rosters?:number; league_id:string; name:string; season:string; status:string; roster_positions:string[]; scoring_settings:Record<string,number>; settings:Record<string,number|string>; previous_league_id:string|null; }
 export interface SleeperUser { user_id:string; display_name:string; metadata:{team_name?:string}|null; }
 export interface SleeperRoster { roster_id:number; owner_id:string|null; players:string[]|null; starters:string[]|null; reserve:string[]|null; taxi:string[]|null; settings?:Record<string,number>; }
 export interface SleeperPlayer { player_id:string; full_name?:string; first_name?:string; last_name?:string; position?:string; team?:string|null; status?:string|null; injury_status?:string|null; active?:boolean; }
@@ -19,14 +20,40 @@ export interface SleeperTradedPick { season:string; round:number; roster_id:numb
 export interface SleeperNflState { week:number; season:string; season_type:string; }
 export interface SleeperMatchup { roster_id:number; matchup_id:number|null; points:number; custom_points:number|null; starters:string[]|null; players:string[]|null; }
 
-async function getJson<T>(url:string):Promise<T>{const res=await fetch(url,{headers:{Accept:"application/json"}});if(!res.ok)throw new Error(`Sleeper API request failed (${res.status} ${res.statusText}): ${url}`);return(await res.json())as T;}
+export function validateSleeperRosterSnapshot(league: SleeperLeague, users: SleeperUser[], rosters: SleeperRoster[]): void {
+  const expected = league.total_rosters ?? LEAGUE_TEAM_COUNT;
+  if (!Number.isInteger(expected) || expected < 1 || !Array.isArray(users) || !users.length || !Array.isArray(rosters) || rosters.length !== expected ||
+      rosters.some(roster => !roster || !Number.isInteger(roster.roster_id) || roster.roster_id <= 0 || (roster.players != null && !Array.isArray(roster.players))) ||
+      new Set(rosters.map(roster => roster.roster_id)).size !== rosters.length) {
+    throw new Error("Sleeper returned an incomplete roster or manager list; existing ownership was preserved.");
+  }
+  const players = rosters.flatMap(roster => roster.players ?? []);
+  if (players.some(player => typeof player !== "string" || !player) || new Set(players).size !== players.length) {
+    throw new Error("Sleeper returned conflicting player ownership; existing ownership was preserved.");
+  }
+}
+
+async function getJson<T>(url:string):Promise<T>{const res=await fetch(url,{headers:{Accept:"application/json"},signal:AbortSignal.timeout(20_000),cache:"no-store"});if(!res.ok)throw new Error(`Sleeper API request failed (${res.status} ${res.statusText}): ${url}`);return(await res.json())as T;}
 export async function getLeague(leagueId:string){return getJson<SleeperLeague>(`${BASE}/league/${leagueId}`)}
 export async function getUsers(leagueId:string){return getJson<SleeperUser[]>(`${BASE}/league/${leagueId}/users`)}
 export async function getRosters(leagueId:string){return getJson<SleeperRoster[]>(`${BASE}/league/${leagueId}/rosters`)}
 export async function getNflState(){return getJson<SleeperNflState>(`${BASE}/state/nfl`)}
 export async function getTradedPicks(leagueId:string){return getJson<SleeperTradedPick[]>(`${BASE}/league/${leagueId}/traded_picks`)}
 export async function getMatchups(leagueId:string,week:number){return getJson<SleeperMatchup[]>(`${BASE}/league/${leagueId}/matchups/${week}`)}
-export async function getAllTransactions(leagueId:string,throughWeek:number):Promise<SleeperTransaction[]>{const weeks=Array.from({length:throughWeek},(_,i)=>i+1),results=await Promise.all(weeks.map(w=>getJson<SleeperTransaction[]>(`${BASE}/league/${leagueId}/transactions/${w}`).catch(()=>[] as SleeperTransaction[])));return results.flat();}
+export async function getAllTransactions(leagueId: string, throughWeek: number): Promise<SleeperTransaction[]> {
+  if (!Number.isInteger(throughWeek) || throughWeek < 1 || throughWeek > 18) throw new Error("Invalid Sleeper transaction week range.");
+  const weeks = Array.from({ length: throughWeek }, (_, index) => index + 1);
+  const results = await Promise.all(weeks.map(async (week) => {
+    try {
+      const rows = await getJson<SleeperTransaction[]>(`${BASE}/league/${leagueId}/transactions/${week}`);
+      if (!Array.isArray(rows)) throw new Error("Transaction feed is not an array.");
+      return rows;
+    } catch (error) {
+      throw new Error(`Sleeper transactions week ${week} failed; the ledger was not refreshed. ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }));
+  return [...new Map(results.flat().map(row => [row.transaction_id, row])).values()];
+}
 export async function getPlayerCatalog():Promise<Record<string,SleeperPlayer>>{
   if(playerCatalogPromise&&Date.now()<playerCatalogExpiresAt)return playerCatalogPromise;
   const request=(async()=>{

@@ -12,7 +12,9 @@ export interface TradedPickOwnershipState {
 
 function withAge(rows: SleeperTradedPick[], observedAt: string, origin: TradedPickOwnershipState["origin"]): TradedPickOwnershipState {
   const time = new Date(observedAt).getTime();
-  const ageMs = Number.isFinite(time) ? Math.max(0, Date.now() - time) : Infinity;
+  const now = Date.now();
+  if (!Number.isFinite(time) || time > now) throw new Error("Traded-pick ownership has an invalid or future observation timestamp.");
+  const ageMs = now - time;
   return { rows, observedAt, ageMs, stale: ageMs > MARKET_SOURCE_MAX_AGE_MS, origin };
 }
 
