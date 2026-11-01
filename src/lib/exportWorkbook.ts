@@ -7,28 +7,9 @@ import { prisma } from "@/lib/prisma";
 import { SLEEPER_LEAGUE_ID } from "@/lib/config";
 import { ensureAnalyticsStorage } from "@/lib/weeklyProjection";
 import { getAuditDashboardData } from "@/lib/audit";
+import { excelValue } from "@/lib/excelCell";
 
 type Row = Record<string, unknown>;
-
-function excelValue(value: unknown): string | number | boolean | Date | null {
-  if (value === null || value === undefined) return null;
-  if (typeof value === "bigint") return Number(value);
-  if (
-    typeof value === "string" ||
-    typeof value === "number" ||
-    typeof value === "boolean"
-  )
-    return value;
-  if (value instanceof Date) return value;
-  try {
-    const text = JSON.stringify(value);
-    return text.length > 32700
-      ? `${text.slice(0, 32680)}…[truncated for Excel cell limit]`
-      : text;
-  } catch {
-    return String(value);
-  }
-}
 
 async function query(sql: string) {
   return prisma.$queryRawUnsafe<Row[]>(sql);
