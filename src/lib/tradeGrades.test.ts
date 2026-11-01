@@ -38,16 +38,49 @@ test("withholds a historical grade when any trade asset lacks a nearby snapshot"
   assert.equal(grades.current.status, "READY");
 });
 
-test("withholds both grades when a trade includes unpriced FAAB", () => {
-  const grades = calculateTradeSideGrades({
+test("FAAB does not change historical or current player package ratings", () => {
+  const packages = {
     gave: [asset("Player A", 3_000, 3_000)],
     got: [asset("Player B", 3_200, 3_200)],
-    hasUnpricedAssets: true,
-  });
+  };
+  assert.deepEqual(
+    calculateTradeSideGrades({ ...packages, faabSent: 500, faabReceived: 5 }),
+    calculateTradeSideGrades(packages),
+  );
+});
 
-  assert.equal(grades.atTrade.status, "INCOMPLETE");
-  assert.equal(grades.current.status, "INCOMPLETE");
-  assert.match(grades.current.reason ?? "", /FAAB/);
+test("player-for-FAAB trades rate both sides, with FAAB contributing zero", () => {
+  const buyer = calculateTradeSideGrades({ gave: [], got: [asset("Player", 819, 805)], faabSent: 9 });
+  const seller = calculateTradeSideGrades({ gave: [asset("Player", 819, 805)], got: [], faabReceived: 9 });
+  for (const phase of ["atTrade", "current"] as const) {
+    assert.equal(buyer[phase].status, "READY");
+    assert.equal(buyer[phase].grade, "A+");
+    assert.equal(buyer[phase].balance?.give.adjustedValue, 0);
+    assert.equal(seller[phase].status, "READY");
+    assert.equal(seller[phase].grade, "D");
+    assert.equal(seller[phase].balance?.get.adjustedValue, 0);
+  }
+});
+
+test("FAAB cannot conceal missing player prices or an unrelated missing ledger side", () => {
+  const missingPrice = calculateTradeSideGrades({ gave: [], got: [asset("Unknown", null, 805)], faabSent: 9 });
+  assert.equal(missingPrice.atTrade.status, "INCOMPLETE");
+  assert.equal(missingPrice.current.status, "READY");
+  for (const faabSent of [undefined, 0, -1, NaN, Infinity]) {
+    assert.equal(calculateTradeSideGrades({ gave: [], got: [asset("Player", 819, 805)], faabSent }).current.status, "INCOMPLETE");
+  }
+  assert.equal(calculateTradeSideGrades({ gave: [], got: [asset("Player", 819, 805)], faabReceived: 9 }).current.status, "INCOMPLETE");
+});
+
+test("FAAB-only sides are excluded without being labeled incomplete", () => {
+  const grades = calculateTradeSideGrades({
+    gave: [],
+    got: [],
+    faabSent: 9,
+  });
+  assert.equal(grades.atTrade.status, "EXCLUDED");
+  assert.equal(grades.current.status, "EXCLUDED");
+  assert.equal(grades.current.grade, null);
 });
 
 test("grades use the same package adjustment as the trade calculator", () => {

@@ -9,7 +9,79 @@
   --border: #d8e0ea;
   --border-strong: #c5d0dd;
   --muted: #5f6d80;
+  --text-secondary: #263348;
+  --text-body: #3b4a60;
+  --text-muted: #4d5d73;
+  --text-subtle: #58687d;
+  --text-faint: #68788c;
+  --surface-raised: #e3eaf2;
+  --overlay: rgba(246, 248, 251, .9);
+  --surface-overlay: rgba(255, 255, 255, .86);
+  --muted-overlay: rgba(241, 245, 249, .88);
+  --header: rgba(255, 255, 255, .96);
+  --positive: #047857;
+  --positive-surface: #ecfdf5;
+  --positive-badge: #d1fae5;
+  --positive-border: #86efac;
+  --negative: #b42318;
+  --negative-surface: #fef2f2;
+  --negative-border: #fca5a5;
+  --warning: #92400e;
+  --warning-surface: #fffbeb;
+  --warning-border: #fcd34d;
+  --info: #1d4ed8;
+  --info-surface: #eff6ff;
+  --sky: #075985;
+  --sky-surface: #f0f9ff;
+  --purple: #6d28d9;
+  --purple-surface: #f5f3ff;
+  --info-border: #bfdbfe;
+  --orange: #9a3412;
+  --chart-grid: #e2e8f0;
+  --chart-tick: #64748b;
   color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --background: #0b1220;
+  --foreground: #e5edf8;
+  --surface: #111d2e;
+  --surface-muted: #19273b;
+  --surface-hover: #23334b;
+  --surface-raised: #293b54;
+  --border: #2b3d55;
+  --border-strong: #3c526e;
+  --muted: #a7b6cb;
+  --text-secondary: #dae4f2;
+  --text-body: #c4d1e3;
+  --text-muted: #b2c1d6;
+  --text-subtle: #a7b6cb;
+  --text-faint: #98abc4;
+  --overlay: rgba(11, 18, 32, .93);
+  --surface-overlay: rgba(17, 29, 46, .9);
+  --muted-overlay: rgba(25, 39, 59, .9);
+  --header: rgba(11, 18, 32, .96);
+  --positive: #6ee7b7;
+  --positive-surface: #102f2c;
+  --positive-badge: #17473c;
+  --positive-border: #286957;
+  --negative: #fda4af;
+  --negative-surface: #351e2b;
+  --negative-border: #713748;
+  --warning: #fcd77d;
+  --warning-surface: #332b1d;
+  --warning-border: #6e5730;
+  --info: #93baff;
+  --info-surface: #182c49;
+  --sky: #8ed8f8;
+  --sky-surface: #153044;
+  --purple: #c4b5fd;
+  --purple-surface: #292441;
+  --info-border: #3a577c;
+  --orange: #fdba74;
+  --chart-grid: #2b3d55;
+  --chart-tick: #a7b6cb;
+  color-scheme: dark;
 }
 
 @theme inline {
@@ -45,8 +117,7 @@ button,
 input,
 select,
 textarea {
-  font: inherit;
-  color: inherit;
+  font-family: inherit;
 }
 
 button:not(:disabled) {
@@ -65,29 +136,28 @@ textarea::placeholder {
 }
 
 /*
- * The application started as a dark terminal. Its components still use the
- * neutral Tailwind scale, so map that scale to a deliberate light hierarchy
- * instead of mixing a white page with dark control fragments.
+ * Map the existing terminal classes and newer slate cards to the same theme
+ * tokens so controls, menus, tables, charts, and trade cards switch together.
  */
 .bg-neutral-950 { background-color: var(--background) !important; }
 .bg-neutral-900 { background-color: var(--surface) !important; }
 .bg-neutral-800 { background-color: var(--surface-muted) !important; }
-.bg-neutral-700 { background-color: #e3eaf2 !important; }
+.bg-neutral-700 { background-color: var(--surface-raised) !important; }
 .bg-neutral-500 { background-color: #64748b !important; }
-.bg-neutral-950\/40, .bg-neutral-950\/50, .bg-neutral-950\/60, .bg-neutral-950\/70, .bg-neutral-950\/95 { background-color: rgba(246, 248, 251, .9) !important; }
-.bg-neutral-900\/40, .bg-neutral-900\/50, .bg-neutral-900\/60, .bg-neutral-900\/70 { background-color: rgba(255, 255, 255, .86) !important; }
-.bg-neutral-800\/30, .bg-neutral-800\/40 { background-color: rgba(241, 245, 249, .88) !important; }
-.border-neutral-900, .border-neutral-900\/90 { border-color: #e2e8f0 !important; }
+.bg-neutral-950\/40, .bg-neutral-950\/50, .bg-neutral-950\/60, .bg-neutral-950\/70, .bg-neutral-950\/95 { background-color: var(--overlay) !important; }
+.bg-neutral-900\/40, .bg-neutral-900\/50, .bg-neutral-900\/60, .bg-neutral-900\/70 { background-color: var(--surface-overlay) !important; }
+.bg-neutral-800\/30, .bg-neutral-800\/40 { background-color: var(--muted-overlay) !important; }
+.border-neutral-900, .border-neutral-900\/90 { border-color: var(--border) !important; }
 .border-neutral-800, .border-neutral-800\/70, .border-neutral-800\/80, .border-neutral-800\/90 { border-color: var(--border) !important; }
 .border-neutral-700 { border-color: var(--border-strong) !important; }
-.border-neutral-600 { border-color: #a9b6c5 !important; }
+.border-neutral-600 { border-color: var(--border-strong) !important; }
 .text-neutral-100 { color: var(--foreground) !important; }
-.text-neutral-200 { color: #263348 !important; }
-.text-neutral-300 { color: #3b4a60 !important; }
-.text-neutral-400 { color: #4d5d73 !important; }
-.text-neutral-500 { color: #58687d !important; }
+.text-neutral-200 { color: var(--text-secondary) !important; }
+.text-neutral-300 { color: var(--text-body) !important; }
+.text-neutral-400 { color: var(--text-muted) !important; }
+.text-neutral-500 { color: var(--text-subtle) !important; }
 .text-neutral-600 { color: var(--muted) !important; }
-.text-neutral-700 { color: #68788c !important; }
+.text-neutral-700 { color: var(--text-faint) !important; }
 
 /* Cards retain enough separation to scan dense tables without heavy chrome. */
 .rounded-lg.bg-neutral-900,
@@ -99,30 +169,43 @@ textarea::placeholder {
   background-color: var(--surface-hover) !important;
 }
 
-/* Preserve semantic colors while making them legible on white surfaces. */
-.text-emerald-100, .text-emerald-200, [class*="text-emerald-300"], .text-emerald-400, .text-emerald-500 { color: #047857 !important; }
-.text-red-200, [class*="text-red-300"], .text-red-400, .text-rose-200, .text-rose-300 { color: #b42318 !important; }
-.text-amber-100, .text-amber-200, .text-amber-300, .text-amber-400, .text-amber-500, .text-amber-600 { color: #92400e !important; }
-.text-blue-200, .text-blue-300 { color: #1d4ed8 !important; }
-.text-orange-400 { color: #9a3412 !important; }
-.text-purple-200, .text-purple-300, .text-violet-200, .text-violet-300 { color: #6d28d9 !important; }
-.text-sky-200, .text-sky-300, .text-sky-400 { color: #075985 !important; }
-[class*="bg-emerald-950"] { background-color: #ecfdf5 !important; }
-[class*="bg-amber-950"], [class*="bg-amber-900"] { background-color: #fffbeb !important; }
-[class*="bg-red-950"], [class*="bg-rose-950"] { background-color: #fef2f2 !important; }
-[class*="bg-blue-950"] { background-color: #eff6ff !important; }
-[class*="bg-sky-950"] { background-color: #f0f9ff !important; }
-[class*="bg-purple-950"], [class*="bg-violet-950"] { background-color: #f5f3ff !important; }
-[class*="border-emerald-800"], [class*="border-emerald-900"] { border-color: #86efac !important; }
-[class*="border-amber-700"], [class*="border-amber-800"], [class*="border-amber-900"] { border-color: #fcd34d !important; }
-[class*="border-red-800"], [class*="border-red-900"], [class*="border-rose-800"], [class*="border-rose-900"] { border-color: #fca5a5 !important; }
-[class*="border-sky-800"], [class*="border-sky-900"], [class*="border-violet-800"] { border-color: #bfdbfe !important; }
-.bg-neutral-500.text-white, .bg-neutral-700.text-white, .bg-neutral-800.text-white, .bg-neutral-900.text-white, .bg-neutral-950.text-white { color: #172033 !important; }
-.hover\:text-white:hover { color: #111827 !important; }
-header {
-  background-color: rgba(255, 255, 255, .96) !important;
-  box-shadow: 0 1px 0 rgba(15, 23, 42, .035);
-}
+/* Semantic colors remain readable in both themes. */
+.text-emerald-100, .text-emerald-200, [class*="text-emerald-300"], .text-emerald-400, .text-emerald-500, .text-emerald-700, .text-emerald-800, .text-emerald-900 { color: var(--positive) !important; }
+.text-red-200, [class*="text-red-300"], .text-red-400, .text-rose-200, .text-rose-300, .text-rose-800 { color: var(--negative) !important; }
+.text-amber-100, .text-amber-200, .text-amber-300, .text-amber-400, .text-amber-500, .text-amber-600, .text-amber-800 { color: var(--warning) !important; }
+.text-blue-200, .text-blue-300 { color: var(--info) !important; }
+.text-orange-400 { color: var(--orange) !important; }
+.text-purple-200, .text-purple-300, .text-violet-200, .text-violet-300 { color: var(--purple) !important; }
+.text-sky-200, .text-sky-300, .text-sky-400 { color: var(--sky) !important; }
+[class*="bg-emerald-950"], .bg-emerald-50 { background-color: var(--positive-surface) !important; }
+.bg-emerald-100 { background-color: var(--positive-badge) !important; }
+[class*="bg-amber-950"], [class*="bg-amber-900"], .bg-amber-50 { background-color: var(--warning-surface) !important; }
+[class*="bg-red-950"], [class*="bg-rose-950"], .bg-rose-50 { background-color: var(--negative-surface) !important; }
+[class*="bg-blue-950"] { background-color: var(--info-surface) !important; }
+[class*="bg-sky-950"] { background-color: var(--sky-surface) !important; }
+[class*="bg-purple-950"], [class*="bg-violet-950"] { background-color: var(--purple-surface) !important; }
+[class*="border-emerald-800"], [class*="border-emerald-900"], .border-emerald-200, .border-emerald-300 { border-color: var(--positive-border) !important; }
+[class*="border-amber-700"], [class*="border-amber-800"], [class*="border-amber-900"], .border-amber-200 { border-color: var(--warning-border) !important; }
+[class*="border-red-800"], [class*="border-red-900"], [class*="border-rose-800"], [class*="border-rose-900"] { border-color: var(--negative-border) !important; }
+[class*="border-sky-800"], [class*="border-sky-900"], [class*="border-violet-800"] { border-color: var(--info-border) !important; }
+.bg-neutral-500.text-white, .bg-neutral-700.text-white, .bg-neutral-800.text-white, .bg-neutral-900.text-white, .bg-neutral-950.text-white { color: var(--foreground) !important; }
+.hover\:text-white:hover { color: var(--foreground) !important; }
+header { background-color: var(--header) !important; }
+
+.bg-white { background-color: var(--surface) !important; }
+.bg-slate-50, .bg-slate-100 { background-color: var(--surface-muted) !important; }
+.bg-slate-200, .bg-neutral-200 { background-color: var(--surface-raised) !important; }
+.text-slate-950, .text-slate-900 { color: var(--foreground) !important; }
+.text-slate-800 { color: var(--text-secondary) !important; }
+.text-slate-700 { color: var(--text-body) !important; }
+.text-slate-600 { color: var(--text-muted) !important; }
+.text-slate-500 { color: var(--text-subtle) !important; }
+.border-slate-200 { border-color: var(--border) !important; }
+.border-slate-300 { border-color: var(--border-strong) !important; }
+.divide-slate-200 > :not(:last-child), .divide-neutral-800 > :not(:last-child) { border-color: var(--border) !important; }
+.decoration-slate-300 { text-decoration-color: var(--border-strong) !important; }
+.hover\:bg-emerald-50:hover { background-color: var(--positive-surface) !important; }
+.hover\:text-emerald-800:hover { color: var(--positive) !important; }
 
 /* Keep compact dashboard labels readable on cards. */
 :where(main) :is(.text-\[8px\], .text-\[9px\], .text-\[10px\], .text-\[11px\]) {

@@ -24,6 +24,25 @@ test('incomplete trade reviewer withholds a winner instead of grading the known 
  assert.doesNotMatch(html,/has the market edge/);
  assert.match(html,/Missing price/);
 });
+test('player-for-FAAB reviewer shows a market edge and displays FAAB outside the rating',()=>{
+ const player=[asset('Reggie Virgil',805)];
+ const rows=[
+  {rosterId:7,name:'Buyer',gave:[],got:player,faabSent:9,faabReceived:0,grades:calculateTradeSideGrades({gave:[],got:player,faabSent:9})},
+  {rosterId:3,name:'Seller',gave:player,got:[],faabSent:0,faabReceived:9,grades:calculateTradeSideGrades({gave:player,got:[],faabReceived:9})},
+ ];
+ const html=renderToStaticMarkup(React.createElement(TradeReviewCard,{sides:rows}));
+ assert.match(html,/Buyer has the market edge/);
+ assert.match(html,/FAAB sent: \$9/);
+ assert.match(html,/FAAB received: \$9/);
+ assert.match(html,/counts as 0 in both historical and current ratings/);
+ assert.doesNotMatch(html,/Winner withheld|Grade unavailable/);
+});
+test('FAAB-only transfers are not labeled incomplete',()=>{
+ const rows=[1,2].map(rosterId=>({rosterId,name:`Team ${rosterId}`,gave:[],got:[],faabSent:rosterId===1?9:0,faabReceived:rosterId===2?9:0,grades:calculateTradeSideGrades({gave:[],got:[],faabSent:rosterId===1?9:0,faabReceived:rosterId===2?9:0})}));
+ const html=renderToStaticMarkup(React.createElement(TradeReviewCard,{sides:rows}));
+ assert.match(html,/FAAB-only transfer/);
+ assert.doesNotMatch(html,/Winner withheld|Grade unavailable/);
+});
 test('Excel export round-trip remains compatible with the UUID override',async()=>{
  const ExcelJS=await import('exceljs');
  const book=new ExcelJS.default.Workbook();

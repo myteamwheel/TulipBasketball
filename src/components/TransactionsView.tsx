@@ -10,13 +10,13 @@ import { formatDateTimeEastern, formatPoints, formatSigned, trendColorClass } fr
 import { fetchFreshDraftPickMarketValues } from "@/lib/pickMarket";
 import { currentPickMarketValue } from "@/lib/pickValuation";
 import { calculateTradeSideGrades, selectTradeSnapshot, TRADE_SNAPSHOT_WINDOW_MS, type TradeGradeAsset, type TradeSnapshotTiming } from "@/lib/tradeGrades";
+import { faabForRoster, parseFaabTransfers } from "@/lib/tradeFaab";
 
 
 
 const PAGE_SIZE = 15;
 type TxFilter = "all" | "trade" | "moves";
 type TradedPick = { season: string; round: number; roster_id: number; previous_owner_id: number; owner_id: number };
-type FaabTransfer = { amount: number; sender: number; receiver: number };
 type Asset = TradeGradeAsset & { playerId: string | null; atMoveObservedAt: Date | null; atMoveTiming: TradeSnapshotTiming | null };
 
 const HISTORICAL_MARKET_WINDOW_MS = TRADE_SNAPSHOT_WINDOW_MS;
@@ -112,7 +112,7 @@ export default async function TransactionsPage({ searchParams, review = false }:
   }
   const rows = transactions.map((tx) => {
     const adds = record(tx.adds), drops = record(tx.drops), picks = array<TradedPick>(tx.draftPicks);
-    const faab = array<FaabTransfer>(tx.waiverBudget).filter((row) => Number(row.amount) > 0);
+    const faab = parseFaabTransfers(tx.waiverBudget);
     const rosterIds = [...new Set([...array<number>(tx.rosterIdsInvolved), ...Object.values(adds), ...Object.values(drops), ...picks.flatMap((p) => [p.owner_id, p.previous_owner_id]), ...faab.flatMap(p => [p.sender, p.receiver])])];
     const sides = rosterIds.map((rosterId) => {
       const gotPlayers = Object.entries(adds).filter(([, owner]) => owner === rosterId).map(([id]) => playerAsset(id, tx.sleeperCreatedAt));
@@ -120,13 +120,15 @@ export default async function TransactionsPage({ searchParams, review = false }:
       const gotPicks = picks.filter((p) => p.owner_id === rosterId).map((p) => pickAsset(p, tx.sleeperCreatedAt));
       const gavePicks = picks.filter((p) => p.previous_owner_id === rosterId).map((p) => pickAsset(p, tx.sleeperCreatedAt));
       const gave = [...gavePlayers, ...gavePicks], got = [...gotPlayers, ...gotPicks];
+      const budget = faabForRoster(faab, rosterId);
       return {
         rosterId,
         name: teamName(rosterId),
         got,
         gave,
+        ...budget,
         grades: tx.type === "trade"
-          ? calculateTradeSideGrades({ gave, got, hasUnpricedAssets: faab.length > 0 })
+          ? calculateTradeSideGrades({ gave, got, ...budget })
           : null,
       };
     }).filter((side) => side.got.length || side.gave.length || faab.some(row => row.sender === side.rosterId || row.receiver === side.rosterId));

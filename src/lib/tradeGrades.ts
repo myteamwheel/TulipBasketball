@@ -21,7 +21,7 @@ export type TradeGradeAsset = {
 export type TradeGradeLetter = "A+" | "A" | "A-" | "B+" | "B" | "B-" | "C+" | "C" | "D";
 
 export type TradeGradePhase = {
-  status: "READY" | "INCOMPLETE";
+  status: "READY" | "INCOMPLETE" | "EXCLUDED";
   grade: TradeGradeLetter | null;
   result: "WON" | "EVEN" | "LOST" | null;
   balance: TradeBalance | null;
@@ -34,8 +34,9 @@ export type TradeGradePhase = {
 export type TradeSideGradeInput = {
   gave: TradeGradeAsset[];
   got: TradeGradeAsset[];
-  /** FAAB has no KTC market price. Do not score a partial trade as complete. */
-  hasUnpricedAssets?: boolean;
+  /** Recorded FAAB establishes a valid cash-only side, but contributes zero to grades. */
+  faabSent?: number;
+  faabReceived?: number;
 };
 
 export const TRADE_SNAPSHOT_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -130,7 +131,22 @@ function calculatePhase(
     .filter((asset) => !isUsableValue(asset[key]))
     .map((asset) => asset.label);
 
-  if (!side.gave.length || !side.got.length) {
+  const sentFaab = Number.isFinite(side.faabSent) && (side.faabSent ?? 0) > 0;
+  const receivedFaab = Number.isFinite(side.faabReceived) && (side.faabReceived ?? 0) > 0;
+
+  if (!assets.length && (sentFaab || receivedFaab)) {
+    return {
+      status: "EXCLUDED",
+      grade: null,
+      result: null,
+      balance: null,
+      valuedAssets: 0,
+      totalAssets: 0,
+      missingAssets: [],
+      reason: "FAAB-only side. No players or picks to rate; FAAB is excluded from market grades.",
+    };
+  }
+  if ((!side.gave.length && !sentFaab) || (!side.got.length && !receivedFaab)) {
     return {
       status: "INCOMPLETE",
       grade: null,
@@ -140,18 +156,6 @@ function calculatePhase(
       totalAssets: assets.length,
       missingAssets,
       reason: "The Sleeper ledger does not include a complete give-and-get side for this team.",
-    };
-  }
-  if (side.hasUnpricedAssets) {
-    return {
-      status: "INCOMPLETE",
-      grade: null,
-      result: null,
-      balance: null,
-      valuedAssets: assets.filter((asset) => isUsableValue(asset[key])).length,
-      totalAssets: assets.length,
-      missingAssets,
-      reason: "FAAB or another unpriced asset was included, so a complete market grade would be misleading.",
     };
   }
   if (missingAssets.length) {
@@ -193,7 +197,8 @@ function calculatePhase(
 /**
  * Grade one manager's side of a trade at the historical transaction snapshot
  * and at the newest fresh market snapshot. A grade is withheld rather than
- * estimating an absent player, pick, or FAAB value.
+ * estimating an absent player or pick value. FAAB is deliberately excluded in
+ * both phases, including when it is the only recorded payment for a player.
  */
 export function calculateTradeSideGrades(side: TradeSideGradeInput): {
   atTrade: TradeGradePhase;

@@ -21,10 +21,13 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  colorScheme: "light",
-  themeColor: "#f7f8fa",
+  colorScheme: "light dark",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f6f8fb" },
+    { media: "(prefers-color-scheme: dark)", color: "#0b1220" },
+  ],
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
-  return <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full bg-neutral-950 antialiased`}><body className="min-h-full min-w-0 bg-neutral-950 text-neutral-100">{children}</body></html>;
+  return <html lang="en" suppressHydrationWarning className={`${geistSans.variable} ${geistMono.variable} h-full bg-neutral-950 antialiased`}><head><script dangerouslySetInnerHTML={{ __html: `(function(){var t='system';try{t=localStorage.getItem('dynasty-theme')||t}catch(e){}document.documentElement.dataset.theme=t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light'})()` }} /></head><body className="min-h-full min-w-0 bg-neutral-950 text-neutral-100">{children}</body></html>;
 }
