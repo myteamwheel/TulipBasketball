@@ -24,10 +24,10 @@ export default async function DataExportPage() {
           Full Data Export
         </h1>
         <p className="mt-1 max-w-3xl text-sm leading-5 text-neutral-500">
-          Download a complete Excel workbook rebuilt from the dashboard&apos;s
-          retained history. The database stays canonical and append-oriented, so
-          each export contains everything currently recorded rather than relying
-          on one binary spreadsheet file being updated in place.
+          Download an Excel workbook rebuilt from the dashboard&apos;s retained
+          history. Each export includes the retained rows available when it is
+          generated, so it does not depend on an older spreadsheet being updated
+          in place.
         </p>
       </section>
 
@@ -48,6 +48,11 @@ export default async function DataExportPage() {
             {Number(projections[0]?.count ?? 0).toLocaleString("en-US")} saved projection rows
           </div>
         </div>
+        <p className="mt-3 max-w-3xl text-xs leading-5 text-neutral-500">
+          Large IDs are stored as text to preserve every digit. Excel limits each
+          cell to 32,767 characters; longer text or JSON payloads have a visible
+          truncation marker. The full original values remain in the database.
+        </p>
       </section>
 
       <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3 text-[10px] leading-5 text-neutral-500">

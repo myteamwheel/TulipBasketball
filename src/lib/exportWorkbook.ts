@@ -197,6 +197,7 @@ export async function buildCompleteDataWorkbook(options?: {
     [
       ["Generated", new Date().toISOString()],
       ["League", SLEEPER_LEAGUE_ID],
+      ["Cell limits and IDs", "Large integer IDs are stored as text to preserve every digit. Text and JSON over Excel's 32,767-character cell limit are visibly marked as truncated. The full original values remain in the database."],
       [
         "What is included",
         "This workbook includes every historical row currently retained by the dashboard for refreshes, roster snapshots, ownership, KTC, independent market feeds, consensus, transactions, football profiles, NFL game stats, model signals, weekly projections, projection eligibility/source inputs, and projection accuracy.",
