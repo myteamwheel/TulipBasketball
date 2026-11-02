@@ -163,7 +163,7 @@ export default async function ForecastPage() {
           </div>
         </div>
       </section>
-      <p className="text-xs text-neutral-400">Usable current or prior-season production: {productionCovered}/{rows.length} valued players. A current-week role is also required for actionable model edges; saved pregame forecasts remain role evidence after a game finishes.</p>
+      <p className="text-xs text-neutral-400">Current or prior-season production: {productionCovered}/{rows.length} valued players. Current-week role evidence is required for lineup advice.</p>
       <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3">
         <SectionHeader
           title="This week’s usable signal"
@@ -191,19 +191,8 @@ export default async function ForecastPage() {
             <div className={`mt-1 text-lg font-semibold ${accountabilityCoverage >= 0.75 ? "text-emerald-300" : "text-amber-300"}`}>{(accountabilityCoverage * 100).toFixed(0)}%</div>
           </div>
         </div>
-        <p className="mt-2 text-[10px] leading-4 text-neutral-500">
-          Accountability means every rostered QB/RB/WR/TE is in exactly one
-          state: lineup-ready, kickoff-locked, explicitly withheld, or
-          completed and moved to accuracy history. It is not a claim that every
-          player has a usable live projection.
-        </p>
-        <p className="mt-3 text-[11px] leading-5 text-neutral-400">
-          {`${(lineupReadyCoverage * 100).toFixed(0)}% of rostered QB/RB/WR/TE players have a lineup-ready current-week forecast. `}
-          Only those rows are usable for player-level lineup decisions. Players
-          without a verified role or identity check are held out rather than
-          filled with estimates; kickoff-locked and completed forecasts are
-          retained for accountability and dynasty research, not lineup
-          decisions.
+        <p className="mt-3 text-sm font-medium text-neutral-200">
+          {`${(lineupReadyCoverage * 100).toFixed(0)}% of rostered QB/RB/WR/TE players have a lineup-ready current-week forecast.`} Only those rows support lineup decisions.
         </p>
         {weeklyFallback.length ? (
           <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -222,6 +211,7 @@ export default async function ForecastPage() {
         ) : (
           <p className="mt-3 text-[11px] text-amber-200">No lineup-ready weekly rows are available from the current feeds, so no team-level weekly output is presented as usable.</p>
         )}
+        <details className="mt-3 border-t border-neutral-800 pt-3 text-xs leading-5 text-neutral-500"><summary className="cursor-pointer font-medium text-neutral-300">Coverage and accountability details</summary><p className="mt-2">Accountability means every rostered QB/RB/WR/TE is in exactly one state: lineup-ready, kickoff-locked, explicitly withheld, or completed and moved to accuracy history. It does not mean every player has a usable live projection. Players without verified role or identity are held out; saved pregame forecasts, kickoff-locked rows, and completed forecasts remain available for research and accuracy history.</p></details>
       </section>
       {productionCovered < rows.length * 0.6 ? (
         <div className="rounded-lg border border-amber-900/70 bg-amber-950/20 p-3 text-[11px] leading-5 text-amber-200">

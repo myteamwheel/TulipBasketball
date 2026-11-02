@@ -30,6 +30,8 @@ import { getFreshCurrentMarketMix } from "@/lib/currentMarket";
 import ManualRefreshButton from "@/components/ManualRefreshButton";
 import SinceLastVisit from "@/components/SinceLastVisit";
 import { prisma } from "@/lib/prisma";
+import { publicTeamName } from "@/lib/publicIdentity";
+import { summarizeRecentTrade } from "@/lib/recentTradeSummary";
 export const dynamic = "force-dynamic";
 const COVERAGE_MIN = 0.75;
 function tone(
@@ -86,6 +88,7 @@ export default async function HomePage() {
     catalog,
     predictionModels,
     recentTrades,
+    recentTradeManagers,
   ] = await Promise.all([
     getCurrentRoster(manager.id),
     computeAllTeamValuations(),
@@ -97,8 +100,12 @@ export default async function HomePage() {
     getLeague(SLEEPER_LEAGUE_ID),
     getPlayerCatalog(),
     getDecisionGradePredictiveModels(),
-    prisma.transaction.findMany({ where: { league: { sleeperId: SLEEPER_LEAGUE_ID }, type: "trade" }, orderBy: { sleeperCreatedAt: "desc" }, take: 3, select: { id: true, sleeperCreatedAt: true } }),
+    prisma.transaction.findMany({ where: { league: { sleeperId: SLEEPER_LEAGUE_ID }, type: "trade" }, orderBy: { sleeperCreatedAt: "desc" }, take: 3, select: { id: true, sleeperCreatedAt: true, rosterIdsInvolved: true, adds: true, draftPicks: true, waiverBudget: true } }),
+    prisma.manager.findMany({ where: { league: { sleeperId: SLEEPER_LEAGUE_ID } } }),
   ]);
+  const teamNamesByRoster = new Map(recentTradeManagers.map(row => [row.sleeperRosterId, publicTeamName(row)]));
+  const playerNamesBySleeper = Object.fromEntries(Object.entries(catalog).map(([id, player]) => [id, player.full_name ?? `Player ${id}`]));
+  const recentTradeSummaries = recentTrades.map(tx => ({ ...tx, summary: summarizeRecentTrade(tx, teamNamesByRoster, playerNamesBySleeper) }));
   const playerIds = roster.map((p) => p.id);
   const [marketData, marketMix, sourceStatuses, signals] = await Promise.all([
     computeMarketDataForPlayers(playerIds),
@@ -233,8 +240,6 @@ export default async function HomePage() {
           <div className="mt-2 flex w-fit items-start gap-2 sm:mt-0"><ManualRefreshButton /><Link href="/trade-finder" className="inline-flex rounded-md border border-emerald-800 bg-emerald-950/30 px-3 py-1.5 text-xs font-medium text-emerald-300">Open Trade Lab →</Link></div>
         </div>
       </section>
-      <SinceLastVisit current={{ playerCapital: my.playerCapital, rosterCount: roster.length, lineupIssues: lineupProblems.length, observedAt: capitalAsOf }} />
-      <section className="home-trades-card"><div className="home-visit-head"><div><span className="trade-eyebrow">League activity</span><h2>Recent trades</h2></div><Link href="/trade-review">All recorded trades →</Link></div>{recentTrades.length ? <div className="home-trades-list">{recentTrades.map(tx => <Link href={"/trade-review?trade=" + encodeURIComponent(tx.id)} key={tx.id}><span><strong>Review trade</strong><small>{formatDateTimeEastern(tx.sleeperCreatedAt.toISOString())}</small></span><span aria-hidden="true">→</span></Link>)}</div> : <p>No trades have been synced yet.</p>}</section>
       <section className="rounded-lg border border-emerald-900/60 bg-emerald-950/10 p-3 sm:p-4">
         <SectionHeader title="This week" description="Current lineup actions, roster legality, market decisions and waiver budget in one place." />
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
@@ -304,7 +309,7 @@ export default async function HomePage() {
             state={sourceStatuses.KTC.stale ? "warn" : "good"}
             detail={`${my.lastKnownPlayerCount}/${my.playerCount} Orlando Oswalds`}
           />
-          {!sourceStatuses.STATSGUY.stale && <DataBadge
+          <DataBadge
             label="Stats Guy"
             state={sourceStatuses.STATSGUY.stale ? "warn" : "good"}
             detail={providerDetail(
@@ -312,8 +317,8 @@ export default async function HomePage() {
               sourceStatuses.STATSGUY.stale,
               latestRun,
             )}
-          />}
-          {!sourceStatuses.DYNASTY_DEALER.stale && <DataBadge
+          />
+          <DataBadge
             label="Dynasty Dealer"
             state={sourceStatuses.DYNASTY_DEALER.stale ? "warn" : "good"}
             detail={providerDetail(
@@ -321,7 +326,7 @@ export default async function HomePage() {
               sourceStatuses.DYNASTY_DEALER.stale,
               latestRun,
             )}
-          />}
+          />
         </div>
       </section>
       <section id="capital">
@@ -475,6 +480,8 @@ export default async function HomePage() {
           players.
         </div>
       ) : null}
+      <SinceLastVisit current={{ playerCapital: my.playerCapital, rosterCount: roster.length, lineupIssues: lineupProblems.length, observedAt: capitalAsOf }} />
+      <section className="home-trades-card"><div className="home-visit-head"><div><span className="trade-eyebrow">League activity</span><h2>Recent trades</h2></div><Link href="/trade-review">All recorded trades →</Link></div>{recentTradeSummaries.length ? <div className="home-trades-list">{recentTradeSummaries.map(tx => <Link href={"/trade-review?trade=" + encodeURIComponent(tx.id)} key={tx.id}><strong>{tx.summary.title}</strong><small>{formatDateTimeEastern(tx.sleeperCreatedAt.toISOString())}</small><span className="home-trade-packages">{tx.summary.packages.map((side, index) => <span key={index}><b>{side.team} gets</b> {side.assets.slice(0, 2).join(" + ") || "Package details unavailable"}{side.assets.length > 2 ? ` + ${side.assets.length - 2} more` : ""}</span>)}</span><span className="home-trade-link">Full review →</span></Link>)}</div> : <p>No trades have been synced yet.</p>}</section>
       <section>
         <SectionHeader
           title="Orlando Oswalds roster"

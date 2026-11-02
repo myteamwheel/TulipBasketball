@@ -215,6 +215,7 @@ export default function TradeFinderBoard({ data }: { data: TradeFinderData }) {
           {shopMatches.map(({ target, offer }, i) => (
             <details
               key={`${target.id}:${i}`}
+              open={i === 0}
               className="rounded-xl border border-neutral-800 bg-neutral-900 p-3"
             >
               <summary className="cursor-pointer list-none text-sm font-semibold text-neutral-100">
@@ -260,52 +261,6 @@ export default function TradeFinderBoard({ data }: { data: TradeFinderData }) {
               treated as zero.
             </div>
           ) : null}
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-            {data.orlandoNeeds.map((n, i) => (
-              <div
-                key={n.position}
-                className="rounded-lg border border-neutral-800 bg-neutral-900 p-3"
-              >
-                <div className="text-xs font-semibold text-neutral-100">
-                  Market weakness #{i + 1}: {n.position}
-                </div>
-                <div className="mt-1 text-[10px] text-neutral-500">
-                  {n.note}
-                </div>
-              </div>
-            ))}
-          </div>
-          {partners.length ? (
-            <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3">
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500">
-                Trade-partner map
-              </div>
-              <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {partners.map((p) => (
-                  <button
-                    key={p.id}
-                    aria-pressed={owner === p.id}
-                    onClick={() => setOwner(p.id)}
-                    className="rounded-md bg-neutral-950 p-2.5 text-left hover:bg-neutral-800"
-                  >
-                    <div className="truncate text-xs font-medium text-neutral-200">
-                      {p.name}
-                    </div>
-                    <div className="mt-1 text-[9px] text-neutral-600">
-                      Weakest market groups {p.needs.join(" / ")} · {p.count}{" "}
-                      target match{p.count === 1 ? "" : "es"}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </section>
-          ) : null}
-          <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-3 text-[10px] leading-4 text-neutral-500">
-            <span className="font-medium text-neutral-300">Offer pool:</span>{" "}
-            {data.playerTradeChipCount} eligible Orlando Oswalds players and{" "}
-            {data.pickTradeChipCount} verified owned picks. Generated packages
-            can return multiple opposing assets and use up to three Orlando Oswalds pieces. Both teams must remain within active-roster limits.
-          </div>
           <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto]">
             <div className="flex flex-wrap gap-1 rounded-lg border border-neutral-800 bg-neutral-900 p-1">
               {["ALL", "QB", "RB", "WR", "TE"].map((f) => (
@@ -344,10 +299,12 @@ export default function TradeFinderBoard({ data }: { data: TradeFinderData }) {
               <option value="value">Highest KTC</option>
             </select>
           </div>
-          <div className="space-y-3">
-            {visible.map((t) => (
+          <section className="space-y-3" aria-label="Trade targets">
+            <div className="flex flex-wrap items-end justify-between gap-2"><div><h2 className="text-lg font-semibold text-neutral-100">Best trade targets</h2><p className="text-xs text-neutral-500">{visible.length} matching targets · open a target to see the package and fit evidence.</p></div></div>
+            {visible.map((t, index) => (
               <details
                 key={t.id}
+                open={index === 0}
                 className="rounded-xl border border-neutral-800 bg-neutral-900 p-3 sm:p-4"
               >
                 <summary className="cursor-pointer list-none text-sm font-semibold text-neutral-100">
@@ -422,7 +379,15 @@ export default function TradeFinderBoard({ data }: { data: TradeFinderData }) {
                 No reasonable package matches these filters right now.
               </div>
             ) : null}
-          </div>
+          </section>
+          <details className="rounded-lg border border-neutral-800 bg-neutral-900 p-3 text-xs text-neutral-400">
+            <summary className="cursor-pointer font-semibold text-neutral-200">Market context and eligible offer pool</summary>
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+              {data.orlandoNeeds.map((n, i) => <div key={n.position} className="rounded-lg border border-neutral-800 bg-neutral-950 p-3"><div className="font-semibold text-neutral-100">Market weakness #{i + 1}: {n.position}</div><div className="mt-1 text-neutral-500">{n.note}</div></div>)}
+            </div>
+            {partners.length ? <section className="mt-3"><h3 className="font-semibold text-neutral-200">Trade-partner map</h3><div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{partners.map(p => <button key={p.id} aria-pressed={owner === p.id} onClick={() => setOwner(p.id)} className="rounded-md bg-neutral-950 p-2.5 text-left hover:bg-neutral-800"><strong className="text-neutral-200">{p.name}</strong><span className="mt-1 block text-neutral-500">Needs {p.needs.join(" / ")} · {p.count} target matches</span></button>)}</div></section> : null}
+            <p className="mt-3">Offer pool: {data.playerTradeChipCount} eligible Orlando Oswalds players and {data.pickTradeChipCount} verified owned picks. Packages can return multiple opposing assets and use up to three Orlando Oswalds pieces. Both teams must remain within active-roster limits.</p>
+          </details>
         </>
       )}
     </div>

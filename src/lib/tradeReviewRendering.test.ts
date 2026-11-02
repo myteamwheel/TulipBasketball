@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import TradeReviewCard, { type ReviewAsset } from '../components/TradeReviewCard';
+import TradeReviewBoard from '../components/TradeReviewBoard';
 import { calculateTradeSideGrades } from './tradeGrades';
 const asset = (id: string, value: number | null): ReviewAsset => ({id,label:id,playerId:null,assetType:'player',atTradeValue:value,currentValue:value,atMoveObservedAt:null,atMoveTiming:null});
 function sides(missing=false) {
@@ -15,9 +16,18 @@ test('trade reviewer identifies the winning recipient and renders both received 
  assert.match(html,/Team Two/);
  assert.match(html,/Player A/);
  assert.match(html,/Player B/);
+ assert.match(html,/<section class="trade-packages" aria-label="Full trade packages">/);
+ assert.match(html,/Who received and sent what/);
  assert.match(html,/At trade/);
  assert.match(html,/Now/);
  assert.match(html,/Replay change from trade date to now/);
+});
+test('trade history renders complete review cards without an expansion step',()=>{
+ const html=renderToStaticMarkup(React.createElement(TradeReviewBoard,{trades:[{id:'one',date:'2026-10-31T12:00:00.000Z',sides:sides()}]}));
+ assert.match(html,/trade-result-detail/);
+ assert.match(html,/Who received and sent what/);
+ assert.match(html,/Player A/);
+ assert.doesNotMatch(html,/trade-result-chevron|aria-expanded="false"/);
 });
 test('incomplete trade reviewer withholds a winner instead of grading the known subset',()=>{
  const html=renderToStaticMarkup(React.createElement(TradeReviewCard,{sides:sides(true)}));

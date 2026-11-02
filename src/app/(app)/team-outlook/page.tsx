@@ -128,6 +128,7 @@ export default async function TeamOutlookPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <a href="#roster-strengths" className="w-fit rounded-md border border-emerald-800 bg-emerald-950/30 px-3 py-2 text-xs text-emerald-300 hover:bg-emerald-950/50">Your roster strengths ↓</a>
           <Link href="/team-outlook/trade-impact" className="w-fit rounded-md border border-emerald-800 bg-emerald-950/30 px-3 py-2 text-xs text-emerald-300 hover:bg-emerald-950/50">Trade impact →</Link>
           <Link href="/trade-finder" className="w-fit rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-xs text-neutral-300 hover:bg-neutral-800">Trade targets →</Link>
           <Link href="/forecast" className="w-fit rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-xs text-neutral-300 hover:bg-neutral-800">Open Predictions →</Link>
@@ -135,16 +136,17 @@ export default async function TeamOutlookPage() {
       </section>
 
       <div className={`rounded-lg border p-3 text-sm leading-5 ${coverage < 75 ? "border-amber-900/70 bg-amber-950/20 text-amber-200" : "border-neutral-800 bg-neutral-900 text-neutral-300"}`}>
-        <strong>{coverage < 75 ? "Provisional model estimates." : "Current model estimates."}</strong>{" "}
-        {simulation.projectionSeason} Week {simulation.projectionWeek} projection status coverage is {coverage}% (including explicit withholdings); estimates retain {evidence}% of the simulation&apos;s team-specific signal, with {100 - evidence}% blended toward league-average probabilities. Inputs use the latest completed refresh{simulation.inputRefreshAt ? ` (${formatDateTimeEastern(simulation.inputRefreshAt)})` : ""}{simulation.inputRefreshStatus && simulation.inputRefreshStatus !== "SUCCESS" ? `, which was ${simulation.inputRefreshStatus.toLowerCase().replaceAll("_", " ")}` : ""}. These are model probabilities, not betting odds.
+        <strong>{coverage < 75 ? "Provisional" : "Current"} {simulation.projectionSeason} Week {simulation.projectionWeek} outlook · {coverage}% projection status coverage.</strong>
+        <details className="mt-1 text-xs"><summary className="cursor-pointer">Model coverage and inputs</summary><p className="mt-2">Estimates retain {evidence}% of the simulation&apos;s team-specific signal, with {100 - evidence}% blended toward league-average probabilities. Inputs use the latest completed refresh{simulation.inputRefreshAt ? ` (${formatDateTimeEastern(simulation.inputRefreshAt)})` : ""}{simulation.inputRefreshStatus && simulation.inputRefreshStatus !== "SUCCESS" ? `, which was ${simulation.inputRefreshStatus.toLowerCase().replaceAll("_", " ")}` : ""}. These are model probabilities, not betting odds.</p></details>
       </div>
 
       <section className="space-y-3">
-        <SectionHeader title="League playoff and title outlook" description="All 12 teams stay visible, including when projection coverage is below the threshold required to publish a validated full-audit snapshot." />
+        <SectionHeader title="Your outlook and league forecast" description="Your team appears first. The other teams follow in projected power-rank order; all 12 remain visible." />
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {teams
             .filter((team) => team.simulation)
             .sort((a, b) =>
+              Number(b.managerId === primary?.id) - Number(a.managerId === primary?.id) ||
               (a.simulation?.powerRank ?? Number.POSITIVE_INFINITY) -
                 (b.simulation?.powerRank ?? Number.POSITIVE_INFINITY) ||
               (b.simulation?.playoffProbability ?? 0) -
@@ -159,7 +161,7 @@ export default async function TeamOutlookPage() {
                 <article key={team.managerId} className={`rounded-lg border p-3 ${own ? "border-emerald-700 bg-emerald-50" : "border-neutral-800 bg-neutral-900"}`}>
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <h2 className="font-semibold text-neutral-100">{team.name}{own ? <span className="ml-2 text-xs text-emerald-700">Your team</span> : null}</h2>
+                      <h3 className="font-semibold text-neutral-100">{team.name}{own ? <span className="ml-2 text-xs text-emerald-700">Your team</span> : null}</h3>
                       <p className="mt-1 text-xs text-neutral-500">{windowLabel(result.window)} · power rank #{result.powerRank}/12</p>
                     </div>
                     <Link href={`/league/${team.managerId}`} className="text-xs text-emerald-700 underline-offset-2 hover:underline">Roster →</Link>
@@ -177,13 +179,13 @@ export default async function TeamOutlookPage() {
         </div>
       </section>
 
-      <section className="space-y-3">
+      <section id="roster-strengths" className="space-y-3 scroll-mt-32">
         <SectionHeader title="Roster strengths, needs, and surplus" description="Open a team to see its full roster and the evidence behind each position label. This is a decision aid, not an automatic trade instruction." />
         <p className="rounded-md bg-neutral-900 px-3 py-2 text-xs leading-5 text-neutral-500">
           Position need = fewer than the depth target or starter-market capital in the bottom third of comparable teams. Surplus = starter-market capital in the top third plus at least one player above the depth target. Depth targets are QB 3, RB 4, WR 5, TE 3 start-eligible players. Starter capital uses fresh KTC values for the top QB 2 / RB 3 / WR 4 / TE 2 assets. Positions without enough fresh values remain unranked, never treated as zero.
         </p>
         <div className="space-y-3">
-          {teams.map((team) => {
+          {[...teams].sort((a, b) => Number(b.managerId === primary?.id) - Number(a.managerId === primary?.id)).map((team) => {
             const result = team.simulation;
             const window = result?.window ?? "MIDDLE";
             const assessments = TEAM_OUTLOOK_POSITIONS.map((position) => {
@@ -209,7 +211,7 @@ export default async function TeamOutlookPage() {
             });
             const own = team.managerId === primary?.id;
             return (
-              <details key={team.managerId} className={`group rounded-lg border ${own ? "border-emerald-700 bg-emerald-50" : "border-neutral-800 bg-neutral-900"}`}>
+              <details key={team.managerId} open={own ? true : undefined} className={`group rounded-lg border ${own ? "border-emerald-700 bg-emerald-50" : "border-neutral-800 bg-neutral-900"}`}>
                 <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 p-3 [&::-webkit-details-marker]:hidden">
                   <span><strong className="text-sm text-neutral-100">{team.name}</strong>{own ? <span className="ml-2 text-xs text-emerald-700">Your team</span> : null}<span className="ml-2 text-xs text-neutral-500">{windowLabel(window)} · {team.roster.length} rostered</span></span>
                   <span className="flex flex-wrap gap-2 text-xs"><span className="rounded bg-rose-50 px-2 py-1 text-rose-800">Needs: {needs.map((item) => item.position).join(", ") || "none flagged"}</span><span className="rounded bg-emerald-50 px-2 py-1 text-emerald-800">Surplus: {surpluses.map((item) => item.position).join(", ") || "none flagged"}</span>{unknowns.length > 0 ? <span className="rounded bg-neutral-200 px-2 py-1 text-neutral-700">Unrated: {unknowns.map((item) => item.position).join(", ")}</span> : null}<span aria-hidden="true" className="text-neutral-500 group-open:rotate-180">⌄</span></span>

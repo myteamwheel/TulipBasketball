@@ -237,24 +237,23 @@ export default async function AuditPage({
             }
           />
           <MetricCard
-            label="Weekly status coverage"
-            value={`${Math.round(data.projection.coverage * 100)}%`}
-            tone={data.health.projectionReady ? "positive" : "warning"}
-            detail={`${data.projection.classified}/${data.projection.rosteredSkillPlayers} QB/RB/WR/TE accounted`}
+            label="Live weekly forecasts"
+            value={formatPoints(data.projection.projected)}
+            detail={`of ${data.projection.rosteredSkillPlayers} rostered QB/RB/WR/TE`}
           />
         </div>
       </section>
 
-      <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3 text-[11px] leading-5 text-neutral-500">
-        <div className="font-semibold text-neutral-300">Weekly forecast scope</div>
-        <p className="mt-1">
+      <details className="rounded-lg border border-neutral-800 bg-neutral-900 p-3 text-xs leading-5 text-neutral-500">
+        <summary className="cursor-pointer font-semibold text-neutral-300">Weekly forecast coverage and status</summary>
+        <p className="mt-2">
           <span className="font-medium text-neutral-300">Live weekly-consensus forecasts:</span>{" "}
           {data.projection.projected} active rostered QB/RB/WR/TE players.
           {lockedProjectionCount ? <><span className="font-medium text-neutral-300"> Locked at kickoff:</span>{" "}{lockedProjectionCount} player{lockedProjectionCount === 1 ? "" : "s"}; their pregame forecasts are preserved until final stats move them to accuracy history.</> : null}
           <span className="font-medium text-neutral-300"> Weekly status coverage:</span>{" "}
           {data.projection.classified} accounted-for players, which includes those live forecasts, {data.projection.withheld} players explicitly withheld with a reason, and {completedWeeklyStatuses} completed player result{completedWeeklyStatuses === 1 ? "" : "s"} retained for accuracy history. It is not a claim that every accounted-for player has an active forecast. Kickers and D/ST are intentionally outside this QB/RB/WR/TE projection scope.
         </p>
-      </section>
+      </details>
 
       <section>
         <SectionHeader
