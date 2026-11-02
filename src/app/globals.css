@@ -373,6 +373,8 @@ header { background-color: var(--header) !important; }
 }
 @media (max-width: 380px) {
   .trade-avatar { display: none; }
+  .trade-matrix-head, .trade-matrix-row { grid-template-columns: minmax(0,1.5fr) minmax(0,1fr) minmax(0,1fr); }
+  .trade-team strong { font-size: 12px; -webkit-line-clamp: 3; overflow-wrap: anywhere; }
   .trade-review-actions { width: 100%; }
   .trade-review-actions button { flex: 1; }
   .trade-board-intro { flex-direction: column; gap: 10px; }
