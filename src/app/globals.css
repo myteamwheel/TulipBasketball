@@ -292,6 +292,7 @@ header { background-color: var(--header) !important; }
 .trade-winner-strip > div { display: grid; flex: 1; min-width: 0; gap: 3px; }
 .trade-winner-strip span:not(.trade-winner-arrow) { color: var(--text-muted); font-size: 12px; }
 .trade-winner-strip strong { color: var(--foreground); font-size: clamp(14px, 2vw, 18px); line-height: 1.2; overflow-wrap: anywhere; }
+.trade-winner-strip > div.is-replay-focus { animation: trade-focus 350ms ease-out both; }
 .trade-winner-arrow { color: var(--positive); font-size: 23px; }
 .trade-reversal-badge { align-self: center; padding: 6px 8px; border: 1px solid var(--warning-border); border-radius: 7px; background: var(--warning-surface); color: var(--warning); font-size: 12px; animation: trade-badge-in 350ms ease both; }
 .trade-matrix { min-width: 0; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
@@ -315,6 +316,7 @@ header { background-color: var(--header) !important; }
 .trade-grade.trade-positive strong { color: var(--positive); }
 .trade-grade.trade-negative { color: var(--negative); }
 .trade-grade.trade-negative strong { color: var(--negative); }
+.trade-grade.is-replay-focus { animation: trade-focus 350ms ease-out both; }
 .trade-change-line { display: flex; align-items: center; gap: 10px; margin: 14px 0 8px; color: var(--text-muted); font-size: 12px; font-weight: 650; }
 .trade-change-line i { position: relative; display: block; flex: 1; height: 2px; background: var(--border-strong); }
 .trade-change-line i::after { content: ""; position: absolute; top: -4px; right: 0; width: 10px; height: 10px; border-radius: 50%; background: var(--positive); }
@@ -342,6 +344,7 @@ header { background-color: var(--header) !important; }
 .trade-assets li p { color: var(--text-muted); font-size: 11px; }
 @keyframes trade-badge-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes trade-replay { from { right: calc(100% - 5px); } to { right: 0; } }
+@keyframes trade-focus { from { box-shadow: inset 0 0 0 2px transparent; } to { box-shadow: inset 0 0 0 2px var(--positive-border); } }
 @media (max-width: 700px) {
   .trade-board-intro { align-items: start; }
   .trade-board-stats { min-width: 92px; padding: 10px; }
@@ -368,7 +371,7 @@ header { background-color: var(--header) !important; }
   .trade-detail-columns { grid-template-columns: 1fr; }
 }
 @media (max-width: 380px) { .trade-avatar { display: none; } .trade-review-actions { width: 100%; } .trade-review-actions button { flex: 1; } }
-@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; } }
+@media (prefers-reduced-motion: reduce) { :root:not([data-motion="full"]) *, :root:not([data-motion="full"]) *::before, :root:not([data-motion="full"]) *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; } }
 :root[data-motion="reduced"] *, :root[data-motion="reduced"] *::before, :root[data-motion="reduced"] *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 .home-visit-card, .home-trades-card { padding: 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); }
 .home-visit-head { display: flex; align-items: end; justify-content: space-between; gap: 12px; }

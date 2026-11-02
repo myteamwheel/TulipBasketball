@@ -16,7 +16,7 @@ export default function MetricCard({
   const previous = useRef<string | null>(null);
   const comparable = typeof value === "string" || typeof value === "number" ? String(value) : null;
   useEffect(() => {
-    if (previous.current !== null && comparable !== null && previous.current !== comparable && !matchMedia("(prefers-reduced-motion: reduce)").matches && document.documentElement.dataset.motion !== "reduced") {
+    if (previous.current !== null && comparable !== null && previous.current !== comparable && document.documentElement.dataset.motion !== "reduced" && (document.documentElement.dataset.motion === "full" || !matchMedia("(prefers-reduced-motion: reduce)").matches)) {
       valueRef.current?.animate([{ backgroundColor: "var(--positive-badge)" }, { backgroundColor: "transparent" }], { duration: 650, easing: "ease-out" });
     }
     previous.current = comparable;
