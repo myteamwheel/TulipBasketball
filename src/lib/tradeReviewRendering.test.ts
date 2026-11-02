@@ -11,18 +11,19 @@ function sides(missing=false) {
 }
 test('trade reviewer identifies the winning recipient and renders both received packages',()=>{
  const html=renderToStaticMarkup(React.createElement(TradeReviewCard,{sides:sides()}));
- assert.match(html,/Team One has the market edge/);
+ assert.match(html,/<strong>Team One<\/strong>/);
  assert.match(html,/Team Two/);
  assert.match(html,/Player A/);
  assert.match(html,/Player B/);
- assert.match(html,/aria-pressed="true"/);
- assert.match(html,/Replay comparison/);
+ assert.match(html,/At trade/);
+ assert.match(html,/Now/);
+ assert.match(html,/Replay change from trade date to now/);
 });
 test('incomplete trade reviewer withholds a winner instead of grading the known subset',()=>{
  const html=renderToStaticMarkup(React.createElement(TradeReviewCard,{sides:sides(true)}));
- assert.match(html,/Winner withheld/);
- assert.doesNotMatch(html,/has the market edge/);
- assert.match(html,/Missing player\/pick prices/);
+ assert.match(html,/<strong>Unavailable<\/strong>/);
+ assert.match(html,/At-trade prices missing/);
+ assert.doesNotMatch(html,/<strong>Team One<\/strong><\/div><span class="trade-winner-arrow"/);
 });
 test('player-for-FAAB reviewer shows a market edge and displays FAAB outside the rating',()=>{
  const player=[asset('Reggie Virgil',805)];
@@ -31,25 +32,25 @@ test('player-for-FAAB reviewer shows a market edge and displays FAAB outside the
   {rosterId:3,name:'Seller',gave:player,got:[],faabSent:0,faabReceived:9,grades:calculateTradeSideGrades({gave:player,got:[],faabReceived:9})},
  ];
  const html=renderToStaticMarkup(React.createElement(TradeReviewCard,{sides:rows}));
- assert.match(html,/Buyer has the market edge/);
- assert.match(html,/FAAB sent: \$9/);
- assert.match(html,/FAAB received: \$9/);
- assert.match(html,/counts as 0 in both historical and current ratings/);
- assert.doesNotMatch(html,/Winner withheld|Grade unavailable/);
+ assert.match(html,/<strong>Buyer<\/strong>/);
+ assert.match(html,/FAAB received \$9/);
+ assert.match(html,/sent \$9/);
+ assert.match(html,/FAAB recorded · excluded from grades/);
+ assert.doesNotMatch(html,/At-trade prices missing|Current prices missing/);
 });
 test('FAAB-only transfers are not labeled incomplete',()=>{
  const rows=[1,2].map(rosterId=>({rosterId,name:`Team ${rosterId}`,gave:[],got:[],faabSent:rosterId===1?9:0,faabReceived:rosterId===2?9:0,grades:calculateTradeSideGrades({gave:[],got:[],faabSent:rosterId===1?9:0,faabReceived:rosterId===2?9:0})}));
  const html=renderToStaticMarkup(React.createElement(TradeReviewCard,{sides:rows}));
- assert.match(html,/FAAB-only transfer/);
- assert.doesNotMatch(html,/Winner withheld|Grade unavailable/);
+ assert.match(html,/FAAB only/);
+ assert.doesNotMatch(html,/At-trade prices missing|Current prices missing/);
 });
 test('an absent historical price does not claim the current grade was excluded',()=>{
  const rows=sides();
  rows[0].got[0].atTradeValue=null;
  for(const side of rows) side.grades=calculateTradeSideGrades(side);
  const html=renderToStaticMarkup(React.createElement(TradeReviewCard,{sides:rows}));
- assert.match(html,/Team One has the market edge/);
- assert.match(html,/Missing historical price; at-trade grade withheld/);
+ assert.match(html,/<strong>Team One<\/strong>/);
+ assert.match(html,/At-trade prices missing/);
  assert.doesNotMatch(html,/excluded from grades/);
 });
 test('Excel export round-trip remains compatible with the UUID override',async()=>{

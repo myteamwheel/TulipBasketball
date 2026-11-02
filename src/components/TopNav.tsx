@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
+import MotionToggle from "@/components/MotionToggle";
 
 type NavGroup = {
   label: string;
@@ -80,6 +81,7 @@ export default function TopNav() {
   const openMenuId = openGroup
     ? `nav-menu-${openGroup.label.toLowerCase().replaceAll(" ", "-")}`
     : undefined;
+  const mobileMoreOpen = openMenu?.label === "More" && openMenu.pathname === pathname;
 
   // An outside click or Escape clears the menu. The state also records the
   // pathname it was opened on, so a route change hides it without a second
@@ -105,7 +107,7 @@ export default function TopNav() {
       aria-label="Primary"
       className="relative py-1.5"
     >
-      <div className="flex gap-1 overflow-x-auto pb-1">
+      <div className="hidden gap-1 overflow-x-auto pb-1 lg:flex">
         {groups.map((group) => {
           const active = isActive(pathname, group);
           const itemClass = `inline-flex min-h-11 items-center justify-center px-3 text-xs font-medium transition-colors ${
@@ -158,6 +160,19 @@ export default function TopNav() {
           );
         })}
       </div>
+      <div className="grid grid-cols-5 gap-1 lg:hidden">
+        {[
+          { label: "Team", href: "/" },
+          { label: "Review", href: "/trade-review" },
+          { label: "Outlook", href: "/team-outlook" },
+          { label: "Trade Lab", href: "/trade-finder" },
+        ].map(item => {
+          const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+          return <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} onClick={() => setOpenMenu(null)} className={"flex min-h-11 items-center justify-center rounded-md px-1 text-center text-xs font-semibold " + (active ? "bg-emerald-700 text-white" : "text-neutral-500")}>{item.label}</Link>;
+        })}
+        <button type="button" aria-label="More navigation" aria-expanded={mobileMoreOpen} aria-controls="mobile-more-menu" onClick={() => setOpenMenu(mobileMoreOpen ? null : { label: "More", pathname })} className={"min-h-11 rounded-md px-1 text-xs font-semibold " + (mobileMoreOpen ? "bg-emerald-700 text-white" : "text-neutral-500")}>More ▾</button>
+      </div>
+      {mobileMoreOpen ? <div id="mobile-more-menu" className="absolute inset-x-0 top-full z-50 grid max-h-[70vh] grid-cols-2 gap-1 overflow-y-auto rounded-b-xl border border-neutral-700 bg-neutral-900 p-2 shadow-xl lg:hidden">{groups.flatMap(group => [{ href: group.href, label: group.label }, ...(group.links ?? [])]).filter(item => !["/", "/trade-review", "/team-outlook", "/trade-finder"].includes(item.href)).map(item => <Link key={item.href} href={item.href} onClick={() => setOpenMenu(null)} className="flex min-h-11 items-center rounded-md px-3 text-sm text-neutral-200 hover:bg-neutral-800">{item.label}</Link>)}<div className="col-span-2 border-t border-neutral-800 pt-2"><MotionToggle /></div></div> : null}
       {openGroup?.links?.length ? (
         <div
           id={openMenuId}

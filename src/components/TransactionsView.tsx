@@ -1,4 +1,5 @@
 import TradeReviewCard from "@/components/TradeReviewCard";
+import TradeReviewBoard from "@/components/TradeReviewBoard";
 import { historicalPickSnapshots } from "@/lib/pickFreshness";
 import Link from "next/link";
 import { Prisma } from "@/generated/prisma/client";
@@ -17,7 +18,7 @@ import { faabForRoster, parseFaabTransfers } from "@/lib/tradeFaab";
 const PAGE_SIZE = 15;
 type TxFilter = "all" | "trade" | "moves";
 type TradedPick = { season: string; round: number; roster_id: number; previous_owner_id: number; owner_id: number };
-type Asset = TradeGradeAsset & { playerId: string | null; atMoveObservedAt: Date | null; atMoveTiming: TradeSnapshotTiming | null };
+type Asset = TradeGradeAsset & { playerId: string | null; atMoveObservedAt: Date | null; atMoveTiming: TradeSnapshotTiming | null; currentObservedAt: string | null };
 
 const HISTORICAL_MARKET_WINDOW_MS = TRADE_SNAPSHOT_WINDOW_MS;
 
@@ -36,7 +37,7 @@ function href(filter: TxFilter, page: number) {
 function waiverBid(raw: string) {
   try { const rawValue = (JSON.parse(raw) as { settings?: { waiver_bid?: unknown } }).settings?.waiver_bid; const value = Number(rawValue); return rawValue != null && Number.isFinite(value) && value >= 0 ? value : null; } catch { return null; }
 }
-export default async function TransactionsPage({ searchParams, review = false }: { searchParams: Promise<{ type?: string; page?: string }>; review?: boolean }) {
+export default async function TransactionsPage({ searchParams, review = false }: { searchParams: Promise<{ type?: string; page?: string; trade?: string }>; review?: boolean }) {
   const params = await searchParams;
   const filter: TxFilter = review ? "trade" : params.type === "trade" ? "trade" : params.type === "moves" ? "moves" : "all";
   const requestedPage = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
@@ -45,7 +46,7 @@ export default async function TransactionsPage({ searchParams, review = false }:
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const page = Math.min(requestedPage, totalPages);
   const [transactions, managers, pickMarket] = await Promise.all([
-    prisma.transaction.findMany({ where, orderBy: { sleeperCreatedAt: "desc" }, skip: (page - 1) * PAGE_SIZE, take: PAGE_SIZE }),
+    prisma.transaction.findMany({ where, orderBy: { sleeperCreatedAt: "desc" }, ...(review ? {} : { skip: (page - 1) * PAGE_SIZE, take: PAGE_SIZE }) }),
     prisma.manager.findMany({ where: { league: { sleeperId: SLEEPER_LEAGUE_ID } } }),
     fetchFreshDraftPickMarketValues().catch(() => []),
   ]);
@@ -76,7 +77,7 @@ export default async function TransactionsPage({ searchParams, review = false }:
 
   function playerAsset(sleeperId: string, date: Date): Asset {
     const player = playerBySleeper.get(sleeperId);
-    if (!player) return { id: `player:${sleeperId}`, playerId: null, label: `Sleeper player ${sleeperId}`, assetType: "player", atTradeValue: null, currentValue: null, atMoveObservedAt: null, atMoveTiming: null };
+    if (!player) return { id: `player:${sleeperId}`, playerId: null, label: `Sleeper player ${sleeperId}`, assetType: "player", atTradeValue: null, currentValue: null, currentObservedAt: null, atMoveObservedAt: null, atMoveTiming: null };
     const atMove = selectTradeSnapshot(
       series.get(player.id) ?? [],
       date,
@@ -90,6 +91,7 @@ export default async function TransactionsPage({ searchParams, review = false }:
       assetType: "player",
       atTradeValue: atMove?.snapshot.value ?? null,
       currentValue: market && !market.isStale ? market.currentValue : null,
+      currentObservedAt: market && !market.isStale ? market.currentObservedAt : null,
       atMoveObservedAt: atMove?.snapshot.observedAt ?? null,
       atMoveTiming: atMove?.timing ?? null,
     };
@@ -99,13 +101,16 @@ export default async function TransactionsPage({ searchParams, review = false }:
     const atTradeValue = snapshot
       ? currentPickMarketValue(snapshot.snapshot.rows, Number(pick.season), pick.round, null)
       : null;
+    const currentValue = currentPickMarketValue(pickMarket, Number(pick.season), pick.round, null);
+    const currentObservedAt = currentValue === null ? null : pickMarket.filter(row => Number(row.season) === Number(pick.season) && row.round === pick.round).map(row => row.sourceUpdatedAt).filter(Boolean).sort()[0] ?? null;
     return {
       id: `pick:${pick.season}:${pick.round}:${pick.roster_id}`,
       playerId: null,
       label: `${pick.season} Round ${pick.round} · ${teamName(pick.roster_id)} original`,
       assetType: "pick",
       atTradeValue,
-      currentValue: currentPickMarketValue(pickMarket, Number(pick.season), pick.round, null),
+      currentValue,
+      currentObservedAt,
       atMoveObservedAt: snapshot?.snapshot.observedAt ?? null,
       atMoveTiming: snapshot?.timing ?? null,
     };
@@ -134,6 +139,19 @@ export default async function TransactionsPage({ searchParams, review = false }:
     }).filter((side) => side.got.length || side.gave.length || faab.some(row => row.sender === side.rosterId || row.receiver === side.rosterId));
     return { tx, sides, bid: waiverBid(tx.rawPayload), faab };
   });
+
+  if (review) {
+    const trades = rows.map(({ tx, sides }) => ({
+      id: tx.id,
+      date: tx.sleeperCreatedAt.toISOString(),
+      sides: sides.map(side => ({
+        ...side,
+        gave: side.gave.map(asset => ({ ...asset, atMoveObservedAt: asset.atMoveObservedAt?.toISOString() ?? null })),
+        got: side.got.map(asset => ({ ...asset, atMoveObservedAt: asset.atMoveObservedAt?.toISOString() ?? null })),
+      })),
+    }));
+    return <TradeReviewBoard trades={trades} initialTrade={params.trade} />;
+  }
 
   const renderAsset = (item: Asset, tone: "got" | "gave") => <li key={`${tone}:${item.label}`} className="rounded-md border border-neutral-800 bg-neutral-950 px-2.5 py-2">
     <div className={`text-xs font-medium ${tone === "got" ? "text-emerald-300" : "text-red-300"}`}>{item.playerId ? <Link href={`/players/${item.playerId}`} className="hover:text-white">{item.label}</Link> : item.label}</div>

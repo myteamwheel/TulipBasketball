@@ -28,6 +28,8 @@ import { getRosters, getLeague, getPlayerCatalog } from "@/lib/sleeper";
 import { getLatestMarketSourceStatuses } from "@/lib/marketSources";
 import { getFreshCurrentMarketMix } from "@/lib/currentMarket";
 import ManualRefreshButton from "@/components/ManualRefreshButton";
+import SinceLastVisit from "@/components/SinceLastVisit";
+import { prisma } from "@/lib/prisma";
 export const dynamic = "force-dynamic";
 const COVERAGE_MIN = 0.75;
 function tone(
@@ -83,6 +85,7 @@ export default async function HomePage() {
     league,
     catalog,
     predictionModels,
+    recentTrades,
   ] = await Promise.all([
     getCurrentRoster(manager.id),
     computeAllTeamValuations(),
@@ -94,6 +97,7 @@ export default async function HomePage() {
     getLeague(SLEEPER_LEAGUE_ID),
     getPlayerCatalog(),
     getDecisionGradePredictiveModels(),
+    prisma.transaction.findMany({ where: { league: { sleeperId: SLEEPER_LEAGUE_ID }, type: "trade" }, orderBy: { sleeperCreatedAt: "desc" }, take: 3, select: { id: true, sleeperCreatedAt: true } }),
   ]);
   const playerIds = roster.map((p) => p.id);
   const [marketData, marketMix, sourceStatuses, signals] = await Promise.all([
@@ -229,6 +233,8 @@ export default async function HomePage() {
           <div className="mt-2 flex w-fit items-start gap-2 sm:mt-0"><ManualRefreshButton /><Link href="/trade-finder" className="inline-flex rounded-md border border-emerald-800 bg-emerald-950/30 px-3 py-1.5 text-xs font-medium text-emerald-300">Open Trade Lab →</Link></div>
         </div>
       </section>
+      <SinceLastVisit current={{ playerCapital: my.playerCapital, rosterCount: roster.length, lineupIssues: lineupProblems.length, observedAt: capitalAsOf }} />
+      <section className="home-trades-card"><div className="home-visit-head"><div><span className="trade-eyebrow">League activity</span><h2>Recent trades</h2></div><Link href="/trade-review">All recorded trades →</Link></div>{recentTrades.length ? <div className="home-trades-list">{recentTrades.map(tx => <Link href={"/trade-review?trade=" + encodeURIComponent(tx.id)} key={tx.id}><span><strong>Review trade</strong><small>{formatDateTimeEastern(tx.sleeperCreatedAt.toISOString())}</small></span><span aria-hidden="true">→</span></Link>)}</div> : <p>No trades have been synced yet.</p>}</section>
       <section className="rounded-lg border border-emerald-900/60 bg-emerald-950/10 p-3 sm:p-4">
         <SectionHeader title="This week" description="Current lineup actions, roster legality, market decisions and waiver budget in one place." />
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
