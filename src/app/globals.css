@@ -356,6 +356,7 @@ header { background-color: var(--header) !important; }
   .trade-board-filters label { flex-basis: calc(50% - 8px); }
   .trade-result-summary { flex-wrap: wrap; gap: 6px 9px; }
   .trade-result-main { flex-basis: calc(100% - 110px); }
+  .trade-result-main strong, .trade-result-winners strong { display: -webkit-box; white-space: normal; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.3; }
   .trade-result-winners { order: 3; flex-basis: calc(100% - 55px); padding-left: 46px; }
   .trade-result-score { flex-basis: auto; }
   .trade-result-chevron { order: 4; margin-left: auto; }
@@ -370,7 +371,17 @@ header { background-color: var(--header) !important; }
   .trade-grade small { display: none; }
   .trade-detail-columns { grid-template-columns: 1fr; }
 }
-@media (max-width: 380px) { .trade-avatar { display: none; } .trade-review-actions { width: 100%; } .trade-review-actions button { flex: 1; } }
+@media (max-width: 380px) {
+  .trade-avatar { display: none; }
+  .trade-review-actions { width: 100%; }
+  .trade-review-actions button { flex: 1; }
+  .trade-board-intro { flex-direction: column; gap: 10px; }
+  .trade-board-stats { display: flex; align-items: center; width: 100%; gap: 8px; padding: 9px 11px; }
+  .trade-board-stats strong { font-size: 20px; }
+  .trade-board-stats small { margin-left: auto; }
+  .trade-board-sort label { flex-basis: 100%; }
+  .trade-board-sort select { width: 100%; }
+}
 @media (prefers-reduced-motion: reduce) { :root:not([data-motion="full"]) *, :root:not([data-motion="full"]) *::before, :root:not([data-motion="full"]) *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; } }
 :root[data-motion="reduced"] *, :root[data-motion="reduced"] *::before, :root[data-motion="reduced"] *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 .home-visit-card, .home-trades-card { padding: 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); }

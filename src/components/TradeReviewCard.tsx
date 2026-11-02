@@ -29,7 +29,7 @@ export default function TradeReviewCard({ sides, trade }: { sides: ReviewSide[];
   const missingThen = sides.some(side => side.grades?.atTrade.status === "INCOMPLETE");
   const missingNow = sides.some(side => side.grades?.current.status === "INCOMPLETE");
   const hasFaab = sides.some(side => (side.faabSent ?? 0) > 0 || (side.faabReceived ?? 0) > 0);
-  const readySide = sides.length === 2 ? sides.find(side => side.grades?.atTrade.status === "READY" && side.grades.current.status === "READY") : null;
+  const readySide = sides.length === 2 ? sides.find(side => side.name === nowWinner && side.grades?.atTrade.status === "READY" && side.grades.current.status === "READY") ?? sides.find(side => side.grades?.atTrade.status === "READY" && side.grades.current.status === "READY") : null;
   const gain = readySide ? readySide.grades!.current.balance!.adjustedEdge - readySide.grades!.atTrade.balance!.adjustedEdge : null;
   const shareUrl = trade ? "https://dynasty-boys-dashboard.vercel.app/trade-review?trade=" + encodeURIComponent(trade.id) : "";
   async function share() {

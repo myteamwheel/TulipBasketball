@@ -36,6 +36,7 @@ test('player-for-FAAB reviewer shows a market edge and displays FAAB outside the
  assert.match(html,/FAAB received \$9/);
  assert.match(html,/sent \$9/);
  assert.match(html,/FAAB recorded · excluded from grades/);
+ assert.match(html,/Advantage change for Buyer/);
  assert.doesNotMatch(html,/At-trade prices missing|Current prices missing/);
 });
 test('FAAB-only transfers are not labeled incomplete',()=>{
