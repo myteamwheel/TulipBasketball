@@ -5,10 +5,10 @@ let failed = false;
 function fail(message) { console.error(`FAIL ${message}`); failed = true; }
 function get(path) { return fetch(`${base}${path}`, { redirect: "follow", headers }); }
 
-const pages = ["/", "/forecast", "/projections", "/audit", "/audit/report", "/audit/research", "/league", "/trade-finder", "/waivers", "/transactions", "/players", "/refresh-history", "/settings", "/data-export"];
+const pages = ["/", "/trade-review", "/team-outlook", "/team-outlook/trade-impact", "/forecast", "/projections", "/audit", "/audit/report", "/audit/research", "/league", "/trade-finder", "/waivers", "/transactions", "/players", "/refresh-history", "/settings", "/data-export"];
 for (const path of pages) {
   const response = await get(path), text = await response.text();
-  if (!response.ok || (path !== "/" && /Private market dashboard|sign in to continue|type="password"/i.test(text))) fail(`page ${path}: status=${response.status}`);
+  if (!response.ok || /id="__next_error__"|Application error: a server-side exception|Something went wrong|This dashboard view could not load its current data/i.test(text) || (path !== "/" && /Private market dashboard|sign in to continue|type="password"/i.test(text))) fail(`page ${path}: status=${response.status}`);
   else console.log(`PASS page ${path}: ${response.status}`);
 }
 
@@ -30,14 +30,16 @@ try {
 try {
   const response = await get("/api/projection-source-health"), payload = await response.json();
   const sourceHealthy = ["SLEEPER", "CBS", "ESPN_DRAFTKINGS_ODDS"].every((source) => payload?.sources?.[source]?.ok === true && Number(payload.sources[source].rows ?? 0) > 0);
-  const classified = Number(payload?.stored?.classified ?? 0), rostered = Number(payload?.rosteredSkillPlayers ?? 0);
-  if (!response.ok || !sourceHealthy || rostered < 25 || classified !== rostered) fail(`projection health: status=${response.status} sources=${JSON.stringify(payload?.sources)} classified=${classified}/${rostered}`);
-  else console.log(`PASS projection inputs and classification: ${classified}/${rostered}`);
+  const classified = Number(payload?.stored?.classified ?? 0), pending = Number(payload?.stored?.pending ?? 0), rostered = Number(payload?.rosteredSkillPlayers ?? 0);
+  if (!response.ok || !sourceHealthy || rostered < 25 || classified + pending !== rostered) fail(`projection health: status=${response.status} sources=${JSON.stringify(payload?.sources)} classified=${classified}/${rostered} pending=${pending}`);
+  else console.log(`PASS projection inputs and player accounting: ${classified} classified + ${pending} pending / ${rostered}`);
+  const easternHour = Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", hourCycle: "h23" }).format(new Date()));
+  if (easternHour >= 9 && pending > rostered * 0.25) fail(`projection refresh overdue: ${pending}/${rostered} players still pending after the morning refresh window`);
 } catch (error) { fail(`projection health: ${error instanceof Error ? error.message : String(error)}`); }
 
 try {
   const response = await get("/projections"), html = await response.text();
-  const labels = ["Sleeper", "CBS", "Local model", "Player consensus", "Odds context", "Final FP", "Predicted NFL stat line", "Confidence"];
+  const labels = ["Sleeper", "CBS", "local recency model", "DraftKings", "Active forecasts", "Locked at kickoff", "Withheld", "Completed", "How the projection model learns"];
   const missing = labels.filter((label) => !html.includes(label));
   if (!response.ok || missing.length) fail(`projection transparency: missing ${missing.join(", ")}`);
   else console.log("PASS projection source breakdown and stat-line labels");
@@ -45,6 +47,8 @@ try {
 
 try {
   const response = await get("/api/audit"), payload = await response.json(), health = payload?.data?.health;
+  const refreshAge = Date.now() - Date.parse(health?.latestRefreshAt ?? "");
+  if (!Number.isFinite(refreshAge) || refreshAge < 0 || refreshAge > 32 * 3600000) fail("audit refresh timestamp is missing, future-dated, or more than 32 hours old");
   if (!response.ok || health?.auditValidated !== true || health?.projectionReady !== true || health?.latestRefreshStatus !== "SUCCESS") fail(`audit health: status=${response.status} health=${JSON.stringify(health)}`);
   else console.log(`PASS audit health: ${health.rosteredPlayers} rostered, ${health.valuedPlayers} valued`);
 } catch (error) { fail(`audit health: ${error instanceof Error ? error.message : String(error)}`); }

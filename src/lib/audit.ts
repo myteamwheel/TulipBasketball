@@ -552,7 +552,7 @@ export async function buildLiveAuditData(
   );
   const classified = new Set([
     ...projection.current.map((row) => row.playerId),
-    ...projection.unavailable.map((row) => row.playerId),
+    ...projection.unavailable.filter((row) => row.status !== "PENDING").map((row) => row.playerId),
     ...completedThisWeek.map((row) => row.playerId),
   ]).size;
   const coverage = rosteredSkillPlayers ? classified / rosteredSkillPlayers : 0;

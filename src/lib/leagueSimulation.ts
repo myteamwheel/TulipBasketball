@@ -351,11 +351,12 @@ export async function getCachedDynastyBoysSimulation(): Promise<
     orderBy: { finishedAt: "desc" },
     select: { id: true, finishedAt: true, status: true },
   });
-  const cacheKey = latestRun?.id ?? "unrefreshed";
+  const state = await getNflState();
+  const cacheKey = `${latestRun?.id ?? "unrefreshed"}:${state.season}:${state.week}`;
   const loadSimulation = unstable_cache(
     () => simulateDynastyBoys(2500),
-    ["dynasty-boys-league-simulation-v2", cacheKey],
-    { revalidate: 60 * 60 },
+    ["dynasty-boys-league-simulation-v3", cacheKey],
+    { revalidate: 5 * 60 },
   );
   const simulation = await loadSimulation();
   return {

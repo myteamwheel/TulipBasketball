@@ -26,6 +26,7 @@ export default function TradeReviewBoard({ trades, initialTrade }: { trades: Rev
   const [filters, setFilters] = useState<ReviewFilters>(defaults);
   const [page, setPage] = useState(1);
   const [ready, setReady] = useState(false);
+  const previousPage = useRef(1);
   const listRef = useRef<HTMLDivElement>(null);
   const previousRects = useRef<Map<string, DOMRect>>(new Map());
   const teams = useMemo(() => [...new Map(trades.flatMap(trade => trade.sides.map(side => [side.rosterId, side.name] as const))).entries()].sort((a, b) => a[1].localeCompare(b[1])), [trades]);
@@ -38,6 +39,10 @@ export default function TradeReviewBoard({ trades, initialTrade }: { trades: Rev
   const capture = () => {
     previousRects.current = new Map([...listRef.current?.querySelectorAll<HTMLElement>("[data-trade-id]") ?? []].map(node => [node.dataset.tradeId ?? "", node.getBoundingClientRect()]));
   };
+  useEffect(() => {
+    if (previousPage.current !== page) listRef.current?.scrollIntoView({ block: "start", behavior: "instant" });
+    previousPage.current = page;
+  }, [page]);
   useLayoutEffect(() => {
     if (!ready || document.documentElement.dataset.motion === "reduced" || document.documentElement.dataset.motion !== "full" && matchMedia("(prefers-reduced-motion: reduce)").matches) { previousRects.current.clear(); return; }
     for (const node of listRef.current?.querySelectorAll<HTMLElement>("[data-trade-id]") ?? []) {

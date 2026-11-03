@@ -118,6 +118,7 @@ export default function WeeklyProjectionBoard({
     visibleCurrentPage * 25,
   );
   const currentIds = new Set(currentForecasts.map((row) => row.playerId));
+  const pendingCount = unavailable.filter(row => row.status === "PENDING").length;
   const totalWithheldCount = unavailable.filter((row) => !currentIds.has(row.playerId)).length;
   const unavailableRows = unavailable
     .filter((row) => !currentIds.has(row.playerId))
@@ -173,6 +174,7 @@ export default function WeeklyProjectionBoard({
         <span className="font-semibold text-neutral-300">How to read this:</span> final points use the unrounded blend; stat lines are readable whole-number outcomes. Only players with a supported current role are projected.
       </div>
 
+      {pendingCount > 0 ? <p role="status" className="rounded-lg border border-amber-900/70 bg-amber-950/20 p-3 text-sm leading-5 text-amber-200">{pendingCount} players are awaiting a fresh Week {week} projection refresh. Their names and reasons remain under “Not projected”; missing forecasts are not zero-point predictions.</p> : null}
       <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
         <input
           value={query}
@@ -334,7 +336,8 @@ export default function WeeklyProjectionBoard({
               Rostered players deliberately withheld instead of receiving a
               fabricated projection.
             </p>
-          <div className="mt-3 overflow-x-auto rounded-lg border border-neutral-800">
+          <div className="mt-3 space-y-2 lg:hidden">{unavailableRows.map(row => <article key={row.playerId} className="rounded-lg border border-neutral-800 p-3 text-xs leading-5"><h3 className="font-semibold text-neutral-200">{row.playerName} <span className="font-normal text-neutral-400">{row.position}{row.nflTeam ? ` · ${row.nflTeam}` : ""}</span></h3><p className="mt-1 text-neutral-400">{row.reason}</p>{row.sourceNames.length ? <p className="mt-1 text-neutral-500">Sources: {row.sourceNames.join(" + ")}</p> : null}</article>)}</div>
+          <div className="mt-3 hidden overflow-x-auto rounded-lg border border-neutral-800 lg:block">
             <table className="w-full min-w-[720px] text-xs">
               <thead>
                 <tr className="bg-neutral-950 text-xs uppercase tracking-wide text-neutral-600">

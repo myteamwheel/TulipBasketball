@@ -347,7 +347,7 @@ header { background-color: var(--header) !important; }
 .trade-assets li { padding: 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
 .trade-asset-name { display: flex; justify-content: space-between; gap: 8px; color: var(--foreground); font-size: 13px; font-weight: 650; overflow-wrap: anywhere; }
 .trade-asset-name a { text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 3px; }
-.trade-asset-name span { color: var(--text-muted); font-size: 11px; font-weight: 500; text-transform: capitalize; }
+.trade-asset-name span { flex-shrink: 0; color: var(--text-muted); font-size: 11px; font-weight: 500; text-transform: capitalize; }
 .trade-asset-values { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 5px; color: var(--text-muted); font-size: 12px; }
 .trade-asset-values strong { color: var(--foreground); font-variant-numeric: tabular-nums; }
 .trade-assets li p { color: var(--text-muted); font-size: 11px; }
@@ -445,3 +445,7 @@ header { background-color: var(--header) !important; }
 .trade-loading-controls { width: 100%; height: 67px; }
 .trade-loading-card { width: 100%; height: 87px; }
 @keyframes trade-loading-pulse { from { opacity: .55; } to { opacity: 1; } }
+
+/* Keep keyboard and anchor destinations below the persistent navigation. */
+html { scroll-padding-top: 150px; }
+@media (max-width: 1023px) { html { scroll-padding-top: 130px; } }

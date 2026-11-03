@@ -18,6 +18,7 @@ export async function GET() {
 
   const players = await prisma.$queryRaw<
     Array<{
+      id: string;
       sleeperId: string;
       fullName: string;
       position: string;
@@ -25,6 +26,7 @@ export async function GET() {
     }>
   >`
     SELECT DISTINCT
+      p.id,
       p."sleeperId",
       p."fullName",
       p.position,
@@ -53,10 +55,12 @@ export async function GET() {
   const storedWithheld = stored.unavailable.filter(
     (row) => row.status === "EXCLUDED",
   ).length;
+  const rosteredIds = new Set(players.map(player => player.id));
   const storedClassified = new Set([
     ...stored.current.map((row) => row.playerId),
-    ...stored.unavailable.map((row) => row.playerId),
-  ]).size;
+    ...stored.unavailable.filter((row) => row.status !== "PENDING").map((row) => row.playerId),
+    ...stored.history.filter((row) => row.season === stored.season && row.week === stored.week && row.actualFantasyPoints !== null).map((row) => row.playerId),
+  ].filter(id => rosteredIds.has(id))).size;
   const sourceCoverage = Object.fromEntries(
     bundle.statuses.map((status) => [
       status.source,
@@ -85,6 +89,7 @@ export async function GET() {
         projected: storedProjected,
         withheld: storedWithheld,
         classified: storedClassified,
+        pending: stored.unavailable.filter((row) => row.status === "PENDING").length,
         classificationCoverage:
           players.length > 0 ? storedClassified / players.length : 0,
       },

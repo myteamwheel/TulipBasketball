@@ -50,11 +50,10 @@ function Side({
         `${a.name} ${a.position} ${a.nflTeam ?? ""}`
           .toLowerCase()
           .includes(query.trim().toLowerCase()),
-      )
-      .slice(0, 10);
+      );
   return (
     <div className="rounded-lg border border-neutral-800 bg-neutral-950/60 p-3">
-      <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-neutral-500">
+      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
         {title}
       </div>
       <div className="mb-2 flex gap-1">
@@ -63,7 +62,7 @@ function Side({
             key={v}
             aria-pressed={kind === v}
             onClick={() => setKind(v as typeof kind)}
-            className={`rounded px-2 py-1 text-[9px] ${kind === v ? "bg-neutral-700 text-neutral-100" : "bg-neutral-900 text-neutral-500"}`}
+            className={`min-h-11 rounded px-3 py-2 text-xs ${kind === v ? "bg-neutral-700 text-neutral-100" : "bg-neutral-900 text-neutral-500"}`}
           >
             {v === "ALL"
               ? "All"
@@ -79,6 +78,7 @@ function Side({
         className="h-9 w-full rounded-md border border-neutral-700 bg-neutral-900 px-2.5 text-xs text-neutral-200 outline-none focus:border-emerald-700"
       />
       <div className="mt-2 max-h-48 space-y-1 overflow-auto">
+        {!suggestions.length ? <p className="p-2 text-xs text-neutral-400">No unselected assets match this search.</p> : null}
         {suggestions.map((a) => (
           <button
             key={a.id}
@@ -86,12 +86,12 @@ function Side({
               add(a.id);
               setQuery("");
             }}
-            className="flex w-full items-center justify-between gap-2 rounded-md border border-neutral-800 bg-neutral-900 px-2.5 py-2 text-left hover:border-neutral-700"
+            className="flex min-h-11 w-full items-center justify-between gap-2 rounded-md border border-neutral-800 bg-neutral-900 px-2.5 py-2 text-left hover:border-neutral-700"
           >
-            <span className="min-w-0 truncate text-[11px] text-neutral-200">
+            <span className="min-w-0 break-words text-xs text-neutral-200">
               {a.assetType === "pick" ? "PICK" : a.position} · {a.name}
             </span>
-            <span className="shrink-0 text-[9px] text-neutral-600">
+            <span className="shrink-0 text-xs text-neutral-600">
               {points(a.value)}
             </span>
           </button>
@@ -104,10 +104,10 @@ function Side({
             className="flex items-center justify-between gap-2 rounded-md border border-neutral-800 bg-neutral-900 px-2.5 py-2"
           >
             <div className="min-w-0">
-              <div className="truncate text-xs font-medium text-neutral-100">
+              <div className="break-words text-xs font-medium text-neutral-100">
                 {a.name}
               </div>
-              <div className="text-[9px] text-neutral-600">
+              <div className="text-xs text-neutral-600">
                 {a.assetType === "pick" ? "PICK" : a.position} ·{" "}
                 {assetValueLabel(a)}
                 {a.slot && a.assetType !== "pick" ? ` · ${a.slot}` : ""}
@@ -115,7 +115,8 @@ function Side({
             </div>
             <button
               onClick={() => remove(a.id)}
-              className="text-[10px] text-neutral-600 hover:text-red-300"
+              aria-label={`Remove ${a.name}`}
+              className="min-h-11 shrink-0 px-2 text-xs text-neutral-400 hover:text-red-300"
             >
               Remove
             </button>
@@ -182,24 +183,24 @@ export default function TradeCalculator({
         <h2 className="text-sm font-semibold text-neutral-100">
           Manual Trade Calculator
         </h2>
-        <p className="mt-1 max-w-3xl text-[11px] leading-4 text-neutral-500">
+        <p className="mt-1 max-w-3xl text-xs leading-4 text-neutral-500">
           Search current assets with package adjustment and Orlando Oswalds roster
           impact. Player values are KTC; pick values are verified current
           pick-market values normalized to the same comparison scale. Value
           balance is not an acceptance probability.
         </p>
         {ktcStale ? (
-          <div className="mt-3 rounded-md border border-amber-900 bg-amber-950/20 px-3 py-2 text-[10px] text-amber-300">
+          <div className="mt-3 rounded-md border border-amber-900 bg-amber-950/20 px-3 py-2 text-xs text-amber-300">
             Current KTC is unavailable. Trade verdicts are paused.
           </div>
         ) : null}
         {!pickMarketAvailable ? (
-          <div className="mt-2 rounded-md border border-amber-900 bg-amber-950/20 px-3 py-2 text-[10px] text-amber-300">
+          <div className="mt-2 rounded-md border border-amber-900 bg-amber-950/20 px-3 py-2 text-xs text-amber-300">
             Picks are hidden because current pick prices or ownership could not
             be verified as fresh.
           </div>
         ) : null}
-        <label className="mt-4 block max-w-sm text-[9px] uppercase tracking-wide text-neutral-600">
+        <label className="mt-4 block max-w-sm text-xs uppercase tracking-wide text-neutral-600">
           Other team
           <select
             value={otherManagerId}
@@ -207,7 +208,7 @@ export default function TradeCalculator({
               setOtherManagerId(e.target.value);
               setGetIds([]);
             }}
-            className="mt-1 h-9 w-full rounded-md border border-neutral-700 bg-neutral-950 px-2 text-xs text-neutral-200"
+            className="mt-1 min-h-11 w-full rounded-md border border-neutral-700 bg-neutral-950 px-2 text-xs text-neutral-200"
           >
             {others.map((m) => (
               <option key={m.id} value={m.id}>
@@ -256,7 +257,7 @@ export default function TradeCalculator({
                   key={String(label)}
                   className="rounded-md bg-neutral-950 p-2.5"
                 >
-                  <div className="text-[9px] uppercase tracking-wide text-neutral-600">
+                  <div className="text-xs uppercase tracking-wide text-neutral-600">
                     {label}
                   </div>
                   <div className="mt-1 text-base font-semibold tabular-nums text-neutral-100">
@@ -266,33 +267,33 @@ export default function TradeCalculator({
               ))}
             </div>
             <div className="mt-3 rounded-md border border-neutral-800 bg-neutral-950 p-3">
-              <div className="text-[9px] uppercase tracking-wide text-neutral-600">
+              <div className="text-xs uppercase tracking-wide text-neutral-600">
                 Adjusted verdict
               </div>
               <div className="mt-1 text-sm font-semibold text-neutral-100">
                 {verdictLabel(balance.verdict, primaryManagerName, otherName)}
               </div>
-              <div className="mt-1 text-[10px] text-neutral-600">
+              <div className="mt-1 text-xs text-neutral-600">
                 Value balance {balance.fairnessPercent.toFixed(1)}% · Orlando Oswalds
                 adjusted edge {balance.adjustedEdge > 0 ? "+" : ""}
                 {points(balance.adjustedEdge)}
               </div>
             </div>
             <div className="mt-3 rounded-md border border-neutral-800 bg-neutral-950 p-3">
-              <div className="text-[9px] uppercase tracking-wide text-neutral-600">
+              <div className="text-xs uppercase tracking-wide text-neutral-600">
                 Orlando Oswalds roster impact
               </div>
               <div className="mt-2 flex flex-wrap gap-2">
                 {positionImpact.map((r) => (
                   <span
                     key={r.position}
-                    className={`rounded-md border border-neutral-800 px-2 py-1 text-[10px] ${r.delta > 0 ? "text-emerald-300" : "text-red-300"}`}
+                    className={`rounded-md border border-neutral-800 px-2 py-1 text-xs ${r.delta > 0 ? "text-emerald-300" : "text-red-300"}`}
                   >
                     {r.position} {r.delta > 0 ? "+" : ""}
                     {points(r.delta)}
                   </span>
                 ))}
-                <span className="rounded-md border border-neutral-800 px-2 py-1 text-[10px] text-neutral-400">
+                <span className="rounded-md border border-neutral-800 px-2 py-1 text-xs text-neutral-400">
                   {rosterSpots > 0
                     ? `${rosterSpots} roster spot${rosterSpots === 1 ? "" : "s"} freed`
                     : rosterSpots < 0
@@ -300,7 +301,7 @@ export default function TradeCalculator({
                       : "Roster spots neutral"}
                 </span>
                 {outgoingStarters > 0 ? (
-                  <span className="rounded-md border border-amber-900 px-2 py-1 text-[10px] text-amber-300">
+                  <span className="rounded-md border border-amber-900 px-2 py-1 text-xs text-amber-300">
                     {outgoingStarters} current Sleeper starter-slot player
                     {outgoingStarters === 1 ? "" : "s"} outgoing
                   </span>

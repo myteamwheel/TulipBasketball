@@ -1,4 +1,5 @@
 import { cache } from "react";
+import { pendingProjectionPlayers } from "@/lib/projectionCoverage";
 import { getNflSchedule, scheduleTeam, type ScheduledGame } from "@/lib/nflSchedule";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
@@ -75,7 +76,7 @@ export type ProjectionAvailabilityRow = {
   season: number;
   week: number;
   asOfDate: string;
-  status: "PROJECTED" | "ALREADY_PLAYED" | "EXCLUDED";
+  status: "PROJECTED" | "ALREADY_PLAYED" | "EXCLUDED" | "PENDING";
   reason: string;
   sourceNames: string[];
 };
@@ -1194,10 +1195,7 @@ async function readProjectionDashboardData(includeFreeAgents = false) {
       };
     }),
   ];
-  return {
-    season,
-    week,
-    current: currentRaw
+  const current = currentRaw
       .filter(
         (row) =>
           rosteredById.get(String(row.playerId))?.mappingStatus === "MAPPED" &&
@@ -1220,9 +1218,19 @@ async function readProjectionDashboardData(includeFreeAgents = false) {
             return placement === "CURRENT" || placement === "CURRENT_LOCKED";
           }),
       )
-      .map(normalizeProjectionRow),
-    history: historyRaw.map(normalizeProjectionRow),
-    unavailable,
+      .map(normalizeProjectionRow);
+  const history = historyRaw.map(normalizeProjectionRow);
+  const pending: ProjectionAvailabilityRow[] = pendingProjectionPlayers(
+    rosteredPlayers, current, unavailable, history, season, week,
+  ).map(player => ({
+    playerId: player.id, playerName: player.fullName, position: player.position,
+    nflTeam: player.nflTeam, season, week, asOfDate: easternDate(),
+    status: "PENDING", sourceNames: [],
+    reason: `Awaiting a fresh Week ${week} projection refresh. No current forecast is available; this player is not assumed to score zero.`,
+  }));
+  return {
+    season, week, current, history,
+    unavailable: [...unavailable, ...pending],
     scheduleStatusAvailable: schedule !== null,
   };
 }

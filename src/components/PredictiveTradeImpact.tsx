@@ -46,12 +46,11 @@ function Side({
         `${asset.name} ${asset.position}`
           .toLowerCase()
           .includes(query.toLowerCase()),
-    )
-    .slice(0, 12);
+    );
 
   return (
     <div className="rounded-lg border border-neutral-800 bg-neutral-950/60 p-3">
-      <div className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500">
+      <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
         {title}
       </div>
       <input
@@ -59,9 +58,10 @@ function Side({
         value={query}
         onChange={(event) => setQuery(event.target.value)}
         placeholder="Search player or pick…"
-        className="mt-2 h-9 w-full rounded-md border border-neutral-800 bg-neutral-900 px-2.5 text-xs text-neutral-200 outline-none focus:border-emerald-800"
+        className="mt-2 min-h-11 w-full rounded-md border border-neutral-800 bg-neutral-900 px-2.5 text-xs text-neutral-200 outline-none focus:border-emerald-800"
       />
       <div className="mt-2 max-h-40 space-y-1 overflow-auto">
+        {!available.length ? <p className="p-2 text-xs text-neutral-400">No unselected assets match this search.</p> : null}
         {available.map((asset) => (
           <button
             key={asset.id}
@@ -69,12 +69,12 @@ function Side({
               setSelected([...selected, asset.id]);
               setQuery("");
             }}
-            className="flex w-full items-center justify-between rounded-md bg-neutral-900 px-2.5 py-2 text-left"
+            className="flex min-h-11 w-full items-center justify-between rounded-md bg-neutral-900 px-2.5 py-2 text-left"
           >
-            <span className="truncate text-[11px] text-neutral-200">
+            <span className="break-words text-xs text-neutral-200">
               {asset.position} · {asset.name}
             </span>
-            <span className="text-[9px] text-neutral-600">
+            <span className="shrink-0 text-xs text-neutral-400">
               {points(asset.marketValue)}
             </span>
           </button>
@@ -88,7 +88,7 @@ function Side({
           >
             <div>
               <div className="text-xs text-neutral-100">{asset.name}</div>
-              <div className="text-[9px] text-neutral-600">
+              <div className="text-xs text-neutral-600">
                 {asset.position} · model {points(asset.modelValue)}
               </div>
             </div>
@@ -96,7 +96,8 @@ function Side({
               onClick={() =>
                 setSelected(selected.filter((id) => id !== asset.id))
               }
-              className="text-[9px] text-neutral-600"
+              aria-label={`Remove ${asset.name}`}
+              className="min-h-11 shrink-0 px-2 text-xs text-neutral-400"
             >
               Remove
             </button>
@@ -222,12 +223,12 @@ export default function PredictiveTradeImpact({
         <h2 className="text-sm font-semibold text-neutral-100">
           Trade Impact Simulator
         </h2>
-        <p className="mt-1 text-[10px] leading-4 text-neutral-500">
+        <p className="mt-1 text-xs leading-4 text-neutral-500">
           This answers a different question than value balance: what does the
           trade do to Orlando Oswalds&apos; modeled lineup, fair-value portfolio and
           simulated title path?
         </p>
-        <label className="mt-3 block max-w-sm text-[9px] uppercase tracking-wide text-neutral-600">
+        <label className="mt-3 block max-w-sm text-xs uppercase tracking-wide text-neutral-600">
           Trade partner
           <select
             value={other}
@@ -235,7 +236,7 @@ export default function PredictiveTradeImpact({
               setOther(event.target.value);
               setGetIds([]);
             }}
-            className="mt-1 h-9 w-full rounded-md border border-neutral-800 bg-neutral-950 px-2 text-xs text-neutral-200"
+            className="mt-1 min-h-11 w-full rounded-md border border-neutral-800 bg-neutral-950 px-2 text-xs text-neutral-200"
           >
             {managers.map(([id, name]) => (
               <option key={id} value={id}>
@@ -265,7 +266,7 @@ export default function PredictiveTradeImpact({
         <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3">
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <div className="rounded-md bg-neutral-950 p-2.5">
-              <div className="text-[9px] uppercase text-neutral-600">
+              <div className="text-xs uppercase text-neutral-600">
                 Weekly lineup
               </div>
               <div
@@ -273,12 +274,12 @@ export default function PredictiveTradeImpact({
               >
                 {signed(afterPpg - beforePpg, 1)} pts
               </div>
-              <div className="text-[9px] text-neutral-600">
+              <div className="text-xs text-neutral-600">
                 {beforePpg.toFixed(1)} → {afterPpg.toFixed(1)}
               </div>
             </div>
             <div className="rounded-md bg-neutral-950 p-2.5">
-              <div className="text-[9px] uppercase text-neutral-600">
+              <div className="text-xs uppercase text-neutral-600">
                 Model value
               </div>
               <div
@@ -287,12 +288,12 @@ export default function PredictiveTradeImpact({
                 {modelDelta >= 0 ? "+" : ""}
                 {points(modelDelta)}
               </div>
-              <div className="text-[9px] text-neutral-600">
+              <div className="text-xs text-neutral-600">
                 evidence-gated fair value
               </div>
             </div>
             <div className="rounded-md bg-neutral-950 p-2.5">
-              <div className="text-[9px] uppercase text-neutral-600">
+              <div className="text-xs uppercase text-neutral-600">
                 1-year value
               </div>
               <div
@@ -301,10 +302,10 @@ export default function PredictiveTradeImpact({
                 {forecastDelta >= 0 ? "+" : ""}
                 {points(forecastDelta)}
               </div>
-              <div className="text-[9px] text-neutral-600">forecast means</div>
+              <div className="text-xs text-neutral-600">forecast means</div>
             </div>
             <div className="rounded-md bg-neutral-950 p-2.5">
-              <div className="text-[9px] uppercase text-neutral-600">
+              <div className="text-xs uppercase text-neutral-600">
                 Market value
               </div>
               <div
@@ -313,13 +314,13 @@ export default function PredictiveTradeImpact({
                 {marketDelta >= 0 ? "+" : ""}
                 {points(marketDelta)}
               </div>
-              <div className="text-[9px] text-neutral-600">
+              <div className="text-xs text-neutral-600">
                 current market inventory
               </div>
             </div>
           </div>
 
-          <div className="mt-2 rounded-md border border-neutral-800 bg-neutral-950/60 px-2.5 py-2 text-[9px] text-neutral-600">
+          <div className="mt-2 rounded-md border border-neutral-800 bg-neutral-950/60 px-2.5 py-2 text-xs text-neutral-600">
             Trade-partner lineup is also updated in the league simulation:{" "}
             {otherName} {otherBeforePpg.toFixed(1)} → {otherAfterPpg.toFixed(1)}{" "}
             projected points/week.
@@ -328,7 +329,7 @@ export default function PredictiveTradeImpact({
           {scenario ? (
             <div className="mt-3 grid grid-cols-2 gap-2">
               <div className="rounded-md border border-neutral-800 bg-neutral-950 p-3">
-                <div className="text-[9px] uppercase tracking-wide text-neutral-600">
+                <div className="text-xs uppercase tracking-wide text-neutral-600">
                   Playoff probability
                 </div>
                 <div className="mt-1 text-lg font-semibold text-neutral-100">
@@ -338,8 +339,8 @@ export default function PredictiveTradeImpact({
                 <div
                   className={
                     scenario.playoffProbability >= baselinePlayoff
-                      ? "text-[10px] text-emerald-300"
-                      : "text-[10px] text-red-300"
+                      ? "text-xs text-emerald-300"
+                      : "text-xs text-red-300"
                   }
                 >
                   {signed(
@@ -350,7 +351,7 @@ export default function PredictiveTradeImpact({
                 </div>
               </div>
               <div className="rounded-md border border-neutral-800 bg-neutral-950 p-3">
-                <div className="text-[9px] uppercase tracking-wide text-neutral-600">
+                <div className="text-xs uppercase tracking-wide text-neutral-600">
                   Championship probability
                 </div>
                 <div className="mt-1 text-lg font-semibold text-neutral-100">
@@ -360,8 +361,8 @@ export default function PredictiveTradeImpact({
                 <div
                   className={
                     scenario.championshipProbability >= baselineTitle
-                      ? "text-[10px] text-emerald-300"
-                      : "text-[10px] text-red-300"
+                      ? "text-xs text-emerald-300"
+                      : "text-xs text-red-300"
                   }
                 >
                   {signed(
@@ -374,7 +375,7 @@ export default function PredictiveTradeImpact({
             </div>
           ) : null}
 
-          <p className="mt-3 text-[9px] leading-4 text-neutral-600">
+          <p className="mt-3 text-xs leading-4 text-neutral-600">
             Scenario odds rerun the same league-strength simulation with both
             teams&apos; post-trade optimal projected lineups.{" "}
             {lowEvidence

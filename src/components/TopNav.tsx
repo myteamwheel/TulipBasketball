@@ -85,6 +85,11 @@ export default function TopNav() {
   );
   const mobileMoreOpen = openMenu?.label === "More" && openMenu.pathname === pathname;
 
+  // Start a new section at its heading, even when the previous page was long.
+  useEffect(() => {
+    if (!window.location.hash) window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  }, [pathname]);
+
   // An outside click or Escape clears the menu. The state also records the
   // pathname it was opened on, so a route change hides it without a second
   // state update during render.
