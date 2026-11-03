@@ -85,6 +85,21 @@ export default function TopNav() {
   );
   const mobileMoreOpen = openMenu?.label === "More" && openMenu.pathname === pathname;
 
+  useEffect(() => {
+    const update = () => {
+      const compact = window.scrollY > 160;
+      document.documentElement.dataset.compactNav = compact ? 'true' : 'false';
+      const header = navRef.current?.closest('header');
+      if (header) document.documentElement.style.setProperty('--dashboard-header-height', header.getBoundingClientRect().height + 'px');
+    };
+    update();
+    window.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
+    const observer = new ResizeObserver(update);
+    if (navRef.current?.closest('header')) observer.observe(navRef.current.closest('header')!);
+    return () => { window.removeEventListener('scroll', update); window.removeEventListener('resize', update); observer.disconnect(); };
+  }, []);
+
   // Start a new section at its heading, even when the previous page was long.
   useEffect(() => {
     if (!window.location.hash) window.scrollTo({ top: 0, left: 0, behavior: "instant" });

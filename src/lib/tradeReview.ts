@@ -1,3 +1,4 @@
+import { calculateTradeSideGrades } from "./tradeGrades";
 import type { TradeGradePhase, TradeSnapshotTiming } from "@/lib/tradeGrades";
 
 export type ReviewAsset = {
@@ -7,12 +8,16 @@ export type ReviewAsset = {
   assetType: "player" | "pick";
   atTradeValue: number | null;
   currentValue: number | null;
+  priceSource?: string;
+  outcome?: { label: string; playerId: string | null; sleeperId: string; pickNumber: number; currentValue: number | null; sourceUrl: string };
+  journey?: { tradeId: string; date: string; label: string }[];
   currentObservedAt?: string | null;
   atMoveObservedAt: string | null;
   atMoveTiming: TradeSnapshotTiming | null;
 };
 export type ReviewSide = {
   rosterId: number;
+  identityKey?: string;
   name: string;
   gave: ReviewAsset[];
   got: ReviewAsset[];
@@ -20,8 +25,8 @@ export type ReviewSide = {
   faabReceived?: number;
   grades: { atTrade: TradeGradePhase; current: TradeGradePhase } | null;
 };
-export type ReviewTrade = { id: string; date: string; sides: ReviewSide[] };
-export type ReviewSort = "newest" | "winsThen" | "winsNow" | "improved" | "reversals" | "losses" | "largest";
+export type ReviewTrade = { id: string; date: string; season?: string; sides: ReviewSide[] };
+export type ReviewSort = "newest" | "winsThen" | "winsNow" | "outcomeNow" | "improved" | "reversals" | "losses" | "largest";
 export type ReviewMetric = "points" | "percent";
 export type ReviewFilters = { team: number | null; season: string; opponent: number | null; asset: "all" | "player" | "pick"; faab: "all" | "yes" | "no" };
 export type RankedTrade = { trade: ReviewTrade; side: ReviewSide | null; score: number | null };
@@ -49,7 +54,7 @@ function phaseEdge(side: ReviewSide, phase: "atTrade" | "current", metric: Revie
 
 export function rankTrades(trades: ReviewTrade[], sort: ReviewSort, metric: ReviewMetric, filters: ReviewFilters): RankedTrade[] {
   const filtered = trades.filter(trade => {
-    if (filters.season !== "all" && new Date(trade.date).getUTCFullYear().toString() !== filters.season) return false;
+    if (filters.season !== "all" && (trade.season ?? new Date(trade.date).getUTCFullYear().toString()) !== filters.season) return false;
     if (filters.team !== null && !trade.sides.some(side => side.rosterId === filters.team)) return false;
     if (filters.opponent !== null && !trade.sides.some(side => side.rosterId === filters.opponent && side.rosterId !== filters.team)) return false;
     if (filters.asset !== "all" && !trade.sides.some(side => side.got.some(asset => asset.assetType === filters.asset))) return false;
@@ -64,6 +69,11 @@ export function rankTrades(trades: ReviewTrade[], sort: ReviewSort, metric: Revi
       const now = phaseEdge(side, "current", metric);
       let score: number | null = null;
       if (sort === "winsThen") score = then !== null && eligiblePhase(side, "atTrade")?.result === "WON" ? then : null;
+      if (sort === "outcomeNow") {
+        const convert = (items: ReviewAsset[]) => items.map(asset => ({ ...asset, currentValue: asset.outcome ? asset.outcome.currentValue : asset.currentValue }));
+        const outcome = calculateTradeSideGrades({ ...side, got: convert(side.got), gave: convert(side.gave) }).current;
+        score = outcome.status === 'READY' && outcome.result === 'WON' && outcome.balance ? (metric === 'percent' ? outcome.balance.edgePercent : outcome.balance.adjustedEdge) : null;
+      }
       if (sort === "winsNow") score = now !== null && eligiblePhase(side, "current")?.result === "WON" ? now : null;
       if (sort === "improved") score = then !== null && now !== null && now > then ? now - then : null;
       if (sort === "reversals") score = then !== null && now !== null && then < 0 && now > 0 ? now - then : null;

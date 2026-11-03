@@ -1,3 +1,4 @@
+import DataHealthSummary from "@/components/DataHealthSummary";
 import { projectionSummary } from "@/lib/projectionSummary";
 import {
   getAllCurrentRosterEntries,
@@ -137,6 +138,8 @@ export default async function SettingsPage() {
           and which players still need data.
         </p>
       </div>
+
+      <DataHealthSummary />
 
       <section className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-3">

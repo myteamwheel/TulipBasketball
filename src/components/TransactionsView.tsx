@@ -1,3 +1,6 @@
+import { getLeagueHistory, getFrozenTradePrices } from "@/lib/leagueHistory";
+import { historicalManager, resolveDraftPick } from "@/lib/tradeLineage";
+import type { ReviewAsset } from "@/lib/tradeReview";
 import TradeReviewCard from "@/components/TradeReviewCard";
 import TradeReviewBoard from "@/components/TradeReviewBoard";
 import { historicalPickSnapshots } from "@/lib/pickFreshness";
@@ -18,7 +21,7 @@ import { faabForRoster, parseFaabTransfers } from "@/lib/tradeFaab";
 const PAGE_SIZE = 15;
 type TxFilter = "all" | "trade" | "moves";
 type TradedPick = { season: string; round: number; roster_id: number; previous_owner_id: number; owner_id: number };
-type Asset = TradeGradeAsset & { playerId: string | null; atMoveObservedAt: Date | null; atMoveTiming: TradeSnapshotTiming | null; currentObservedAt: string | null };
+type Asset = TradeGradeAsset & Pick<ReviewAsset, "outcome" | "journey" | "priceSource"> & { playerId: string | null; atMoveObservedAt: Date | null; atMoveTiming: TradeSnapshotTiming | null; currentObservedAt: string | null };
 
 const HISTORICAL_MARKET_WINDOW_MS = TRADE_SNAPSHOT_WINDOW_MS;
 
@@ -45,11 +48,32 @@ export default async function TransactionsPage({ searchParams, review = false }:
   const total = await prisma.transaction.count({ where });
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const page = Math.min(requestedPage, totalPages);
-  const [transactions, managers, pickMarket] = await Promise.all([
+  const [storedTransactions, managers, pickMarket] = await Promise.all([
     prisma.transaction.findMany({ where, orderBy: { sleeperCreatedAt: "desc" }, ...(review ? {} : { skip: (page - 1) * PAGE_SIZE, take: PAGE_SIZE }) }),
     prisma.manager.findMany({ where: { league: { sleeperId: SLEEPER_LEAGUE_ID } } }),
     fetchFreshDraftPickMarketValues().catch(() => []),
   ]);
+  const [history, frozenPrices] = await Promise.all([getLeagueHistory(), getFrozenTradePrices()]);
+  const currentLeague = history.seasons.find(s => s.leagueId === SLEEPER_LEAGUE_ID);
+  const currentManagerByOwner = new Map(managers.map(m => [m.sleeperUserId, m]));
+  const identityKeys = [...new Set(history.seasons.flatMap(s => s.managers.map(m => historicalManager(history, s.leagueId, m.rosterId).key)))].sort();
+  const identityNumber = (leagueId: string, rosterId: number) => {
+    const owner = historicalManager(history, leagueId, rosterId);
+    const current = currentManagerByOwner.get(owner.key.replace(/^owner:/, ''));
+    return current?.sleeperRosterId ?? -(identityKeys.indexOf(owner.key) + 1);
+  };
+  const transactionLeague = new Map(storedTransactions.map(t => [t.sleeperTransactionId, SLEEPER_LEAGUE_ID]));
+  const allTransactions = new Map(storedTransactions.map(t => [t.sleeperTransactionId, t]));
+  if (review) for (const season of history.seasons) for (const tx of season.trades) {
+    transactionLeague.set(tx.transaction_id, season.leagueId);
+    if (!allTransactions.has(tx.transaction_id)) allTransactions.set(tx.transaction_id, {
+      id: 'sleeper-' + tx.transaction_id, leagueId: season.leagueId, sleeperTransactionId: tx.transaction_id,
+      type: tx.type, status: tx.status, sleeperCreatedAt: new Date(tx.created),
+      rosterIdsInvolved: JSON.stringify(tx.roster_ids ?? []), adds: JSON.stringify(tx.adds), drops: JSON.stringify(tx.drops),
+      draftPicks: JSON.stringify(tx.draft_picks ?? []), waiverBudget: JSON.stringify(tx.waiver_budget ?? []), rawPayload: JSON.stringify(tx), processedAt: new Date(season.checkedAt),
+    });
+  }
+  const transactions = [...allTransactions.values()].sort((a,b) => b.sleeperCreatedAt.getTime() - a.sleeperCreatedAt.getTime());
   const rangeStart = transactions.length
     ? new Date(Math.min(...transactions.map((tx) => tx.sleeperCreatedAt.getTime())) - HISTORICAL_MARKET_WINDOW_MS)
     : null;
@@ -67,33 +91,40 @@ export default async function TransactionsPage({ searchParams, review = false }:
         select: { startedAt: true, finishedAt: true, summary: true },
       })
     : [];
-  const sleeperIds = [...new Set(transactions.flatMap((tx) => [...Object.keys(record(tx.adds)), ...Object.keys(record(tx.drops))]))];
+  const sleeperIds = [...new Set([...transactions.flatMap((tx) => [...Object.keys(record(tx.adds)), ...Object.keys(record(tx.drops))]), ...history.seasons.flatMap(s => s.drafts.flatMap(d => d.picks.map(p => p.playerId)))])];
   const players = await prisma.player.findMany({ where: { sleeperId: { in: sleeperIds } }, select: { id: true, sleeperId: true, fullName: true, position: true } });
   const [series, currentMarket] = await Promise.all([getObservationSeries(players.map((p) => p.id)), computeMarketDataForPlayers(players.map((p) => p.id))]);
   const managerByRoster = new Map(managers.map((m) => [m.sleeperRosterId, m]));
   const playerBySleeper = new Map(players.map((p) => [p.sleeperId, p]));
   const pickSnapshots = historicalPickSnapshots(refreshRuns);
-  const teamName = (rosterId: number) => managerByRoster.has(rosterId) ? publicTeamName(managerByRoster.get(rosterId)!) : `Team ${rosterId}`;
+  let activeLeagueId = SLEEPER_LEAGUE_ID;
+  let activeTransactionId = '';
+  const teamName = (rosterId: number) => {
+    if (activeLeagueId === SLEEPER_LEAGUE_ID && managerByRoster.has(rosterId)) return publicTeamName(managerByRoster.get(rosterId)!);
+    return historicalManager(history, activeLeagueId, rosterId).name;
+  };
 
   function playerAsset(sleeperId: string, date: Date): Asset {
     const player = playerBySleeper.get(sleeperId);
-    if (!player) return { id: `player:${sleeperId}`, playerId: null, label: `Sleeper player ${sleeperId}`, assetType: "player", atTradeValue: null, currentValue: null, currentObservedAt: null, atMoveObservedAt: null, atMoveTiming: null };
+    if (!player) return { id: `player:${sleeperId}`, playerId: null, label: history.players[sleeperId] ? `${history.players[sleeperId].name} (${history.players[sleeperId].position})` : `Sleeper player ${sleeperId}`, assetType: "player", atTradeValue: null, currentValue: null, currentObservedAt: null, atMoveObservedAt: null, atMoveTiming: null };
     const atMove = selectTradeSnapshot(
       series.get(player.id) ?? [],
       date,
       (observation) => observation.validationStatus === "VALID",
     );
     const market = currentMarket.get(player.id);
+    const frozen = frozenPrices.get(activeTransactionId)?.[player.id];
     return {
       id: player.id,
       playerId: player.id,
       label: `${player.fullName} (${player.position})`,
       assetType: "player",
-      atTradeValue: atMove?.snapshot.value ?? null,
+      atTradeValue: frozen?.value ?? atMove?.snapshot.value ?? null,
       currentValue: market && !market.isStale ? market.currentValue : null,
       currentObservedAt: market && !market.isStale ? market.currentObservedAt : null,
-      atMoveObservedAt: atMove?.snapshot.observedAt ?? null,
-      atMoveTiming: atMove?.timing ?? null,
+      atMoveObservedAt: frozen ? new Date(frozen.observedAt) : atMove?.snapshot.observedAt ?? null,
+      atMoveTiming: frozen?.timing ?? atMove?.timing ?? null,
+      priceSource: frozen ? "Preserved KTC observation" : "Verified KTC observation",
     };
   }
   function pickAsset(pick: TradedPick, date: Date): Asset {
@@ -101,21 +132,29 @@ export default async function TransactionsPage({ searchParams, review = false }:
     const atTradeValue = snapshot
       ? currentPickMarketValue(snapshot.snapshot.rows, Number(pick.season), pick.round, null)
       : null;
-    const currentValue = currentPickMarketValue(pickMarket, Number(pick.season), pick.round, null);
+    const resolution = resolveDraftPick(history, pick.season, pick.round, pick.roster_id);
+    const drafted = resolution ? playerBySleeper.get(resolution.playerId) : null;
+    const draftedMarket = drafted ? currentMarket.get(drafted.id) : null;
+    const frozen = frozenPrices.get(activeTransactionId)?.[`pick:${pick.season}:${pick.round}:${pick.roster_id}`];
+    const currentValue = resolution ? null : currentPickMarketValue(pickMarket, Number(pick.season), pick.round, null);
     const currentObservedAt = currentValue === null ? null : pickMarket.filter(row => Number(row.season) === Number(pick.season) && row.round === pick.round).map(row => row.sourceUpdatedAt).filter(Boolean).sort()[0] ?? null;
     return {
       id: `pick:${pick.season}:${pick.round}:${pick.roster_id}`,
       playerId: null,
       label: `${pick.season} Round ${pick.round} · ${teamName(pick.roster_id)} original`,
       assetType: "pick",
-      atTradeValue,
+      atTradeValue: frozen?.value ?? atTradeValue,
       currentValue,
+      outcome: resolution ? { label: resolution.name, playerId: drafted?.id ?? null, sleeperId: resolution.playerId, pickNumber: resolution.overall, currentValue: draftedMarket && !draftedMarket.isStale ? draftedMarket.currentValue : null, sourceUrl: `https://sleeper.com/draft/nfl/${resolution.draftId}` } : undefined,
+      priceSource: 'Generic round-level pick market',
       currentObservedAt,
-      atMoveObservedAt: snapshot?.snapshot.observedAt ?? null,
-      atMoveTiming: snapshot?.timing ?? null,
+      atMoveObservedAt: frozen ? new Date(frozen.observedAt) : snapshot?.snapshot.observedAt ?? null,
+      atMoveTiming: frozen?.timing ?? snapshot?.timing ?? null,
     };
   }
   const rows = transactions.map((tx) => {
+    activeLeagueId = transactionLeague.get(tx.sleeperTransactionId) ?? SLEEPER_LEAGUE_ID;
+    activeTransactionId = tx.sleeperTransactionId;
     const adds = record(tx.adds), drops = record(tx.drops), picks = array<TradedPick>(tx.draftPicks);
     const faab = parseFaabTransfers(tx.waiverBudget);
     const rosterIds = [...new Set([...array<number>(tx.rosterIdsInvolved), ...Object.values(adds), ...Object.values(drops), ...picks.flatMap((p) => [p.owner_id, p.previous_owner_id]), ...faab.flatMap(p => [p.sender, p.receiver])])];
@@ -127,7 +166,8 @@ export default async function TransactionsPage({ searchParams, review = false }:
       const gave = [...gavePlayers, ...gavePicks], got = [...gotPlayers, ...gotPicks];
       const budget = faabForRoster(faab, rosterId);
       return {
-        rosterId,
+        rosterId: review ? identityNumber(activeLeagueId, rosterId) : rosterId,
+        identityKey: historicalManager(history, activeLeagueId, rosterId).key,
         name: teamName(rosterId),
         got,
         gave,
@@ -136,7 +176,7 @@ export default async function TransactionsPage({ searchParams, review = false }:
           ? calculateTradeSideGrades({ gave, got, ...budget })
           : null,
       };
-    }).filter((side) => side.got.length || side.gave.length || faab.some(row => row.sender === side.rosterId || row.receiver === side.rosterId));
+    }).filter((side) => side.got.length || side.gave.length || (side.faabSent ?? 0) > 0 || (side.faabReceived ?? 0) > 0);
     return { tx, sides, bid: waiverBid(tx.rawPayload), faab };
   });
 
@@ -144,13 +184,18 @@ export default async function TransactionsPage({ searchParams, review = false }:
     const trades = rows.map(({ tx, sides }) => ({
       id: tx.id,
       date: tx.sleeperCreatedAt.toISOString(),
+      season: history.seasons.find(s => s.leagueId === transactionLeague.get(tx.sleeperTransactionId))?.season ?? currentLeague?.season,
       sides: sides.map(side => ({
         ...side,
         gave: side.gave.map(asset => ({ ...asset, atMoveObservedAt: asset.atMoveObservedAt?.toISOString() ?? null })),
         got: side.got.map(asset => ({ ...asset, atMoveObservedAt: asset.atMoveObservedAt?.toISOString() ?? null })),
       })),
     }));
-    return <TradeReviewBoard trades={trades} initialTrade={params.trade} />;
+    for (const trade of trades) for (const side of trade.sides) for (const asset of side.got) {
+      const later = trades.filter(next => next.date > trade.date && next.sides.some(s => s.got.some(a => a.id === asset.id || (asset.outcome?.playerId && a.playerId === asset.outcome.playerId)))).sort((a,b) => a.date.localeCompare(b.date));
+      asset.journey = later.map(next => ({ tradeId: next.id, date: next.date, label: next.sides.map(s => s.name).join(' ↔ ') }));
+    }
+    return <TradeReviewBoard trades={trades} initialTrade={params.trade} historyCoverage={history.seasons.map(s => ({ season: s.season, complete: s.complete, trades: trades.filter(t => t.season === s.season).length }))} checkedAt={history.checkedAt} chainComplete={history.chainComplete} />;
   }
 
   const renderAsset = (item: Asset, tone: "got" | "gave") => <li key={`${tone}:${item.label}`} className="rounded-md border border-neutral-800 bg-neutral-950 px-2.5 py-2">

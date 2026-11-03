@@ -1,3 +1,4 @@
+import { formatDateTimeEastern } from "@/lib/format";
 import { projectionSummary } from "@/lib/projectionSummary";
 import MetricCard from "@/components/MetricCard";
 import SectionHeader from "@/components/SectionHeader";
@@ -67,6 +68,7 @@ export default async function ProjectionsPage() {
         </div>
       </section>
 
+      <p className="section-freshness">Forecast inputs as of {formatDateTimeEastern(data.current.map(row => row.asOfDate).sort().at(-1) ?? null)} · Each source timestamp is available in the player details.</p>
       <WeeklyProjectionBoard
         current={data.current}
         history={data.history}

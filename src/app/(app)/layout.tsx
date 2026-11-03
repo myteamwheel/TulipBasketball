@@ -10,7 +10,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     <div className="min-h-screen min-w-0 bg-neutral-950 text-neutral-100">
       <header className="sticky top-0 z-30 w-full border-b border-neutral-800/90 bg-neutral-950/95 backdrop-blur-xl">
         <div className="mx-auto w-full max-w-7xl px-3 sm:px-4">
-          <div className="flex min-w-0 items-center justify-between gap-2 py-2.5">
+          <div className="dashboard-brand-row flex min-w-0 items-center justify-between gap-2 py-2.5">
             <div className="min-w-0 truncate text-sm font-semibold tracking-tight text-neutral-100">
               <span>Dynasty Boys</span>
               <span className="hidden sm:inline"> <span className="text-emerald-500">·</span> Market Terminal</span>

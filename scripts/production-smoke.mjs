@@ -84,6 +84,19 @@ try {
   else console.log("PASS manual refresh protection: 401 without owner key");
 } catch (error) { fail(`manual refresh protection: ${error instanceof Error ? error.message : String(error)}`); }
 
+try {
+  const response = await fetch(`${base}/api/admin/trade-history`, { method: "POST", headers });
+  if (response.status !== 401) fail(`history import protection: expected 401, got ${response.status}`);
+  else console.log("PASS history import protection: 401 without owner key");
+} catch (error) { fail(`history protection: ${String(error)}`); }
+
+try {
+  const response = await get('/api/data-health'), health = await response.json();
+  const errors = (health.alerts ?? []).filter(alert => alert.severity === 'error');
+  if (!response.ok || !Array.isArray(health.alerts) || errors.length) fail(`data integrity: ${JSON.stringify(errors)}`);
+  else console.log(`PASS data integrity: ${health.historySeasons} seasons, ${health.historyTrades} trades; ${health.alerts.length} optional warnings`);
+} catch (error) { fail(`data integrity: ${error instanceof Error ? error.message : String(error)}`); }
+
 const protectedChecks = [["POST", "/api/refresh"], ["GET", "/api/strategy"], ["POST", "/api/strategy"], ["POST", "/api/ktc/import"], ["GET", "/api/export/full-history"], ["GET", "/api/export/ktc-history"]];
 for (const [method, path] of protectedChecks) {
   const response = await fetch(`${base}${path}`, { method, redirect: "manual", headers: { ...headers, "content-type": "application/json" }, body: method === "POST" ? "{}" : undefined });

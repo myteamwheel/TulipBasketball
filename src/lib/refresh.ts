@@ -1,3 +1,6 @@
+import { recordDataHealth } from "@/lib/dataHealth";
+import { preserveTradePrices } from "@/lib/preserveTradePrices";
+import { syncLeagueHistory } from "@/lib/leagueHistory";
 import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { syncSleeperState } from "@/lib/sync/sleeperSync";
@@ -525,6 +528,10 @@ async function executeRefresh(runId: string) {
         "Weekly projection refresh classified zero rostered skill players; results are not decision-grade.",
     });
   }
+  let leagueHistory = null;
+  try { leagueHistory = await syncLeagueHistory(); }
+  catch (error) { errors.push({ source: "league_history", message: error instanceof Error ? error.message : String(error) }); }
+
   const exportSnapshotOk = exportSnapshot !== null;
   const universeRequired = ktcSyncOk === true;
   const status =
@@ -544,6 +551,7 @@ async function executeRefresh(runId: string) {
         : "SUCCESS";
 
   const summary = {
+    leagueHistory,
     rosterChangesCount,
     playersRefreshed,
     mappingWarningsCount: mappingWarnings.length,
@@ -564,7 +572,11 @@ async function executeRefresh(runId: string) {
 
   // Persist the completed inputs before taking the immutable audit snapshot.
   await prisma.refreshRun.update({ where: { id: runId }, data: { status, finishedAt: new Date(), sleeperSyncOk, ktcSyncOk, summary: JSON.stringify(summary) } });
-  if (status === "SUCCESS") {
+  try { await recordDataHealth(); }
+  catch (error) { errors.push({ source: "integrity_check", message: error instanceof Error ? error.message : String(error) }); }
+  try { await preserveTradePrices(); }
+  catch (error) { errors.push({ source: "trade_price_preservation", message: error instanceof Error ? error.message : String(error) }); }
+  if (status === "SUCCESS" && errors.length === 0) {
     try { auditSnapshot = await recordAuditSnapshot(runId); }
     catch (error) { errors.push({ source: "audit_snapshot", message: error instanceof Error ? error.message : String(error) }); }
   }
@@ -574,7 +586,7 @@ async function executeRefresh(runId: string) {
   await prisma.refreshRun.update({
     where: { id: runId },
     data: {
-      status: status === "SUCCESS" && !auditSnapshot ? "PARTIAL_FAILURE" : status,
+      status: status === "SUCCESS" && (!auditSnapshot || errors.length > 0) ? "PARTIAL_FAILURE" : status,
       finishedAt: new Date(),
       sleeperSyncOk,
       ktcSyncOk,

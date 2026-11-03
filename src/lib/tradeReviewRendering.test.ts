@@ -16,8 +16,8 @@ test('trade reviewer identifies the winning recipient and renders both received 
  assert.match(html,/Team Two/);
  assert.match(html,/Player A/);
  assert.match(html,/Player B/);
- assert.match(html,/<section class="trade-packages" aria-label="Full trade packages">/);
- assert.match(html,/Who received and sent what/);
+ assert.doesNotMatch(html,/<section class="trade-packages"/);
+ assert.match(html,/trade-inline-prices/);
  assert.match(html,/At trade/);
  assert.match(html,/Now/);
  assert.match(html,/Replay change from trade date to now/);
@@ -25,7 +25,7 @@ test('trade reviewer identifies the winning recipient and renders both received 
 test('trade history renders complete review cards without an expansion step',()=>{
  const html=renderToStaticMarkup(React.createElement(TradeReviewBoard,{trades:[{id:'one',date:'2026-10-31T12:00:00.000Z',sides:sides()}]}));
  assert.match(html,/trade-result-detail/);
- assert.match(html,/Who received and sent what/);
+ assert.match(html,/trade-inline-prices/);
  assert.match(html,/Player A/);
  assert.doesNotMatch(html,/trade-result-chevron|aria-expanded="false"/);
 });

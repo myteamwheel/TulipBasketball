@@ -449,3 +449,39 @@ header { background-color: var(--header) !important; }
 /* Keep keyboard and anchor destinations below the persistent navigation. */
 html { scroll-padding-top: 150px; }
 @media (max-width: 1023px) { html { scroll-padding-top: 130px; } }
+
+/* One complete package per recipient; supplementary provenance stays secondary. */
+.trade-result, .trade-matrix { overflow: visible; }
+.trade-matrix-head { position: sticky; top: var(--dashboard-header-height, 130px); z-index: 10; border-radius: 11px 11px 0 0; box-shadow: 0 1px 0 var(--border); }
+.trade-result-main h2 { white-space: normal; overflow-wrap: anywhere; }
+.trade-inline-prices { display: flex; flex-wrap: wrap; gap: 3px 7px; margin-top: 4px; color: var(--text-muted); font-size: 12px; }
+.trade-inline-prices b { font-weight: 650; }
+.trade-grade-missing { max-width: 100%; margin-top: 8px; padding: 6px; color: var(--warning); font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; text-align: left; }
+.trade-grade-missing ul { margin-top: 4px; display: grid; gap: 5px; }
+.trade-grade-missing b { font-weight: 650; }
+.trade-pick-outcome { margin-top: 5px; padding: 6px; border-left: 2px solid var(--positive); font-size: 12px; color: var(--text-muted); }
+.trade-journey { margin-top: 5px; font-size: 12px; }
+.trade-journey summary { padding: 8px 0; cursor: pointer; color: var(--positive); }
+.trade-journey a { display: block; padding: 6px 0; }
+.trade-journey small { display: block; }
+.trade-outcome-summary, .trade-multiteam-sent, .trade-history-coverage { padding: 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-muted); font-size: 13px; line-height: 1.5; }
+.trade-outcome-summary h3 { font-weight: 700; }
+.trade-outcome-summary p, .trade-history-coverage p { color: var(--text-muted); margin: 7px 0; }
+.trade-outcome-summary > div { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; padding-top: 8px; }
+.trade-faab-summary { margin-top: 12px; color: var(--text-muted); font-size: 12px; }
+.trade-history-coverage summary { min-height: 30px; cursor: pointer; font-weight: 650; }
+.trade-change-line { flex-wrap: wrap; }
+.trade-advantage-track { flex: 1 1 120px; height: 9px; border-radius: 8px; background: var(--surface-raised); overflow: hidden; }
+.trade-change-line .trade-advantage-track i { display: block; height: 100%; background: var(--positive); transition: width 700ms cubic-bezier(.2,.7,.2,1); animation: none; }
+.home-priorities { display: grid; gap: 12px; grid-template-columns: repeat(3,minmax(0,1fr)); }
+.home-priorities .home-visit-card { margin: 0; }
+.home-priorities h2 { font-size: 19px; font-weight: 700; margin: 7px 0; }
+.home-priorities a { display: inline-block; padding: 10px 0; color: var(--positive); font-size: 13px; }
+.section-freshness { display: flex; flex-wrap: wrap; gap: 5px 15px; color: var(--text-muted); font-size: 12px; padding: 8px 0; }
+@media (max-width: 1023px) {
+  html[data-compact-nav='true'] .dashboard-brand-row { display: none; }
+  .home-priorities { grid-template-columns: 1fr; }
+  html { scroll-padding-top: calc(var(--dashboard-header-height, 120px) + 12px); }
+}
+@media (prefers-reduced-motion: reduce) { .trade-change-line .trade-advantage-track i { transition: none; } }
+html[data-motion='reduced'] .trade-change-line .trade-advantage-track i { transition: none; }

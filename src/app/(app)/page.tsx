@@ -240,6 +240,11 @@ export default async function HomePage() {
           <div className="mt-2 flex w-fit items-start gap-2 sm:mt-0"><ManualRefreshButton /><Link href="/trade-finder" className="inline-flex rounded-md border border-emerald-800 bg-emerald-950/30 px-3 py-1.5 text-xs font-medium text-emerald-300">Open Trade Lab →</Link></div>
         </div>
       </section>
+      <div className="home-priorities">
+        <section className="home-visit-card"><span className="trade-eyebrow">Needs attention</span><h2>{lineupProblems.length + illegalIr.length ? `${lineupProblems.length + illegalIr.length} roster checks` : 'No flagged lineup issues'}</h2><p>{[...lineupProblems.map(row => row.fullName + ': check starter status'), ...illegalIr.map(row => row.fullName + ': review IR eligibility')].join(' · ') || 'Review weekly projections before kickoff; injury and role information can change.'}</p><Link href="/projections">Check weekly lineup →</Link></section>
+      <SinceLastVisit current={{ playerCapital: my.playerCapital, rosterCount: roster.length, lineupIssues: lineupProblems.length, observedAt: capitalAsOf }} />
+        <section className="home-visit-card"><span className="trade-eyebrow">Best next research step</span><h2>{topBuy ? `Review ${topBuy.fullName}` : topSell ? `Review ${topSell.fullName}` : 'Compare trade targets'}</h2><p>{topBuy ? 'A high-confidence model disagreement worth checking against price, role, and team fit.' : topSell ? 'A qualified sell-high signal on your roster. Compare a real return before acting.' : 'No qualified directional signal. Explore roster-fit offers without forcing a trade.'}</p><Link href={topBuy ? '/players/' + topBuy.playerId : topSell ? '/players/' + topSell.id : '/trade-finder'}>Open supporting evidence →</Link></section>
+      </div>
       <section className="rounded-lg border border-emerald-900/60 bg-emerald-950/10 p-3 sm:p-4">
         <SectionHeader title="This week" description="Current lineup actions, roster legality, market decisions and waiver budget in one place." />
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
@@ -480,8 +485,8 @@ export default async function HomePage() {
           players.
         </div>
       ) : null}
-      <SinceLastVisit current={{ playerCapital: my.playerCapital, rosterCount: roster.length, lineupIssues: lineupProblems.length, observedAt: capitalAsOf }} />
-      <section className="home-trades-card"><div className="home-visit-head"><div><span className="trade-eyebrow">League activity</span><h2>Recent trades</h2></div><Link href="/trade-review">All recorded trades →</Link></div>{recentTradeSummaries.length ? <div className="home-trades-list">{recentTradeSummaries.map(tx => <Link href={"/trade-review?trade=" + encodeURIComponent(tx.id)} key={tx.id}><strong>{tx.summary.title}</strong><small>{formatDateTimeEastern(tx.sleeperCreatedAt.toISOString())}</small><span className="home-trade-packages">{tx.summary.packages.map((side, index) => <span key={index}><b>{side.team} gets</b> {side.assets.slice(0, 2).join(" + ") || "Package details unavailable"}{side.assets.length > 2 ? ` + ${side.assets.length - 2} more` : ""}</span>)}</span><span className="home-trade-link">Full review →</span></Link>)}</div> : <p>No trades have been synced yet.</p>}</section>
+
+      <section className="home-trades-card"><div className="home-visit-head"><div><span className="trade-eyebrow">League activity</span><h2>Recent trades</h2></div><Link href="/trade-review">All recorded trades →</Link></div>{recentTradeSummaries.length ? <div className="home-trades-list">{recentTradeSummaries.map(tx => <Link href={"/trade-review?trade=" + encodeURIComponent(tx.id)} key={tx.id}><strong>{tx.summary.title}</strong><small>{formatDateTimeEastern(tx.sleeperCreatedAt.toISOString())}</small><span className="home-trade-packages">{tx.summary.packages.map((side, index) => <span key={index}><b>{side.team} gets</b> {side.assets.join(" + ") || "Package details unavailable"}</span>)}</span><span className="home-trade-link">Full review →</span></Link>)}</div> : <p>No trades have been synced yet.</p>}</section>
       <section>
         <SectionHeader
           title="Orlando Oswalds roster"

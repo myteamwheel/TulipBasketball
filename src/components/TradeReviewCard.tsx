@@ -1,4 +1,6 @@
 "use client";
+import { exportGradeColor, exportGradeLabel, wrapExportText } from "@/lib/tradeImage";
+import { calculateTradeSideGrades } from "@/lib/tradeGrades";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { formatDateTimeEastern, formatPoints, formatSigned, formatPercent } from "@/lib/format";
@@ -10,8 +12,8 @@ const value = (points: number | null) => points === null ? "Unavailable" : forma
 const grade = (side: ReviewSide, phase: "atTrade" | "current") => side.grades?.[phase].status === "EXCLUDED" ? "FAAB only" : side.grades?.[phase].grade ?? "Unrated";
 const receivedSummary = (side: ReviewSide) => [...side.got.map(asset => asset.label), ...((side.faabReceived ?? 0) > 0 ? ["$" + side.faabReceived + " FAAB"] : [])].join(" · ") || "No received assets recorded";
 
-function Assets({ title, items }: { title: string; items: ReviewAsset[] }) {
-  return <div className="trade-assets"><h5>{title}</h5>{items.length ? <ul>{items.map(asset => <li key={asset.id}><div className="trade-asset-name">{asset.playerId ? <Link href={"/players/" + asset.playerId}>{asset.label}</Link> : asset.label}<span>{asset.assetType}</span></div><div className="trade-asset-values"><span>At trade <strong>{value(asset.atTradeValue)}</strong></span><span>Now <strong>{value(asset.currentValue)}</strong></span></div></li>)}</ul> : <p>No players or picks recorded.</p>}</div>;
+function AssetDetail({ asset }: { asset: ReviewAsset }) {
+  return <li><div>{asset.playerId ? <Link href={'/players/' + asset.playerId}>{asset.label}</Link> : asset.label}</div><div className="trade-inline-prices"><span>Then <b>{value(asset.atTradeValue)}</b></span><span aria-hidden="true">→</span><span>Now <b>{asset.outcome ? 'Pick used' : value(asset.currentValue)}</b></span></div>{asset.outcome ? <div className="trade-pick-outcome">Became {asset.outcome.playerId ? <Link href={'/players/' + asset.outcome.playerId}>{asset.outcome.label}</Link> : asset.outcome.label} · #{asset.outcome.pickNumber}<br/>Player now: {value(asset.outcome.currentValue)} market pts <a href={asset.outcome.sourceUrl} target="_blank" rel="noreferrer">Draft record ↗</a></div> : null}{asset.journey?.length ? <details className="trade-journey"><summary>{asset.journey.length} later trade{asset.journey.length === 1 ? '' : 's'}</summary>{asset.journey.map(step => <Link key={step.tradeId} href={'/trade-review?trade=' + encodeURIComponent(step.tradeId)}>{formatDateTimeEastern(step.date)} · {step.label}</Link>)}<small>Asset path only; later returns are not credited to the original recipient.</small></details> : null}</li>;
 }
 
 export default function TradeReviewCard({ sides, trade, embedded = false }: { sides: ReviewSide[]; trade?: ReviewTrade; embedded?: boolean }) {
@@ -19,7 +21,7 @@ export default function TradeReviewCard({ sides, trade, embedded = false }: { si
   const [shareNote, setShareNote] = useState("");
   useEffect(() => {
     if (!replayPhase) return;
-    const timer = window.setTimeout(() => setReplayPhase(replayPhase === "atTrade" ? "current" : null), replayPhase === "atTrade" ? 350 : 650);
+    const timer = window.setTimeout(() => setReplayPhase(replayPhase === "atTrade" ? "current" : null), replayPhase === "atTrade" ? 900 : 1200);
     return () => window.clearTimeout(timer);
   }, [replayPhase]);
   const shell = { id: trade?.id ?? "", date: trade?.date ?? "", sides };
@@ -42,47 +44,78 @@ export default function TradeReviewCard({ sides, trade, embedded = false }: { si
   }
   function saveImage() {
     if (!trade) return;
-    const sectionHeights = sides.map(side => 142 + Math.max(side.got.length, side.gave.length, 1) * 36);
-    const imageHeight = 220 + sectionHeights.reduce((sum, height) => sum + height + 16, 0) + 72;
-    const canvas = document.createElement("canvas"); canvas.width = 1600; canvas.height = imageHeight;
-    const ctx = canvas.getContext("2d"); if (!ctx) return;
-    ctx.fillStyle = "#0b1220"; ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "#6ee7b7"; ctx.font = "bold 26px sans-serif"; ctx.fillText("DYNASTY BOYS · TRADE REVIEW", 48, 62);
-    ctx.fillStyle = "#e5edf8"; ctx.font = "42px sans-serif"; ctx.fillText(formatDateTimeEastern(trade.date), 48, 120);
-    ctx.font = "21px sans-serif"; ctx.fillText("At trade: " + thenWinner + "   →   Now: " + nowWinner, 48, 164, 1480);
-    let y = 206;
-    sides.forEach((side, index) => {
-      const height = sectionHeights[index];
-      ctx.fillStyle = "#19273b"; ctx.fillRect(40, y, 1520, height);
-      ctx.fillStyle = "#e5edf8"; ctx.font = "bold 26px sans-serif"; ctx.fillText(side.name, 58, y + 37, 610);
-      ctx.fillStyle = "#6ee7b7"; ctx.font = "bold 25px sans-serif"; ctx.fillText("Then " + grade(side, "atTrade") + " " + formatSigned(side.grades?.atTrade.balance?.adjustedEdge), 690, y + 37);
-      ctx.fillText("Now " + grade(side, "current") + " " + formatSigned(side.grades?.current.balance?.adjustedEdge), 1110, y + 37);
-      ctx.fillStyle = "#a7b6cb"; ctx.font = "18px sans-serif";
-      ctx.fillText("RECEIVED", 58, y + 71); ctx.fillText("SENT", 800, y + 71);
-      const rows = Math.max(side.got.length, side.gave.length, 1);
-      for (let row = 0; row < rows; row++) {
-        for (const [asset, x] of [[side.got[row], 58], [side.gave[row], 800]] as const) {
-          if (!asset) continue;
-          ctx.fillStyle = "#e5edf8"; ctx.font = "18px sans-serif";
-          ctx.fillText(asset.label + " · then " + value(asset.atTradeValue) + " · now " + value(asset.currentValue), x, y + 102 + row * 36, 705);
-        }
+    const canvas = document.createElement('canvas'); canvas.width = 1600;
+    const ctx = canvas.getContext('2d'); if (!ctx) return;
+    ctx.font = '24px sans-serif';
+    const measure = (text: string) => ctx.measureText(text).width;
+    const sections = sides.map(side => {
+      const lines: { text: string; color: string; bold?: boolean }[] = [];
+      const add = (text: string, color = '#e5edf8', bold = false) => {
+        ctx.font = bold ? 'bold 26px sans-serif' : '24px sans-serif';
+        lines.push(...wrapExportText(text, 1450, measure).map(text => ({ text, color, bold })));
+      };
+      add(side.name, '#e5edf8', true);
+      add(exportGradeLabel(side, 'atTrade'), exportGradeColor(side, 'atTrade'));
+      add(exportGradeLabel(side, 'current'), exportGradeColor(side, 'current'));
+      add('RECEIVED');
+      for (const asset of side.got) {
+        add(asset.label);
+        add(`At trade ${value(asset.atTradeValue)} → Now ${asset.outcome ? 'pick used' : value(asset.currentValue)} market pts`);
+        if (asset.outcome) add(`Became ${asset.outcome.label} · current player value ${value(asset.outcome.currentValue)} (separate outcome)`);
       }
-      ctx.fillStyle = "#a7b6cb"; ctx.font = "17px sans-serif";
-      ctx.fillText("FAAB received $" + (side.faabReceived ?? 0) + " · sent $" + (side.faabSent ?? 0) + " (excluded from rating)", 58, y + height - 14);
-      y += height + 16;
+      if (!side.got.length) add('No players or picks received');
+      add(`FAAB received $${side.faabReceived ?? 0} · sent $${side.faabSent ?? 0} — excluded from grades`);
+      for (const phase of ['atTrade', 'current'] as const) if (side.grades?.[phase].missingAssets.length) add(`${phase === 'atTrade' ? 'Historical' : 'Current'} missing prices: ${side.grades[phase].missingAssets.join(', ')}`);
+      return lines;
     });
-    ctx.fillStyle = "#a7b6cb"; ctx.font = "18px sans-serif"; ctx.fillText("Market points · source prices and methods at " + shareUrl, 48, imageHeight - 28, 1500);
-    const link = document.createElement("a"); link.href = canvas.toDataURL("image/png"); link.download = "dynasty-trade-" + trade.id + ".png"; link.click();
+    ctx.font = '26px sans-serif';
+    const winnerLines = wrapExportText(`At trade: ${thenWinner} → Now: ${nowWinner}`, 1480, measure);
+    const sectionStart = Math.max(176 + winnerLines.length * 32, 230);
+    canvas.height = sectionStart + sections.reduce((n, lines) => n + lines.length * 38 + 40, 0) + 110;
+    ctx.fillStyle = '#0b1220'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#6ee7b7'; ctx.font = 'bold 30px sans-serif'; ctx.fillText('DYNASTY BOYS · TRADE REVIEW', 48, 58);
+    ctx.fillStyle = '#e5edf8'; ctx.font = '26px sans-serif'; ctx.fillText(formatDateTimeEastern(trade.date), 48, 110);
+    let y = 156;
+    for (const line of winnerLines) { ctx.fillText(line, 48, y); y += 32; }
+    y = sectionStart;
+    for (const lines of sections) {
+      ctx.fillStyle = '#19273b'; ctx.fillRect(36, y - 25, 1528, lines.length * 38 + 20);
+      for (const line of lines) {
+        ctx.font = line.bold ? 'bold 26px sans-serif' : '24px sans-serif';
+        ctx.fillStyle = line.color;
+        ctx.fillText(line.text, 58, y); y += 38;
+      }
+      y += 40;
+    }
+    ctx.font = '20px sans-serif'; ctx.fillStyle = '#a7b6cb';
+    ctx.fillText('Each receiving package is shown once. Market grades exclude FAAB and downstream trades.', 48, y);
+    ctx.fillText(shareUrl, 48, y + 32);
+    const link = document.createElement('a'); link.href = canvas.toDataURL('image/png'); link.download = 'dynasty-trade-' + trade.id + '.png'; link.click();
   }
+  const replaySide = sides[0];
+  const replayGrade = replaySide?.grades?.[replayPhase ?? 'current'];
+  const replayShare = replayGrade?.balance ? Math.max(0, Math.min(100, 50 + replayGrade.balance.edgePercent / 2)) : 50;
+  const replay = () => {
+    const reduced = document.documentElement.dataset.motion === 'reduced' || document.documentElement.dataset.motion !== 'full' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduced) { setShareNote('At trade: ' + thenWinner + '. Now: ' + nowWinner + '.'); return; }
+    setReplayPhase('atTrade');
+  };
   return <section className="trade-review-card" aria-label="Trade comparison">
-    <div className="trade-review-toolbar"><div><span className="trade-eyebrow">Trade comparison</span>{embedded ? <h3>Trade outcome</h3> : <h2>Who got the better deal?</h2>}</div><div className="trade-review-actions"><button type="button" onClick={() => setReplayPhase("atTrade")} disabled={replayPhase !== null} aria-label="Replay change from trade date to now">↻ Replay</button>{trade ? <><button type="button" onClick={share}>Share</button><button type="button" onClick={saveImage}>Save image</button></> : null}</div></div>
+    <div className="trade-review-toolbar"><div><span className="trade-eyebrow">Trade comparison</span>{embedded ? <h3>Trade outcome</h3> : <h2>Who got the better deal?</h2>}</div><div className="trade-review-actions"><button type="button" onClick={replay} disabled={replayPhase !== null} aria-label="Replay change from trade date to now">↻ Replay</button>{trade ? <><button type="button" onClick={share}>Share</button><button type="button" onClick={saveImage}>Save image</button></> : null}</div></div>
     {shareNote ? <p role="status" className="trade-share-note">{shareNote}</p> : null}
+    <p className="section-freshness">Current prices as of {formatDateTimeEastern(pricedAssets.map(a => a.currentObservedAt).filter((v): v is string => !!v).sort()[0] ?? null)} · Historical prices retain their original observation dates.</p>
     <div className="trade-winner-strip" aria-live="polite"><div className={replayPhase === "atTrade" ? "is-replay-focus" : ""}><span>At trade</span><strong>{thenWinner}</strong></div><span className="trade-winner-arrow" aria-hidden="true">→</span><div className={replayPhase === "current" ? "is-replay-focus" : ""}><span>Now</span><strong>{nowWinner}</strong></div>{changed ? <b className="trade-reversal-badge">{thenWinner === "Even" || nowWinner === "Even" ? "Outcome changed" : "Winner changed"}</b> : null}</div>
-    <div className="trade-matrix" role="table" aria-label="Team grades and market edges at trade and now"><div className="trade-matrix-head" role="row"><span role="columnheader">Received by</span><span role="columnheader">At trade</span><span role="columnheader">Now</span></div>{sides.map(side => <div className="trade-matrix-row" role="row" key={side.rosterId}><div className="trade-team" role="cell"><span className="trade-avatar" aria-hidden="true">{initials(side.name)}</span><div><strong>{side.name}</strong><ul className="trade-received-assets" aria-label={side.name + " received"}>{side.got.map(asset => <li key={asset.id}>{asset.playerId ? <Link href={"/players/" + asset.playerId}>{asset.label}</Link> : asset.label}</li>)}{(side.faabReceived ?? 0) > 0 ? <li className="trade-received-faab">${side.faabReceived} FAAB <span>Excluded from grades</span></li> : null}{!side.got.length && !(side.faabReceived ?? 0) ? <li>No received assets recorded</li> : null}</ul></div></div>{(["atTrade", "current"] as const).map(phase => { const result = side.grades?.[phase]; return <div key={phase} role="cell" className={"trade-grade " + (result?.result === "WON" ? "trade-positive" : result?.result === "LOST" ? "trade-negative" : "") + (replayPhase === phase ? " is-replay-focus" : "")}><strong>{grade(side, phase)}</strong><span>{result?.balance ? formatSigned(result.balance.adjustedEdge) : "—"} <small>pts</small></span><span>{result?.balance ? formatPercent(result.balance.edgePercent) : "—"}</span></div>; })}</div>)}</div>
-    <div className={"trade-change-line" + (replayPhase !== null ? " is-replaying" : "")}><span>At trade</span><i aria-hidden="true" /><span>Now</span></div>
+    <div className="trade-matrix" role="table" aria-label="Team grades and market edges at trade and now"><div className="trade-matrix-head" role="row"><span role="columnheader">Received by</span><span role="columnheader">At trade</span><span role="columnheader">Now</span></div>{sides.map(side => <div className="trade-matrix-row" role="row" key={side.rosterId}><div className="trade-team" role="cell"><span className="trade-avatar" aria-hidden="true">{initials(side.name)}</span><div><strong>{side.name}</strong><ul className="trade-received-assets" aria-label={side.name + " received"}>{side.got.map(asset => <AssetDetail asset={asset} key={asset.id} />)}{(side.faabReceived ?? 0) > 0 ? <li className="trade-received-faab">${side.faabReceived} FAAB <span>Excluded from grades</span></li> : null}{!side.got.length && !(side.faabReceived ?? 0) ? <li>No received assets recorded</li> : null}</ul></div></div>{(["atTrade", "current"] as const).map(phase => { const result = side.grades?.[phase]; return <div key={phase} role="cell" className={"trade-grade " + (result?.result === "WON" ? "trade-positive" : result?.result === "LOST" ? "trade-negative" : "") + (replayPhase === phase ? " is-replay-focus" : "")}><strong>{grade(side, phase)}</strong><span>{result?.balance ? formatSigned(result.balance.adjustedEdge) : "—"} <small>pts</small></span><span>{result?.balance ? formatPercent(result.balance.edgePercent) : "—"}</span>{result?.status === 'INCOMPLETE' ? <div className="trade-grade-missing"><b>{phase === 'atTrade' ? 'Historical' : 'Current'} prices missing</b>{result.missingAssets.length ? <ul>{result.missingAssets.map((label, index) => <li key={index}>{label}</li>)}</ul> : <p>{result.reason}</p>}</div> : null}</div>; })}</div>)}</div>
+    <div className={"trade-change-line" + (replayPhase !== null ? " is-replaying" : "")}><span>{replaySide?.name} · {replayPhase === 'atTrade' ? 'At trade' : 'Now'}</span><div className="trade-advantage-track" role="img" aria-label={replayGrade?.balance ? `${replaySide.name} market edge ${formatPercent(replayGrade.balance.edgePercent)}` : 'Advantage unavailable'}><i style={{ width: replayShare + '%' }} /></div><strong>{replayGrade?.balance ? formatSigned(replayGrade.balance.adjustedEdge) + ' pts' : 'Unrated'}</strong></div>
     <p className="trade-review-caption">{gain !== null ? "Advantage change for " + readySide!.name + ": " + formatSigned(gain) + " market points. " : ""}Grades compare received with sent market value after package adjustment. They do not measure fantasy points or team fit.</p>
     <div className="trade-coverage">{approximate ? <span className="trade-warning">Next day historical approximation</span> : null}{missingThen ? <span className="trade-warning">At-trade prices missing</span> : null}{missingNow ? <span className="trade-warning">Current prices missing</span> : null}{hasFaab ? <span>FAAB recorded · excluded from grades</span> : null}</div>
-    <section className="trade-packages" aria-label="Full trade packages"><h3>Who received and sent what</h3><div className="trade-detail-grid">{sides.map(side => <section key={side.rosterId}><h4>{side.name}</h4><div className="trade-detail-columns"><Assets title="Received" items={side.got} /><Assets title="Sent" items={side.gave} /></div>{(side.faabReceived ?? 0) + (side.faabSent ?? 0) > 0 ? <p>FAAB received {"$" + (side.faabReceived ?? 0)} · sent {"$" + (side.faabSent ?? 0)}. Excluded from ratings.</p> : null}{side.grades?.atTrade.reason || side.grades?.current.reason ? <p>Coverage: {side.grades.atTrade.reason ?? "Historical complete."} {side.grades.current.reason ?? "Current complete."}</p> : null}</section>)}</div></section>
+    {sides.some(side => side.got.some(asset => asset.outcome)) ? <section className="trade-outcome-summary"><h3>Drafted-player outcome · separate from the original grade</h3><p>Replaces used picks with their drafted players at fresh current prices. Later trades are linked above and are not added to this score.</p>{sides.map(side => {
+      const convert = (items: ReviewAsset[]) => items.map(asset => ({ ...asset, currentValue: asset.outcome ? asset.outcome.currentValue : asset.currentValue }));
+      const outcome = calculateTradeSideGrades({ ...side, got: convert(side.got), gave: convert(side.gave) }).current;
+      return <div key={side.rosterId}><strong>{side.name}</strong><span>{outcome.grade ?? 'Unrated'} · {outcome.balance ? formatSigned(outcome.balance.adjustedEdge) + ' market pts' : 'Missing fresh prices: ' + outcome.missingAssets.join(', ')}</span></div>;
+    })}</section> : null}
+    {sides.length > 2 ? <section className="trade-multiteam-sent"><h3>Multi-team outgoing packages</h3>{sides.map(side => <div key={side.rosterId}><strong>{side.name} sent</strong><ul>{side.gave.map(asset => <li key={asset.id}>{asset.label}</li>)}</ul></div>)}</section> : null}
+    <p className="trade-faab-summary">{hasFaab ? sides.map(side => `${side.name}: FAAB received $${side.faabReceived ?? 0} · sent $${side.faabSent ?? 0}`).join(' | ') + '. Excluded from ratings.' : 'Each received package is shown once. In a two-team trade, the other team sent that package.'}</p>
     {pricedAssets.length ? <details className="trade-details trade-source-details"><summary>Price source dates</summary><ul>{pricedAssets.map(asset => <li key={asset.id}><strong>{asset.label}</strong><span>{asset.atMoveObservedAt ? "Historical " + formatDateTimeEastern(asset.atMoveObservedAt) + (asset.atMoveTiming === "NEXT_DAY_APPROXIMATION" ? " · next day approximation" : "") : "Historical price unavailable"} · {asset.currentObservedAt ? "Current " + formatDateTimeEastern(asset.currentObservedAt) : "Current source unavailable"}</span></li>)}</ul></details> : null}
     <details className="trade-details trade-method"><summary>How scores and winners are calculated</summary><div><p>Market edge is adjusted received value minus adjusted sent value, in market points. Percentage divides the edge by the larger package. Within 3% is even (B). Positive edges above 3%, 8%, 15%, and 25% earn B+, A−, A, and A+. Losing grades are B−, C+, C, and D.</p><p>The highest-value asset keeps its full price. Additional pieces receive a consolidation discount. Historical values use a verified observation within 24 hours before the trade or a labeled first observation within 24 hours after it. Current prices must be fresh. Pick prices are generic round averages. Missing prices withhold the affected grade. FAAB is always excluded.</p>{sides.length > 2 ? <p>Each team in a multi-team trade is compared with its own outgoing package, so several teams can have positive edges.</p> : null}</div></details>
   </section>;
