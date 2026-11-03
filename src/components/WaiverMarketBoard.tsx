@@ -170,16 +170,16 @@ export default function WaiverMarketBoard({ rows }: { rows: WaiverMarketRow[] })
         ))}
       </div>
 
-      <div className="hidden overflow-x-auto rounded-lg border border-neutral-800 bg-neutral-900 md:block">
+      <div className={`${visibleRows.length ? "hidden md:block" : "hidden"} overflow-x-auto rounded-lg border border-neutral-800 bg-neutral-900`}>
         <table className="w-full min-w-[900px] text-xs">
           <thead>
             <tr className="border-b border-neutral-800 text-xs uppercase text-neutral-400">
               <th className="px-3 py-2 text-left">Player</th>
               <th className="px-2 py-2 text-left">Role</th>
               <th className="px-2 py-2 text-left">Your need</th>
-              <th className="px-2 py-2 text-right">Week projection</th>
-              <th className="px-2 py-2 text-right">KTC</th>
-              <th className="px-2 py-2 text-right">Latest move</th>
+              <th className="min-w-36 px-3 py-2 text-right">Week projection</th>
+              <th className="min-w-20 px-3 py-2 text-right">KTC</th>
+              <th className="min-w-28 px-3 py-2 text-right">Latest move</th>
             </tr>
           </thead>
           <tbody>
@@ -197,7 +197,7 @@ export default function WaiverMarketBoard({ rows }: { rows: WaiverMarketRow[] })
                     {row.nflTeam ? ` · ${row.nflTeam}` : ""}
                   </div>
                 </td>
-                <td className="px-2 py-2 text-neutral-300">{row.projectedRole}</td>
+                <td className="max-w-64 px-2 py-2 leading-5 text-neutral-300">{row.projectedRole}</td>
                 <td className="px-2 py-2 text-sky-300">{row.need}</td>
                 <td className="px-2 py-2 text-right font-semibold text-emerald-300">
                   {points(row.projectedPoints)}
