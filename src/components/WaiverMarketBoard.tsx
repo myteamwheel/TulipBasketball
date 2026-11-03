@@ -68,7 +68,7 @@ export default function WaiverMarketBoard({ rows }: { rows: WaiverMarketRow[] })
             resetPage();
           }}
           placeholder="Search unrostered player…"
-          className="h-9 rounded-md border border-neutral-800 bg-neutral-900 px-3 text-xs text-neutral-200"
+          className="min-h-11 rounded-md border border-neutral-800 bg-neutral-900 px-3 text-xs text-neutral-200"
         />
         <div className="flex rounded-md border border-neutral-800 bg-neutral-900 p-1">
           {["ALL", "QB", "RB", "WR", "TE"].map((value) => (
@@ -79,7 +79,7 @@ export default function WaiverMarketBoard({ rows }: { rows: WaiverMarketRow[] })
                 setPosition(value);
                 resetPage();
               }}
-              className={`rounded px-2.5 py-1 text-xs ${position === value ? "bg-neutral-700 text-white" : "text-neutral-400"}`}
+              className={`min-h-11 flex-1 rounded px-2.5 py-2 text-xs ${position === value ? "bg-neutral-700 text-white" : "text-neutral-400"}`}
             >
               {value}
             </button>
@@ -92,7 +92,7 @@ export default function WaiverMarketBoard({ rows }: { rows: WaiverMarketRow[] })
             setSort(event.target.value as typeof sort);
             resetPage();
           }}
-          className="h-9 rounded-md border border-neutral-800 bg-neutral-900 px-2 text-xs"
+          className="min-h-11 rounded-md border border-neutral-800 bg-neutral-900 px-2 text-xs"
         >
           <option value="projection">Highest weekly projection</option>
           <option value="value">Highest KTC</option>
@@ -101,14 +101,14 @@ export default function WaiverMarketBoard({ rows }: { rows: WaiverMarketRow[] })
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-neutral-800 bg-neutral-950 p-2">
-        <div className="flex gap-1" role="group" aria-label="Waiver candidate scope">
+        <div className="flex flex-wrap gap-1" role="group" aria-label="Waiver candidate scope">
           <button
             aria-pressed={scope === "ACTIONABLE"}
             onClick={() => {
               setScope("ACTIONABLE");
               resetPage();
             }}
-            className={`rounded px-2.5 py-1.5 text-xs ${scope === "ACTIONABLE" ? "bg-emerald-700 text-white" : "text-neutral-400"}`}
+            className={`min-h-11 rounded px-2.5 py-2 text-xs ${scope === "ACTIONABLE" ? "bg-emerald-700 text-white" : "text-neutral-400"}`}
           >
             Actionable this week
           </button>
@@ -118,19 +118,19 @@ export default function WaiverMarketBoard({ rows }: { rows: WaiverMarketRow[] })
               setScope("ALL");
               resetPage();
             }}
-            className={`rounded px-2.5 py-1.5 text-xs ${scope === "ALL" ? "bg-neutral-700 text-white" : "text-neutral-400"}`}
+            className={`min-h-11 rounded px-2.5 py-2 text-xs ${scope === "ALL" ? "bg-neutral-700 text-white" : "text-neutral-400"}`}
           >
             All verified candidates
           </button>
         </div>
-        <p className="text-[11px] text-neutral-500">
+        <p className="text-xs text-neutral-500">
           {scope === "ACTIONABLE"
             ? `Showing players with ${POINTS_FOR_THIS_WEEK}+ current projected points. All verified free agents remain available.`
             : "Includes every verified free agent, including players without a usable current-week role."}
         </p>
       </div>
 
-      <div className="flex items-center justify-between text-xs text-neutral-500">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-neutral-500">
         <span>
           {filtered.length.toLocaleString()} matching candidates
           {pageCount > 1 ? ` · page ${visiblePage} of ${pageCount}` : ""}
@@ -145,7 +145,7 @@ export default function WaiverMarketBoard({ rows }: { rows: WaiverMarketRow[] })
             href={`/players/${row.id}`}
             className="block rounded-lg border border-neutral-800 bg-neutral-900 p-3"
           >
-            <div className="flex justify-between">
+            <div className="flex justify-between gap-3">
               <div>
                 <div className="font-medium">{row.fullName}</div>
                 <div className="text-xs text-neutral-400">
@@ -153,10 +153,11 @@ export default function WaiverMarketBoard({ rows }: { rows: WaiverMarketRow[] })
                   {row.nflTeam ? ` · ${row.nflTeam}` : ""} · {row.projectedRole}
                 </div>
               </div>
-              <div className="text-right">
+              <div className="shrink-0 text-right">
                 <div className="font-semibold text-emerald-300">
                   {points(row.projectedPoints)} FP
                 </div>
+                {row.isKickoffLocked ? <div className="mt-1 text-xs font-medium text-amber-300">Locked at kickoff</div> : null}
                 <div className="text-xs text-neutral-400">
                   KTC {Math.round(row.currentValue)}
                 </div>
@@ -200,6 +201,7 @@ export default function WaiverMarketBoard({ rows }: { rows: WaiverMarketRow[] })
                 <td className="px-2 py-2 text-sky-300">{row.need}</td>
                 <td className="px-2 py-2 text-right font-semibold text-emerald-300">
                   {points(row.projectedPoints)}
+                  {row.isKickoffLocked ? <div className="mt-1 text-xs font-medium text-amber-300">Locked at kickoff</div> : null}
                 </td>
                 <td className="px-2 py-2 text-right">
                   {Math.round(row.currentValue).toLocaleString()}
@@ -213,7 +215,8 @@ export default function WaiverMarketBoard({ rows }: { rows: WaiverMarketRow[] })
 
       {!filtered.length ? (
         <div className="rounded-lg border border-neutral-800 p-6 text-center text-xs text-neutral-400">
-          No unrostered players match these filters. Try all verified candidates or another position.
+          <p>{scope === "ACTIONABLE" ? "No players match the current weekly projection and position filters." : "No verified free agents match these filters."}</p>
+          <button type="button" className="mt-3 min-h-11 rounded-md border border-neutral-700 px-4 text-sm font-medium text-neutral-200" onClick={() => { setScope("ALL"); setPosition("ALL"); setQuery(""); setPage(1); }}>Show all verified free agents</button>
         </div>
       ) : null}
 

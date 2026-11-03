@@ -51,8 +51,9 @@ export default async function RefreshHistoryPage({
       <div>
         <h1 className="text-xl font-semibold text-neutral-100">Refresh History</h1>
         <p className="mt-1 text-sm text-neutral-500">
-          Full paginated Dynasty Boys ingestion history · {total} recorded runs.
+          Check the latest sync result and any failed sources · {total} recorded runs.
         </p>
+        <Link href="/settings" className="mt-2 inline-flex min-h-11 items-center text-sm font-medium text-emerald-300">View current data health →</Link>
       </div>
       <div className="space-y-2">
         {runs.map((run) => {
@@ -102,15 +103,15 @@ export default async function RefreshHistoryPage({
               <div className="flex items-start justify-between gap-3">
                 <div className="flex flex-wrap gap-2">
                   <span
-                    className={`rounded border px-2 py-0.5 text-[10px] font-medium ${STATUS_STYLE[run.status] ?? ""}`}
+                    className={`rounded border px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[run.status] ?? ""}`}
                   >
                     {run.status.replaceAll("_", " ")}
                   </span>
                   <span
                     className={
                       run.sleeperSyncOk
-                        ? "text-[10px] text-emerald-400"
-                        : "text-[10px] text-neutral-600"
+                        ? "text-xs text-emerald-400"
+                        : "text-xs text-neutral-600"
                     }
                   >
                     Sleeper {run.sleeperSyncOk ? "synced" : "not synced"}
@@ -118,27 +119,29 @@ export default async function RefreshHistoryPage({
                   <span
                     className={
                       run.ktcSyncOk
-                        ? "text-[10px] text-emerald-400"
-                        : "text-[10px] text-neutral-600"
+                        ? "text-xs text-emerald-400"
+                        : "text-xs text-neutral-600"
                     }
                   >
                     KTC {run.ktcSyncOk ? "refreshed" : "not refreshed"}
                   </span>
                 </div>
                 <div className="text-right">
-                  <div className="text-[10px] text-neutral-600">
+                  <div className="text-xs text-neutral-600">
                     {formatDateTimeEastern(run.startedAt.toISOString())}
                   </div>
-                  <div className="text-[9px] text-neutral-700">
+                  <div className="text-xs text-neutral-700">
                     {duration === null
-                      ? "running"
+                      ? run.status === "RUNNING" ? "in progress" : "duration not recorded"
                       : duration < 60
                         ? `${duration}s`
                         : `${Math.floor(duration / 60)}m ${duration % 60}s`}
                   </div>
                 </div>
               </div>
-              <div className="mt-3 flex flex-wrap gap-1.5">
+              <details className="mt-3 rounded-md border border-neutral-800 p-2.5">
+                <summary className="min-h-8 cursor-pointer content-center text-xs font-medium text-neutral-300">Source and draft-data details</summary>
+                <div className="mt-2 flex flex-wrap gap-2">
                 {visibleSources.map((source) => {
                   const disabled = !source.enabled;
                   const text = disabled
@@ -155,28 +158,29 @@ export default async function RefreshHistoryPage({
                     <span
                       key={source.source}
                       title={source.message}
-                      className={`rounded-md border px-2 py-1 text-[9px] ${style}`}
+                      className={`rounded-md border px-2 py-1 text-xs ${style}`}
                     >
                       {source.source.replaceAll("_", " ")} · {text}
                     </span>
                   );
                 })}
                 <span
-                  className={`rounded-md border px-2 py-1 text-[9px] ${draft && !draft.stale ? "border-neutral-800 text-neutral-400" : "border-amber-900 text-amber-400"}`}
+                  className={`rounded-md border px-2 py-1 text-xs ${draft && !draft.stale ? "border-neutral-800 text-neutral-400" : "border-amber-900 text-amber-400"}`}
                 >
                   Picks · {draft ? (draft.stale ? "stale" : "fresh") : "unavailable"}
                 </span>
                 <span
-                  className={`rounded-md border px-2 py-1 text-[9px] ${ownership ? "border-neutral-800 text-neutral-400" : "border-amber-900 text-amber-400"}`}
+                  className={`rounded-md border px-2 py-1 text-xs ${ownership ? "border-neutral-800 text-neutral-400" : "border-amber-900 text-amber-400"}`}
                 >
                   Pick ownership · {ownership ? "captured" : "unavailable"}
                 </span>
-                <span className="rounded-md border border-neutral-800 px-2 py-1 text-[9px] text-neutral-500">
+                <span className="rounded-md border border-neutral-800 px-2 py-1 text-xs text-neutral-500">
                   KTC flagged · {Number(summary.ktcFlagged ?? 0)}
                 </span>
-              </div>
+                </div>
+              </details>
               {errors.length ? (
-                <div className="mt-3 rounded-md border border-red-950 bg-red-950/25 p-2.5 text-[10px] text-red-300">
+                <div className="mt-3 rounded-md border border-red-950 bg-red-950/25 p-2.5 text-xs text-red-300">
                   {errors.map((error, index) => (
                     <p key={index}>
                       <span className="font-medium">{error.source}:</span>{" "}
@@ -193,19 +197,23 @@ export default async function RefreshHistoryPage({
         ) : null}
       </div>
       {pages > 1 ? (
-        <nav className="flex items-center justify-between rounded-lg border border-neutral-800 bg-neutral-900 p-3">
+        <nav aria-label="Refresh history pages" className="flex items-center justify-between rounded-lg border border-neutral-800 bg-neutral-900 p-3">
           <Link
             href={href(Math.max(1, page - 1))}
-            className={`rounded-md border px-3 py-1.5 text-xs ${page <= 1 ? "pointer-events-none border-neutral-900 text-neutral-700" : "border-neutral-700 text-neutral-300"}`}
+            aria-disabled={page <= 1}
+            tabIndex={page <= 1 ? -1 : undefined}
+            className={`inline-flex min-h-11 items-center rounded-md border px-3 py-2 text-xs ${page <= 1 ? "pointer-events-none border-neutral-900 text-neutral-700" : "border-neutral-700 text-neutral-300"}`}
           >
             ← Newer
           </Link>
-          <span className="text-[10px] text-neutral-600">
+          <span className="text-xs text-neutral-600">
             Page {page}/{pages}
           </span>
           <Link
             href={href(Math.min(pages, page + 1))}
-            className={`rounded-md border px-3 py-1.5 text-xs ${page >= pages ? "pointer-events-none border-neutral-900 text-neutral-700" : "border-neutral-700 text-neutral-300"}`}
+            aria-disabled={page >= pages}
+            tabIndex={page >= pages ? -1 : undefined}
+            className={`inline-flex min-h-11 items-center rounded-md border px-3 py-2 text-xs ${page >= pages ? "pointer-events-none border-neutral-900 text-neutral-700" : "border-neutral-700 text-neutral-300"}`}
           >
             Older →
           </Link>

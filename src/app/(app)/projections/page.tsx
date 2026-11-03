@@ -13,7 +13,6 @@ export default async function ProjectionsPage() {
   const [data, league] = await Promise.all([getProjectionDashboardData(), getLeague(SLEEPER_LEAGUE_ID)]);
   const omittedScoring = unsupportedNonzeroScoring(league.scoring_settings);
   const summary = projectionSummary(data.current, data.unavailable, data.history);
-  const { mae, bias, withinFive } = summary;
   // Forecasts are locked at kickoff while the results feed catches up. Keep
   // them visible in the table, but do not describe them as actionable.
   const lockedIds = new Set(
@@ -34,11 +33,8 @@ export default async function ProjectionsPage() {
           Weekly NFL Projections
         </h1>
         <p className="mt-1 max-w-3xl text-sm leading-5 text-neutral-500">
-          Player-level projected NFL stat lines and half-PPR fantasy points.
-          Weekly role must be supported by current external projection data, and
-          the displayed stat line is a concrete whole-number outcome. Every
-          refresh preserves the pregame forecast and grades it against actual NFL
-          results so later weeks can be recalibrated.
+          Find this week’s projected fantasy points and stat lines. Forecasts
+          lock at kickoff; completed games move to accuracy history below.
         </p>
       </section>
 
@@ -47,11 +43,11 @@ export default async function ProjectionsPage() {
           title={`${data.season} Week ${data.week}`}
           description="Every row shows the Sleeper and CBS player projections, the local recency model, their player-level blend, DraftKings game-market context through ESPN, and the final scoring-adjusted fantasy projection. Game odds are a bounded team-environment adjustment, not an invented individual player projection."
         />
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-8">
+        <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
           <MetricCard
             label="Active forecasts"
             value={activeCurrent.length.toLocaleString("en-US")}
-            detail="actionable this week"
+            detail={`${highConfidence} high confidence · actionable this week`}
           />
           <MetricCard
             label="Locked at kickoff"
@@ -68,17 +64,6 @@ export default async function ProjectionsPage() {
             value={completedCurrentWeek.toLocaleString("en-US")}
             detail="accuracy history only"
           />
-          <MetricCard
-            label="High confidence"
-            value={highConfidence.toLocaleString("en-US")}
-          />
-          <MetricCard
-            label="Historical MAE"
-            value={mae === null ? "—" : mae.toFixed(2)}
-            detail="fantasy points"
-          />
-          <MetricCard label="Projection bias" value={bias === null ? "—" : `${bias >= 0 ? "+" : ""}${bias.toFixed(2)}`} detail="points; positive = projected too high" />
-          <MetricCard label="Within 5 points" value={withinFive === null ? "—" : `${withinFive.toFixed(1)}%`} detail={`${summary.graded} graded player-weeks`} />
         </div>
       </section>
 

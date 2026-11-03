@@ -60,7 +60,7 @@ export default async function SettingsPage() {
     return !!row && !row.isStale && row.currentValue !== null;
   }).length;
   const anyKtc = entries.filter(
-    (entry) => market.get(entry.playerId)?.currentValue !== null,
+    (entry) => market.get(entry.playerId)?.currentValue != null,
   ).length;
   const ktcExceptions = entries
     .map((entry) => {
@@ -87,13 +87,13 @@ export default async function SettingsPage() {
     .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
     .sort((a, b) => a.name.localeCompare(b.name));
   const dealerCovered = entries.filter(
-    (entry) => mix.get(entry.playerId)?.dynastyDealerValue !== null,
+    (entry) => mix.get(entry.playerId)?.dynastyDealerValue != null,
   ).length;
   const statsGuyCovered = entries.filter(
-    (entry) => mix.get(entry.playerId)?.statsGuyValue !== null,
+    (entry) => mix.get(entry.playerId)?.statsGuyValue != null,
   ).length;
   const consensusCovered = entries.filter(
-    (entry) => mix.get(entry.playerId)?.consensusValue !== null,
+    (entry) => mix.get(entry.playerId)?.consensusValue != null,
   ).length;
   const sources = [
     {
@@ -133,26 +133,25 @@ export default async function SettingsPage() {
       <div>
         <h1 className="text-xl font-semibold text-neutral-100">Data Health</h1>
         <p className="mt-1 text-sm text-neutral-500">
-          Production diagnostics separate market freshness, identity mapping,
-          football evidence and actual league-player coverage so a green
-          provider badge cannot hide a weak predictive input layer.
+          Check when your league last synced, which market sources are fresh,
+          and which players still need data.
         </p>
       </div>
 
       <section className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-3">
-          <div className="text-[9px] uppercase tracking-wide text-neutral-600">
+          <div className="text-xs uppercase tracking-wide text-neutral-600">
             Synced roster entries
           </div>
           <div className="mt-1 text-lg font-semibold text-neutral-100">
             {owned}
           </div>
-          <div className="text-[10px] text-neutral-600">
+          <div className="text-xs text-neutral-600">
             last confirmed Sleeper sync {timeAgo(lastSleeperSync)}
           </div>
         </div>
         <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-3">
-          <div className="text-[9px] uppercase tracking-wide text-neutral-600">
+          <div className="text-xs uppercase tracking-wide text-neutral-600">
             Fresh KTC coverage
           </div>
           <div
@@ -160,12 +159,12 @@ export default async function SettingsPage() {
           >
             {freshKtc}/{owned}
           </div>
-          <div className="text-[10px] text-neutral-600">
+          <div className="text-xs text-neutral-600">
             {owned - freshKtc} exceptions · {anyKtc} ever valued
           </div>
         </div>
         <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-3">
-          <div className="text-[9px] uppercase tracking-wide text-neutral-600">
+          <div className="text-xs uppercase tracking-wide text-neutral-600">
             Trusted blend
           </div>
           <div
@@ -173,12 +172,12 @@ export default async function SettingsPage() {
           >
             {consensusCovered}/{owned}
           </div>
-          <div className="text-[10px] text-neutral-600">
+          <div className="text-xs text-neutral-600">
             players with fresh 2+ source consensus
           </div>
         </div>
         <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-3">
-          <div className="text-[9px] uppercase tracking-wide text-neutral-600">
+          <div className="text-xs uppercase tracking-wide text-neutral-600">
             Identity mapping
           </div>
           <div
@@ -186,7 +185,7 @@ export default async function SettingsPage() {
           >
             {owned - needsReview.length}/{owned}
           </div>
-          <div className="text-[10px] text-neutral-600">
+          <div className="text-xs text-neutral-600">
             mapping and valuation coverage are separate
           </div>
         </div>
@@ -197,14 +196,14 @@ export default async function SettingsPage() {
           <h2 className="text-sm font-semibold text-amber-100">
             KTC coverage exceptions ({ktcExceptions.length})
           </h2>
-          <p className="mt-1 text-[11px] leading-5 text-neutral-400">
+          <p className="mt-1 text-xs leading-5 text-neutral-400">
             These rows are withheld from fresh-KTC totals. They are shown here
             instead of being filled with zero or silently replaced by another
             provider. Historical observations remain available where present.
           </p>
           <div className="mt-3 overflow-auto">
             <table className="w-full min-w-[520px] text-xs">
-              <thead className="border-b border-amber-900/50 text-left text-[10px] uppercase tracking-wide text-neutral-500">
+              <thead className="border-b border-amber-900/50 text-left text-xs uppercase tracking-wide text-neutral-500">
                 <tr><th className="px-2 py-2">Player</th><th className="px-2 py-2">Position</th><th className="px-2 py-2">Team</th><th className="px-2 py-2">Reason</th></tr>
               </thead>
               <tbody>{ktcExceptions.map((entry) => <tr key={entry.playerId} className="border-b border-neutral-800/70 last:border-0"><td className="px-2 py-2 text-neutral-200">{entry.name}</td><td className="px-2 py-2 text-neutral-400">{entry.position}</td><td className="px-2 py-2 text-neutral-400">{entry.nflTeam ?? "—"}</td><td className="px-2 py-2 text-amber-200">{entry.reason}</td></tr>)}</tbody>
@@ -217,7 +216,7 @@ export default async function SettingsPage() {
         <h2 className="text-sm font-semibold text-neutral-100">
           Weekly projection health
         </h2>
-        <p className="mt-1 text-[11px] leading-5 text-neutral-500">
+        <p className="mt-1 text-xs leading-5 text-neutral-500">
           The current weekly board must be generated by the consensus-v2 model.
           Old v1 rows are never counted as current. Players without a supported
           role are explicitly withheld instead of receiving invented volume.
@@ -225,48 +224,48 @@ export default async function SettingsPage() {
         {projectionData ? (
           <div className="mt-3 grid gap-2 sm:grid-cols-3">
             <div className="rounded-md bg-neutral-950 p-3">
-              <div className="text-[9px] uppercase tracking-wide text-neutral-600">
+              <div className="text-xs uppercase tracking-wide text-neutral-600">
                 Current v2 projections
               </div>
               <div className={`mt-1 text-lg font-semibold ${projectionData.current.length ? "text-emerald-300" : "text-amber-300"}`}>
                 {projectionData.current.length}
               </div>
-              <div className="text-[10px] text-neutral-600">
+              <div className="text-xs text-neutral-600">
                 {projectionData.season} Week {projectionData.week}
               </div>
             </div>
             <div className="rounded-md bg-neutral-950 p-3">
-              <div className="text-[9px] uppercase tracking-wide text-neutral-600">
+              <div className="text-xs uppercase tracking-wide text-neutral-600">
                 Explicitly withheld
               </div>
               <div className="mt-1 text-lg font-semibold text-neutral-200">
                 {projectionSummary(projectionData.current, projectionData.unavailable, projectionData.history).withheld}
               </div>
-              <div className="text-[10px] text-neutral-600">
+              <div className="text-xs text-neutral-600">
                 no team / unavailable / unsupported role / already played
               </div>
             </div>
             <div className="rounded-md bg-neutral-950 p-3">
-              <div className="text-[9px] uppercase tracking-wide text-neutral-600">
+              <div className="text-xs uppercase tracking-wide text-neutral-600">
                 External-source rows
               </div>
               <div className={`mt-1 text-lg font-semibold ${projectionData.current.some((row) => row.sourceCount > 0) ? "text-emerald-300" : "text-amber-300"}`}>
                 {projectionData.current.filter((row) => row.sourceCount > 0).length}
               </div>
-              <div className="text-[10px] text-neutral-600">
+              <div className="text-xs text-neutral-600">
                 player feeds plus local model; DraftKings game context is
                 shown in each current projection when available
               </div>
             </div>
           </div>
         ) : (
-          <div className="mt-3 rounded-md border border-amber-900/60 bg-amber-950/20 p-3 text-[10px] leading-4 text-amber-200">
+          <div className="mt-3 rounded-md border border-amber-900/60 bg-amber-950/20 p-3 text-xs leading-4 text-amber-200">
             Projection diagnostics are unavailable. The projection system should
             not be treated as healthy until this panel can classify the current week.
           </div>
         )}
         {projectionData && projectionData.current.length === 0 ? (
-          <p className="mt-3 rounded-md border border-amber-900/50 bg-amber-950/15 p-2.5 text-[10px] leading-4 text-amber-200">
+          <p className="mt-3 rounded-md border border-amber-900/50 bg-amber-950/15 p-2.5 text-xs leading-4 text-amber-200">
             No current consensus-v2 projections have been stored yet. Forecast
             pages remain conservatively gated until the scheduled projection
             refresh populates this week.
@@ -278,7 +277,7 @@ export default async function SettingsPage() {
         <h2 className="text-sm font-semibold text-neutral-100">
           Predictive football evidence
         </h2>
-        <p className="mt-1 text-[11px] leading-5 text-neutral-500">
+        <p className="mt-1 text-xs leading-5 text-neutral-500">
           These are the inputs that determine how much confidence the forecast,
           weekly lineup projection and league simulation can place on football
           performance instead of market-implied fallbacks.
@@ -286,7 +285,7 @@ export default async function SettingsPage() {
         {football ? (
           <div className="mt-3 grid gap-2 sm:grid-cols-3">
             <div className="rounded-md bg-neutral-950 p-3">
-              <div className="text-[9px] uppercase tracking-wide text-neutral-600">
+              <div className="text-xs uppercase tracking-wide text-neutral-600">
                 Football profiles
               </div>
               <div
@@ -294,7 +293,7 @@ export default async function SettingsPage() {
               >
                 {football.profiledPlayers}/{football.rosteredPlayers}
               </div>
-              <div className="text-[10px] text-neutral-600">
+              <div className="text-xs text-neutral-600">
                 {pct(football.profileCoverage)} roster coverage
                 {football.latestProfileSourceUpdatedAt
                   ? ` · source ${timeAgo(football.latestProfileSourceUpdatedAt)}`
@@ -302,7 +301,7 @@ export default async function SettingsPage() {
               </div>
             </div>
             <div className="rounded-md bg-neutral-950 p-3">
-              <div className="text-[9px] uppercase tracking-wide text-neutral-600">
+              <div className="text-xs uppercase tracking-wide text-neutral-600">
                 Players with REG history
               </div>
               <div
@@ -311,7 +310,7 @@ export default async function SettingsPage() {
                 {football.playersWithRegularSeasonGames}/
                 {football.rosteredPlayers}
               </div>
-              <div className="text-[10px] text-neutral-600">
+              <div className="text-xs text-neutral-600">
                 {pct(football.gameCoverage)} roster coverage
                 {football.latestGameObservedAt
                   ? ` · ingested ${timeAgo(football.latestGameObservedAt)}`
@@ -319,7 +318,7 @@ export default async function SettingsPage() {
               </div>
             </div>
             <div className="rounded-md bg-neutral-950 p-3">
-              <div className="text-[9px] uppercase tracking-wide text-neutral-600">
+              <div className="text-xs uppercase tracking-wide text-neutral-600">
                 Decision-grade season
               </div>
               <div
@@ -328,21 +327,21 @@ export default async function SettingsPage() {
                 {football.playersWithDecisionGradeSeason}/
                 {football.rosteredPlayers}
               </div>
-              <div className="text-[10px] text-neutral-600">
+              <div className="text-xs text-neutral-600">
                 current/prior season with ≥3 games ·{" "}
                 {pct(football.decisionGradeCoverage)} coverage
               </div>
             </div>
           </div>
         ) : (
-          <div className="mt-3 rounded-md border border-amber-900/60 bg-amber-950/20 p-3 text-[10px] leading-4 text-amber-200">
+          <div className="mt-3 rounded-md border border-amber-900/60 bg-amber-950/20 p-3 text-xs leading-4 text-amber-200">
             Football evidence diagnostics are temporarily unavailable.
             Predictive pages should still use their own evidence guards rather
             than treating missing football data as zero.
           </div>
         )}
         {football && football.decisionGradeCoverage < 0.65 ? (
-          <p className="mt-3 rounded-md border border-amber-900/50 bg-amber-950/15 p-2.5 text-[10px] leading-4 text-amber-200">
+          <p className="mt-3 rounded-md border border-amber-900/50 bg-amber-950/15 p-2.5 text-xs leading-4 text-amber-200">
             Predictive evidence remains sparse. Forecast probability and
             league-outcome outputs are intentionally shrunk or gated until
             football coverage improves; market coverage alone should not be
@@ -354,24 +353,24 @@ export default async function SettingsPage() {
       <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="rounded-md bg-neutral-950 p-3">
-            <div className="text-[10px] font-medium uppercase tracking-wide text-neutral-600">
+            <div className="text-xs font-medium uppercase tracking-wide text-neutral-600">
               Decision baseline
             </div>
             <div className="mt-1 text-sm font-semibold text-neutral-100">
               {formatDateEastern(ORLANDO_BASELINE_DATE)}
             </div>
-            <p className="mt-1 text-[10px] text-neutral-600">
+            <p className="mt-1 text-xs text-neutral-600">
               First complete verified Orlando Oswalds checkpoint.
             </p>
           </div>
           <div className="rounded-md bg-neutral-950 p-3">
-            <div className="text-[10px] font-medium uppercase tracking-wide text-neutral-600">
+            <div className="text-xs font-medium uppercase tracking-wide text-neutral-600">
               Automatic refresh
             </div>
             <div className="mt-1 text-sm font-semibold text-emerald-300">
               Daily · around 8 a.m. ET
             </div>
-            <p className="mt-1 text-[10px] text-neutral-600">
+            <p className="mt-1 text-xs text-neutral-600">
               {latestRun
                 ? `Latest ${latestRun.status.replaceAll("_", " ").toLowerCase()} run: ${formatDateTimeEastern(latestRun.startedAt)}.`
                 : "Page visits do not launch ingestion jobs."}
@@ -417,19 +416,19 @@ export default async function SettingsPage() {
                           {source.label}
                         </span>
                       )}
-                      <span className="rounded bg-neutral-800 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-neutral-500">
+                      <span className="rounded bg-neutral-800 px-1.5 py-0.5 text-xs uppercase tracking-wide text-neutral-500">
                         {source.role}
                       </span>
                     </div>
-                    <p className="mt-1 text-[11px] leading-4 text-neutral-500">
+                    <p className="mt-1 text-xs leading-4 text-neutral-500">
                       {source.detail}
                     </p>
                   </div>
-                  <span className={`text-[10px] font-medium ${labelClass}`}>
+                  <span className={`text-xs font-medium ${labelClass}`}>
                     {health.label}
                   </span>
                 </div>
-                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-neutral-600">
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-neutral-600">
                   <span>
                     Coverage{" "}
                     <strong
@@ -453,12 +452,12 @@ export default async function SettingsPage() {
                       : "never"}
                   </span>
                 </div>
-                {health.message ? <p className={`mt-2 text-[10px] leading-4 ${disabled ? "text-neutral-500" : "text-amber-300"}`}>{health.message}</p> : null}
+                {health.message ? <p className={`mt-2 text-xs leading-4 ${disabled ? "text-neutral-500" : "text-amber-300"}`}>{health.message}</p> : null}
               </div>
             );
           })}
         </div>
-        <p className="mt-3 text-[10px] text-neutral-600">
+        <p className="mt-3 text-xs text-neutral-600">
           All configured sources appear here, including failed, stale, disabled, and zero-coverage feeds. The blend excludes unavailable or stale values and renormalizes weights across qualifying sources.
         </p>
       </section>
@@ -467,7 +466,7 @@ export default async function SettingsPage() {
         <h2 className="text-sm font-semibold text-neutral-100">Draft data</h2>
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
           <div className="rounded-md bg-neutral-950 p-3">
-            <div className="text-[9px] uppercase tracking-wide text-neutral-600">
+            <div className="text-xs uppercase tracking-wide text-neutral-600">
               Pick market
             </div>
             <div
@@ -479,14 +478,14 @@ export default async function SettingsPage() {
                   ? "Stored / stale"
                   : "Fresh"}
             </div>
-            <div className="mt-1 text-[10px] text-neutral-600">
+            <div className="mt-1 text-xs text-neutral-600">
               {pickMarket
                 ? `${pickMarket.rows.length} market rows · updated ${timeAgo(pickMarket.sourceUpdatedAt)}`
                 : "No verified board available"}
             </div>
           </div>
           <div className="rounded-md bg-neutral-950 p-3">
-            <div className="text-[9px] uppercase tracking-wide text-neutral-600">
+            <div className="text-xs uppercase tracking-wide text-neutral-600">
               Pick ownership
             </div>
             <div
@@ -498,7 +497,7 @@ export default async function SettingsPage() {
                   ? "Last known / stale"
                   : "Fresh"}
             </div>
-            <div className="mt-1 text-[10px] text-neutral-600">
+            <div className="mt-1 text-xs text-neutral-600">
               {pickOwnership
                 ? `${pickOwnership.rows.length} traded-pick records · checked ${timeAgo(pickOwnership.observedAt)}`
                 : "Current trade math withholds picks until ownership can be verified"}
@@ -511,7 +510,7 @@ export default async function SettingsPage() {
         <h2 className="text-sm font-semibold text-neutral-100">
           Identity mapping review ({needsReview.length})
         </h2>
-        <p className="mt-1 text-[10px] leading-4 text-neutral-600">
+        <p className="mt-1 text-xs leading-4 text-neutral-600">
           A mapped identity can still lack a KTC price; that is reported in
           coverage above rather than silently valued at zero.
         </p>

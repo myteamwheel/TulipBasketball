@@ -169,7 +169,7 @@ export default function WeeklyProjectionBoard({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="order-5 rounded-lg border border-neutral-800 bg-neutral-900 p-2.5 text-[10px] leading-4 text-neutral-500">
+      <div className="order-5 rounded-lg border border-neutral-800 bg-neutral-900 p-2.5 text-xs leading-4 text-neutral-500">
         <span className="font-semibold text-neutral-300">How to read this:</span> final points use the unrounded blend; stat lines are readable whole-number outcomes. Only players with a supported current role are projected.
       </div>
 
@@ -183,7 +183,7 @@ export default function WeeklyProjectionBoard({
           }}
           placeholder="Search player or team…"
           aria-label="Search weekly projections"
-          className="h-9 rounded-md border border-neutral-800 bg-neutral-950 px-3 text-xs text-neutral-200 outline-none focus:border-emerald-800"
+          className="min-h-11 rounded-md border border-neutral-800 bg-neutral-950 px-3 text-xs text-neutral-200 outline-none focus:border-emerald-800"
         />
         <div className="flex rounded-md border border-neutral-800 bg-neutral-950 p-0.5">
           {["ALL", "QB", "RB", "WR", "TE"].map((value) => (
@@ -195,7 +195,7 @@ export default function WeeklyProjectionBoard({
                 setHistoryPage(1);
               }}
               aria-pressed={position === value}
-              className={`rounded px-2 py-1 text-[10px] ${position === value ? "bg-neutral-700 text-neutral-100" : "text-neutral-500"}`}
+              className={`min-h-11 flex-1 rounded px-3 py-2 text-xs ${position === value ? "bg-neutral-700 text-neutral-100" : "text-neutral-500"}`}
             >
               {value}
             </button>
@@ -209,15 +209,16 @@ export default function WeeklyProjectionBoard({
             <h2 className="text-sm font-semibold text-neutral-100">
               {season} Week {week} projections
             </h2>
-            <p className="text-[10px] text-neutral-500">
+            <p className="text-xs text-neutral-500">
               Consensus-informed pregame projections only for players with a
               supported Week {week} role.
             </p>
-            <p className="mt-1 text-[10px] text-neutral-400">
-              All {accountedPlayerCount} rostered QB/RB/WR/TE players are accounted for: {activeCurrent.length} active forecasts, {lockedCurrent.length} locked at kickoff while final stats arrive, {totalWithheldCount} withheld with a reason, and {completedCurrentWeekCount} completed players shown only in accuracy history.
-            </p>
+            <details className="mt-2 text-xs leading-5 text-neutral-400">
+              <summary className="min-h-8 cursor-pointer content-center">Coverage: {activeCurrent.length} active · {lockedCurrent.length} locked</summary>
+              <p className="mt-1">{accountedPlayerCount} rostered QB/RB/WR/TE players accounted for: {totalWithheldCount} withheld with a reason and {completedCurrentWeekCount} completed players in accuracy history, alongside the active and locked forecasts.</p>
+            </details>
             {!scheduleStatusAvailable ? (
-              <p role="status" className="mt-1 text-[10px] text-amber-300">
+              <p role="status" className="mt-1 text-xs text-amber-300">
                 Current-week game finals could not be verified. Locked forecasts remain labeled LOCKED until the schedule feed is available.
               </p>
             ) : null}
@@ -229,7 +230,7 @@ export default function WeeklyProjectionBoard({
               setSort(event.target.value as SortKey);
               setCurrentPage(1);
             }}
-            className="h-8 rounded-md border border-neutral-800 bg-neutral-950 px-2 text-[10px] text-neutral-300"
+            className="min-h-11 rounded-md border border-neutral-800 bg-neutral-950 px-2 text-xs text-neutral-300"
           >
             <option value="projected">Projected points</option>
             <option value="player">Player</option>
@@ -247,7 +248,7 @@ export default function WeeklyProjectionBoard({
                   <div className="font-semibold text-neutral-100">
                     {row.playerName}
                     {lockedIds.has(row.playerId) ? (
-                      <span className="ml-1 rounded bg-amber-950 px-1.5 py-0.5 text-[10px] text-amber-300">
+                      <span className="ml-1 rounded bg-amber-950 px-1.5 py-0.5 text-xs text-amber-300">
                         LOCKED
                       </span>
                     ) : null}
@@ -258,38 +259,25 @@ export default function WeeklyProjectionBoard({
                   </div>
                 </div>
                 <div className="shrink-0 text-right">
-                  <div className="text-[10px] font-medium uppercase tracking-wide text-neutral-500">
-                    Final FP
+                  <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">
+                    Projected FP
                   </div>
                   <div className="text-xl font-semibold tabular-nums text-emerald-300">
                     {row.projectedFantasyPoints.toFixed(1)}
                   </div>
                 </div>
               </div>
-              <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                <div className="rounded-md bg-neutral-950 px-2 py-1.5 text-neutral-300">
-                  <div className="text-[10px] uppercase tracking-wide text-neutral-500">
-                    Source blend
-                  </div>
-                  <div className="mt-1 tabular-nums">
-                    Sleeper {number(row.sourceBreakdown.sleeperPoints)} · CBS {number(row.sourceBreakdown.cbsPoints)} · Model {number(row.sourceBreakdown.localModelPoints)}
-                  </div>
+              <p className="mt-3 text-sm leading-6 text-neutral-300">{statLine(row.position, row.projectedStats)}</p>
+              <details className="mt-2 rounded-md bg-neutral-950 px-3 py-2 text-xs text-neutral-300">
+                <summary className="min-h-8 cursor-pointer content-center font-medium text-neutral-400">Sources and model details</summary>
+                <div className="mt-2 space-y-2 leading-5">
+                  <p>Sleeper {number(row.sourceBreakdown.sleeperPoints)} · CBS {number(row.sourceBreakdown.cbsPoints)} · Local model {number(row.sourceBreakdown.localModelPoints)}</p>
+                  <p>Player consensus {number(row.sourceBreakdown.playerSourceConsensusPoints)} · Odds context {oddsContext(row)}</p>
+                  <p>{row.sampleGames} games in sample · Updated {row.asOfDate}</p>
                 </div>
-                <div className="rounded-md bg-neutral-950 px-2 py-1.5 text-sky-300">
-                  <div className="text-[10px] uppercase tracking-wide text-neutral-500">
-                    Odds context
-                  </div>
-                  <div className="mt-1">{oddsContext(row)}</div>
-                </div>
-              </div>
-              <details className="mt-2 rounded-md bg-neutral-950 px-2 py-1.5 text-xs text-neutral-300">
-                <summary className="cursor-pointer font-medium text-neutral-400">
-                  Projected stat line
-                </summary>
-                <p className="mt-1 leading-5">{statLine(row.position, row.projectedStats)}</p>
               </details>
               {lockedIds.has(row.playerId) ? (
-                <p className="mt-2 text-[10px] text-amber-300">
+                <p className="mt-2 text-xs text-amber-300">
                   Game has started. This pregame forecast is locked until final stats move it to accuracy history.
                 </p>
               ) : null}
@@ -297,75 +285,59 @@ export default function WeeklyProjectionBoard({
           ))}
         </div>
         <div className="hidden overflow-x-auto rounded-lg border border-neutral-800 lg:block">
-          <table className="w-full min-w-[1520px] text-xs">
+          <table className="w-full min-w-[900px] text-sm">
             <thead>
-              <tr className="bg-neutral-950 text-[9px] uppercase tracking-wide text-neutral-600">
-                <th className="px-2.5 py-2 text-left"><button type="button" onClick={() => { setSort("player"); setCurrentPage(1); }} className={sort === "player" ? "text-emerald-300" : "hover:text-neutral-300"}>Player</button></th>
-                <th className="px-2 py-2 text-right">Sleeper</th>
-                <th className="px-2 py-2 text-right">CBS</th>
-                <th className="px-2 py-2 text-right">Local model</th>
-                <th className="px-2 py-2 text-right">Player consensus</th>
-                <th className="px-2 py-2 text-right">Odds context</th>
-                <th className="px-2 py-2 text-right"><button type="button" onClick={() => { setSort("projected"); setCurrentPage(1); }} className={sort === "projected" ? "text-emerald-300" : "hover:text-neutral-300"}>Final FP ↓</button></th>
-                <th className="px-2 py-2 text-left">Predicted NFL stat line</th>
-                <th className="px-2 py-2 text-left">Sources</th>
-                <th className="px-2 py-2 text-right">Sample</th>
-                <th className="px-2 py-2 text-right"><button type="button" onClick={() => { setSort("confidence"); setCurrentPage(1); }} className={sort === "confidence" ? "text-emerald-300" : "hover:text-neutral-300"}>Confidence</button></th>
-                <th className="px-2 py-2 text-right">As of</th>
+              <tr className="bg-neutral-950 text-xs text-neutral-400">
+                <th className="px-3 py-3 text-left">Player</th>
+                <th className="px-3 py-3 text-right">Projected FP</th>
+                <th className="px-3 py-3 text-left">Confidence</th>
+                <th className="px-3 py-3 text-left">Projected stat line</th>
+                <th className="px-3 py-3 text-left">Sources &amp; details</th>
               </tr>
             </thead>
             <tbody>
               {visibleCurrentRows.map((row) => (
-                <tr key={row.id} className="border-t border-neutral-800 bg-neutral-900/50">
-                  <td className="px-2.5 py-2">
-                    <div className="font-medium text-neutral-100">{row.playerName}{lockedIds.has(row.playerId) ? <span className="ml-1 rounded bg-amber-950 px-1.5 py-0.5 text-[9px] text-amber-300">LOCKED</span> : null}</div>
-                    <div className="text-[9px] text-neutral-600">
-                      {row.position}{row.nflTeam ? ` · ${row.nflTeam}` : ""}
-                    </div>
+                <tr key={row.id} className="border-t border-neutral-800 bg-neutral-900/50 align-top">
+                  <td className="px-3 py-3">
+                    <div className="font-medium text-neutral-100">{row.playerName}</div>
+                    <div className="mt-1 text-xs text-neutral-400">{row.position}{row.nflTeam ? ` · ${row.nflTeam}` : ""}</div>
+                    {lockedIds.has(row.playerId) ? <span className="mt-1 inline-block rounded bg-amber-950 px-2 py-1 text-xs text-amber-300">Locked at kickoff</span> : null}
                   </td>
-                  <td className="px-2 py-2 text-right tabular-nums text-neutral-300">{number(row.sourceBreakdown.sleeperPoints)}</td>
-                  <td className="px-2 py-2 text-right tabular-nums text-neutral-300">{number(row.sourceBreakdown.cbsPoints)}</td>
-                  <td className="px-2 py-2 text-right tabular-nums text-neutral-300">{number(row.sourceBreakdown.localModelPoints)}</td>
-                  <td className="px-2 py-2 text-right tabular-nums text-emerald-200">{number(row.sourceBreakdown.playerSourceConsensusPoints)}</td>
-                  <td className="whitespace-nowrap px-2 py-2 text-right text-[10px] text-sky-300">{oddsContext(row)}</td>
-                  <td className="px-2 py-2 text-right text-base font-semibold tabular-nums text-emerald-300">
-                    {row.projectedFantasyPoints.toFixed(1)}
+                  <td className="px-3 py-3 text-right text-lg font-semibold tabular-nums text-emerald-300">{row.projectedFantasyPoints.toFixed(1)}</td>
+                  <td className="px-3 py-3 text-xs text-neutral-300">{row.confidence}</td>
+                  <td className="max-w-sm px-3 py-3 text-xs leading-5 text-neutral-300">{statLine(row.position, row.projectedStats)}</td>
+                  <td className="max-w-xs px-3 py-3 text-xs leading-5 text-neutral-400">
+                    <details>
+                      <summary className="min-h-8 cursor-pointer content-center font-medium">View sources</summary>
+                      <div className="mt-2 space-y-1">
+                        <p>Sleeper {number(row.sourceBreakdown.sleeperPoints)} · CBS {number(row.sourceBreakdown.cbsPoints)} · Model {number(row.sourceBreakdown.localModelPoints)}</p>
+                        <p>Player consensus {number(row.sourceBreakdown.playerSourceConsensusPoints)}</p>
+                        <p>Odds context: {oddsContext(row)}</p>
+                        <p>{row.sourceNames.length ? row.sourceNames.join(" + ") : "Local only"} · {row.sampleGames} games</p>
+                        <p>Updated {row.asOfDate}</p>
+                      </div>
+                    </details>
                   </td>
-                  <td className="max-w-[520px] px-2 py-2 text-[10px] leading-4 text-neutral-300">
-                    {statLine(row.position, row.projectedStats)}
-                  </td>
-                  <td className="px-2 py-2 text-[10px] text-neutral-400">
-                    {row.sourceNames.length ? row.sourceNames.join(" + ") : "Local only"}
-                  </td>
-                  <td className="px-2 py-2 text-right text-neutral-400">{row.sampleGames} g</td>
-                  <td className="px-2 py-2 text-right text-neutral-400">{row.confidence}</td>
-                  <td className="px-2 py-2 text-right text-neutral-500">{row.asOfDate}</td>
                 </tr>
               ))}
-              {!currentRows.length ? (
-                <tr>
-                  <td colSpan={12} className="px-3 py-8 text-center text-xs text-neutral-600">
-                    No supported projections match these filters.
-                  </td>
-                </tr>
-              ) : null}
             </tbody>
           </table>
         </div>
-        {currentPageCount > 1 ? <nav aria-label="Current projection pages" className="flex items-center justify-between rounded-lg border border-neutral-800 bg-neutral-900 p-2.5 text-xs"><button disabled={visibleCurrentPage === 1} onClick={() => setCurrentPage((page) => Math.max(1, page - 1))} className="rounded border border-neutral-700 px-3 py-1.5 text-neutral-200 disabled:border-neutral-800 disabled:text-neutral-600">Previous</button><span className="text-neutral-400">{(visibleCurrentPage - 1) * 25 + 1}–{Math.min(visibleCurrentPage * 25, currentRows.length)} of {currentRows.length}</span><button disabled={visibleCurrentPage === currentPageCount} onClick={() => setCurrentPage((page) => Math.min(currentPageCount, page + 1))} className="rounded border border-neutral-700 px-3 py-1.5 text-neutral-200 disabled:border-neutral-800 disabled:text-neutral-600">Next</button></nav> : null}
+        {!currentRows.length ? <p role="status" className="rounded-lg border border-neutral-800 bg-neutral-900 p-5 text-sm text-neutral-400">No supported projections match these filters. Check completed games or the reasons under “Not projected” below.</p> : null}
+        {currentPageCount > 1 ? <nav aria-label="Current projection pages" className="flex items-center justify-between rounded-lg border border-neutral-800 bg-neutral-900 p-2.5 text-xs"><button disabled={visibleCurrentPage === 1} onClick={() => setCurrentPage((page) => Math.max(1, page - 1))} className="min-h-11 rounded border border-neutral-700 px-3 py-2 text-neutral-200 disabled:border-neutral-800 disabled:text-neutral-600">Previous</button><span className="text-neutral-400">{(visibleCurrentPage - 1) * 25 + 1}–{Math.min(visibleCurrentPage * 25, currentRows.length)} of {currentRows.length}</span><button disabled={visibleCurrentPage === currentPageCount} onClick={() => setCurrentPage((page) => Math.min(currentPageCount, page + 1))} className="min-h-11 rounded border border-neutral-700 px-3 py-2 text-neutral-200 disabled:border-neutral-800 disabled:text-neutral-600">Next</button></nav> : null}
       </section>
 
       {unavailableRows.length ? (
         <details className="order-3 rounded-lg border border-neutral-800 bg-neutral-900 p-3">
-          <summary className="cursor-pointer text-sm font-semibold text-neutral-100">Not projected ({unavailableRows.length})</summary>
-            <p className="mt-1 text-[10px] text-neutral-500">
+          <summary className="min-h-11 cursor-pointer content-center text-sm font-semibold text-neutral-100">Not projected ({unavailableRows.length})</summary>
+            <p className="mt-1 text-xs text-neutral-500">
               Rostered players deliberately withheld instead of receiving a
               fabricated projection.
             </p>
           <div className="mt-3 overflow-x-auto rounded-lg border border-neutral-800">
             <table className="w-full min-w-[720px] text-xs">
               <thead>
-                <tr className="bg-neutral-950 text-[9px] uppercase tracking-wide text-neutral-600">
+                <tr className="bg-neutral-950 text-xs uppercase tracking-wide text-neutral-600">
                   <th className="px-2.5 py-2 text-left">Player</th>
                   <th className="px-2 py-2 text-left">Reason</th>
                   <th className="px-2 py-2 text-left">Sources seen</th>
@@ -376,12 +348,12 @@ export default function WeeklyProjectionBoard({
                   <tr key={row.playerId} className="border-t border-neutral-800 bg-neutral-900/50">
                     <td className="px-2.5 py-2">
                       <div className="font-medium text-neutral-200">{row.playerName}</div>
-                      <div className="text-[9px] text-neutral-600">
+                      <div className="text-xs text-neutral-600">
                         {row.position}{row.nflTeam ? ` · ${row.nflTeam}` : ""}
                       </div>
                     </td>
-                    <td className="px-2 py-2 text-[10px] text-neutral-400">{row.reason}</td>
-                    <td className="px-2 py-2 text-[10px] text-neutral-500">
+                    <td className="px-2 py-2 text-xs text-neutral-400">{row.reason}</td>
+                    <td className="px-2 py-2 text-xs text-neutral-500">
                       {row.sourceNames.length ? row.sourceNames.join(" + ") : "None"}
                     </td>
                   </tr>
@@ -392,12 +364,13 @@ export default function WeeklyProjectionBoard({
         </details>
       ) : null}
 
-      <section className="order-2 space-y-2">
+      <details className="order-2 space-y-3 rounded-lg border border-neutral-800 bg-neutral-900 p-3 sm:p-4">
+        <summary className="min-h-11 cursor-pointer content-center text-base font-semibold text-neutral-100">Completed games &amp; accuracy history · {graded.length.toLocaleString()} graded results</summary>
         <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto] sm:items-end">
           <div>
             <h2 className="text-sm font-semibold text-neutral-100">Completed games — projection accuracy history</h2>
-            <p className="text-[10px] text-neutral-500">
-              These players have already played and are not active projections. {graded.length} completed player results are graded. Accuracy is closeness to the larger of projected or actual points. MAE {mae === null ? "—" : mae.toFixed(2)} points · bias {bias === null ? "—" : `${bias > 0 ? "+" : ""}${bias.toFixed(2)}`} · within 5 points {withinFive === null ? "—" : `${withinFive.toFixed(1)}%`}.
+            <p className="text-xs text-neutral-500">
+              All-history summary: {graded.length} completed player results are graded. Accuracy is closeness to the larger of projected or actual points. MAE {mae === null ? "—" : mae.toFixed(2)} points · bias {bias === null ? "—" : `${bias > 0 ? "+" : ""}${bias.toFixed(2)}`} · within 5 points {withinFive === null ? "—" : `${withinFive.toFixed(1)}%`}.
             </p>
           </div>
           <select
@@ -407,7 +380,7 @@ export default function WeeklyProjectionBoard({
               setHistoryWeek(event.target.value);
               setHistoryPage(1);
             }}
-            className="h-8 rounded-md border border-neutral-800 bg-neutral-950 px-2 text-[10px] text-neutral-300"
+            className="min-h-11 rounded-md border border-neutral-800 bg-neutral-950 px-2 text-xs text-neutral-300"
           >
             <option value="ALL">All graded weeks</option>
             {weekOptions.map((value) => {
@@ -422,7 +395,7 @@ export default function WeeklyProjectionBoard({
               setHistorySort(event.target.value as SortKey);
               setHistoryPage(1);
             }}
-            className="h-8 rounded-md border border-neutral-800 bg-neutral-950 px-2 text-[10px] text-neutral-300"
+            className="min-h-11 rounded-md border border-neutral-800 bg-neutral-950 px-2 text-xs text-neutral-300"
           >
             <option value="accuracy">Highest accuracy</option>
             <option value="error">Smallest raw error</option>
@@ -451,7 +424,7 @@ export default function WeeklyProjectionBoard({
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-[10px] uppercase tracking-wide text-neutral-500">
+                    <div className="text-xs uppercase tracking-wide text-neutral-500">
                       Accuracy
                     </div>
                     <div className={`text-lg font-semibold tabular-nums ${accuracyColor(accuracy)}`}>
@@ -461,7 +434,7 @@ export default function WeeklyProjectionBoard({
                 </div>
                 <div className="mt-3 grid grid-cols-2 gap-2">
                   <div className="rounded-md border border-sky-900/60 bg-sky-950/20 p-2">
-                    <div className="text-[10px] font-medium uppercase tracking-wide text-sky-400">
+                    <div className="text-xs font-medium uppercase tracking-wide text-sky-400">
                       Projected
                     </div>
                     <div className="mt-1 text-lg font-semibold tabular-nums text-sky-200">
@@ -469,7 +442,7 @@ export default function WeeklyProjectionBoard({
                     </div>
                   </div>
                   <div className="rounded-md border border-emerald-900/60 bg-emerald-950/20 p-2">
-                    <div className="text-[10px] font-medium uppercase tracking-wide text-emerald-400">
+                    <div className="text-xs font-medium uppercase tracking-wide text-emerald-400">
                       Actual
                     </div>
                     <div className="mt-1 text-lg font-semibold tabular-nums text-emerald-200">
@@ -515,7 +488,7 @@ export default function WeeklyProjectionBoard({
         <div className="hidden overflow-x-auto rounded-lg border border-neutral-800 lg:block">
           <table className="w-full min-w-[1040px] text-xs">
             <thead>
-              <tr className="bg-neutral-950 text-[9px] uppercase tracking-wide text-neutral-600">
+              <tr className="bg-neutral-950 text-xs uppercase tracking-wide text-neutral-600">
                 <th className="px-2.5 py-2 text-left"><button type="button" onClick={() => { setHistorySort("player"); setHistoryPage(1); }} className={historySort === "player" ? "text-emerald-300" : "hover:text-neutral-300"}>Player</button></th>
                 <th className="px-2 py-2 text-right">Week</th>
                 <th className="px-2 py-2 text-right"><button type="button" onClick={() => { setHistorySort("projected"); setHistoryPage(1); }} className={historySort === "projected" ? "text-emerald-300" : "hover:text-neutral-300"}>Projected</button></th>
@@ -531,7 +504,7 @@ export default function WeeklyProjectionBoard({
                 <tr key={row.id} className="border-t border-neutral-800 bg-neutral-900/50">
                   <td className="px-2.5 py-2">
                     <div className="font-medium text-neutral-100">{row.playerName}</div>
-                    <div className="text-[9px] text-neutral-600">{row.position}</div>
+                    <div className="text-xs text-neutral-600">{row.position}</div>
                   </td>
                   <td className="px-2 py-2 text-right text-neutral-500">{row.season} W{row.week}</td>
                   <td className="px-2 py-2 text-right tabular-nums text-neutral-300">
@@ -549,7 +522,7 @@ export default function WeeklyProjectionBoard({
                   <td className={`px-2 py-2 text-right font-medium tabular-nums ${row.signedError === null ? "text-neutral-500" : Math.abs(row.signedError) <= 5 ? "text-emerald-300" : Math.abs(row.signedError) <= 10 ? "text-amber-300" : "text-red-400"}`}>
                     {row.signedError === null ? "—" : `${row.signedError > 0 ? "+" : ""}${row.signedError.toFixed(1)}`}
                   </td>
-                  <td className="min-w-[420px] px-2 py-2 text-[9px] leading-4">
+                  <td className="min-w-[420px] px-2 py-2 text-xs leading-4">
                     <div className="rounded border border-sky-900/60 bg-sky-950/20 px-2 py-1 text-sky-200"><span className="mr-1 font-semibold uppercase tracking-wide text-sky-400">Projected</span>{statLine(row.position, row.projectedStats)}</div>
                     <div className="mt-1 rounded border border-emerald-900/60 bg-emerald-950/20 px-2 py-1 text-emerald-200"><span className="mr-1 font-semibold uppercase tracking-wide text-emerald-400">Actual</span>{statLine(row.position, row.actualStats)}</div>
                   </td>
@@ -566,7 +539,7 @@ export default function WeeklyProjectionBoard({
           </table>
         </div>
         {historyRows.length > 0 && historyPageCount > 1 ? (
-          <nav aria-label="Projection accuracy history pages" className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2 text-[10px] text-neutral-500">
+          <nav aria-label="Projection accuracy history pages" className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2 text-xs text-neutral-500">
             <span>Showing {historyPageStart}–{historyPageEnd} of {historyRows.length}</span>
             <div className="flex items-center gap-2">
               <button type="button" onClick={() => setHistoryPage((value) => Math.max(1, value - 1))} disabled={visibleHistoryPage === 1} className="rounded border border-neutral-700 px-2 py-1 text-neutral-300 disabled:cursor-not-allowed disabled:opacity-40">Previous</button>
@@ -575,7 +548,7 @@ export default function WeeklyProjectionBoard({
             </div>
           </nav>
         ) : null}
-      </section>
+      </details>
     </div>
   );
 }
