@@ -29,6 +29,20 @@ test('trade history renders complete review cards without an expansion step',()=
  assert.match(html,/Player A/);
  assert.doesNotMatch(html,/trade-result-chevron|aria-expanded="false"/);
 });
+test('main comparison lists every received asset and FAAB without a shortened preview',()=>{
+ const received=[asset('First player (QB)',5000),asset('Second player (RB)',3000),asset('Third player (WR)',2000),{...asset('2028 Round 1 · Original Team With A Long Name',4000),assetType:'pick' as const}];
+ const sent=[asset('Outgoing player (TE)',6000)];
+ const rows=[
+  {rosterId:1,name:'Receiving team',got:received,gave:sent,faabReceived:17,grades:calculateTradeSideGrades({got:received,gave:sent,faabReceived:17})},
+  {rosterId:2,name:'Other team',got:sent,gave:received,faabSent:17,grades:calculateTradeSideGrades({got:sent,gave:received,faabSent:17})},
+ ];
+ const html=renderToStaticMarkup(React.createElement(TradeReviewCard,{sides:rows}));
+ const matrix=html.slice(html.indexOf('class="trade-matrix"'),html.indexOf('class="trade-change-line'));
+ for(const item of [...received,...sent]) assert.ok(matrix.includes(item.label),`Missing ${item.label} from main comparison`);
+ assert.match(matrix,/\$17.*FAAB/);
+ assert.match(matrix,/aria-label="Receiving team received"/);
+ assert.doesNotMatch(matrix,/\+\d+ more|<details|<summary/);
+});
 test('incomplete trade reviewer withholds a winner instead of grading the known subset',()=>{
  const html=renderToStaticMarkup(React.createElement(TradeReviewCard,{sides:sides(true)}));
  assert.match(html,/<strong>Unavailable<\/strong>/);
