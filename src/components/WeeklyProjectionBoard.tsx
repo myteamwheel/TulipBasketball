@@ -119,7 +119,7 @@ export default function WeeklyProjectionBoard({
   );
   const currentIds = new Set(currentForecasts.map((row) => row.playerId));
   const pendingCount = unavailable.filter(row => row.status === "PENDING").length;
-  const totalWithheldCount = unavailable.filter((row) => !currentIds.has(row.playerId)).length;
+  const totalWithheldCount = unavailable.filter((row) => row.status !== "PENDING" && !currentIds.has(row.playerId)).length;
   const unavailableRows = unavailable
     .filter((row) => !currentIds.has(row.playerId))
     .filter((row) => matchesSearch(row.playerName, row.nflTeam, row.position))
@@ -217,7 +217,7 @@ export default function WeeklyProjectionBoard({
             </p>
             <details className="mt-2 text-xs leading-5 text-neutral-400">
               <summary className="min-h-8 cursor-pointer content-center">Coverage: {activeCurrent.length} active · {lockedCurrent.length} locked</summary>
-              <p className="mt-1">{accountedPlayerCount} rostered QB/RB/WR/TE players accounted for: {totalWithheldCount} withheld with a reason and {completedCurrentWeekCount} completed players in accuracy history, alongside the active and locked forecasts.</p>
+              <p className="mt-1">{accountedPlayerCount} rostered QB/RB/WR/TE players listed: {totalWithheldCount} withheld with a reason, {pendingCount} awaiting refresh, and {completedCurrentWeekCount} completed players in accuracy history, alongside the active and locked forecasts.</p>
             </details>
             {!scheduleStatusAvailable ? (
               <p role="status" className="mt-1 text-xs text-amber-300">
@@ -333,7 +333,7 @@ export default function WeeklyProjectionBoard({
         <details className="order-3 rounded-lg border border-neutral-800 bg-neutral-900 p-3">
           <summary className="min-h-11 cursor-pointer content-center text-sm font-semibold text-neutral-100">Not projected ({unavailableRows.length})</summary>
             <p className="mt-1 text-xs text-neutral-500">
-              Rostered players deliberately withheld instead of receiving a
+              Rostered players awaiting fresh data or deliberately withheld instead of receiving a
               fabricated projection.
             </p>
           <div className="mt-3 space-y-2 lg:hidden">{unavailableRows.map(row => <article key={row.playerId} className="rounded-lg border border-neutral-800 p-3 text-xs leading-5"><h3 className="font-semibold text-neutral-200">{row.playerName} <span className="font-normal text-neutral-400">{row.position}{row.nflTeam ? ` · ${row.nflTeam}` : ""}</span></h3><p className="mt-1 text-neutral-400">{row.reason}</p>{row.sourceNames.length ? <p className="mt-1 text-neutral-500">Sources: {row.sourceNames.join(" + ")}</p> : null}</article>)}</div>

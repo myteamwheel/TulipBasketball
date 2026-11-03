@@ -63,12 +63,16 @@ export default async function ForecastPage() {
     ),
     withheldRows = projectionData.unavailable.filter(
       (row) =>
+        row.status !== "PENDING" &&
         rosteredSkillPlayerIds.has(row.playerId) &&
         !activeWeeklyIds.has(row.playerId) &&
         !kickoffLockedCurrentIds.has(row.playerId) &&
         !completedCurrentWeekIds.has(row.playerId),
     ),
     withheldIds = new Set(withheldRows.map((row) => row.playerId)),
+    pendingCount = projectionData.unavailable.filter(
+      (row) => row.status === "PENDING" && rosteredSkillPlayerIds.has(row.playerId),
+    ).length,
     // Dynasty research may keep a current week's saved pregame forecast after
     // kickoff or completion. It is role evidence only: the active weekly
     // lineup cards below deliberately use `activeWeeklyRows` alone.
@@ -191,6 +195,7 @@ export default async function ForecastPage() {
             <div className={`mt-1 text-lg font-semibold ${accountabilityCoverage >= 0.75 ? "text-emerald-300" : "text-amber-300"}`}>{(accountabilityCoverage * 100).toFixed(0)}%</div>
           </div>
         </div>
+        {pendingCount > 0 ? <p role="status" className="mt-3 text-sm text-amber-200">{pendingCount} players are awaiting a fresh Week {projectionData.week} refresh. They remain visible in Weekly projections and do not count as confirmed classifications or zero-point forecasts.</p> : null}
         <p className="mt-3 text-sm font-medium text-neutral-200">
           {`${(lineupReadyCoverage * 100).toFixed(0)}% of rostered QB/RB/WR/TE players have a lineup-ready current-week forecast.`} Only those rows support lineup decisions.
         </p>

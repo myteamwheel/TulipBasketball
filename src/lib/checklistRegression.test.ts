@@ -17,6 +17,15 @@ test("locked projections and withheld counts are disjoint", () => {
   assert.equal(value.withheld, 1);
   assert.equal(value.mae, null);
 });
+test("pending refresh rows do not inflate explicit withholding counts", () => {
+  const value = projectionSummary([{ playerId: "locked" }], [
+    { playerId: "locked", status: "ALREADY_PLAYED" },
+    { playerId: "out", status: "EXCLUDED" },
+    { playerId: "waiting", status: "PENDING" },
+  ], []);
+  assert.equal(value.withheld, 1);
+  assert.equal(value.pending, 1);
+});
 test("accuracy uses magnitude, direction and a fixed five-point threshold", () => {
   const summary = projectionSummary([], [], [{ absoluteError: 16.9, signedError: -16.9 }, { absoluteError: 5.1, signedError: 5.1 }, { absoluteError: 5, signedError: 5 }, { absoluteError: null, signedError: null }]);
   assert.equal(summary.mae, 9);
