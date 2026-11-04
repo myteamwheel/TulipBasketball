@@ -71,3 +71,32 @@ test("reversal requires a negative then edge and positive current edge", () => {
   assert.equal(ranked[0].side?.name, "Alpha");
   assert.equal(ranked[0].score, 3000);
 });
+
+test("balance sorts rank absolute gaps independently by period, including exact ties", () => {
+  function exchange(id: string, sent: ReviewAsset, received: ReviewAsset) {
+    return trade(id, "2025-10-01T12:00:00.000Z", [
+      side(1, "Alpha", [sent], [received]),
+      side(2, "Beta", [received], [sent]),
+    ]);
+  }
+  const evenThen = exchange("even-then", asset("a", 1000, 3000), asset("b", 1000, 1000));
+  const evenNow = exchange("even-now", asset("c", 3000, 1000), asset("d", 1000, 1000));
+  const missingThen = exchange("missing-then", asset("e", null, 1500), asset("f", 1200, 1000));
+  const deals = [evenThen, evenNow, missingThen];
+  const ids = (sort: Parameters<typeof rankTrades>[1]) => rankTrades(deals, sort, "points", { ...filters, team: 1 }).map(row => row.trade.id);
+  assert.deepEqual(ids("unequalThen"), ["even-now", "even-then"]);
+  assert.deepEqual(ids("equalThen"), ["even-then", "even-now"]);
+  assert.deepEqual(ids("unequalNow"), ["even-then", "missing-then", "even-now"]);
+  assert.deepEqual(ids("equalNow"), ["even-now", "missing-then", "even-then"]);
+});
+
+test("current balance ranks a used pick by its drafted player, with missing outcomes excluded", () => {
+  const pick = asset("pick", 2300, null, "pick");
+  pick.outcome = { label: "Drafted player", playerId: "drafted", sleeperId: "1", pickNumber: 6, currentValue: 2000, sourceUrl: "https://sleeper.com" };
+  const player = asset("player", 1800, 2000);
+  const deal = trade("used-pick", "2025-10-01T12:00:00.000Z", [side(1, "Alpha", [player], [pick]), side(2, "Beta", [pick], [player])]);
+  assert.equal(rankTrades([deal], "equalNow", "percent", filters)[0]?.score, 0);
+  assert.equal(rankTrades([deal], "winsNow", "percent", filters).length, 0);
+  pick.outcome.currentValue = null;
+  assert.equal(rankTrades([deal], "unequalNow", "percent", filters).length, 0);
+});

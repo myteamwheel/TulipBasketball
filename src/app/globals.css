@@ -244,7 +244,7 @@ header { background-color: var(--header) !important; }
 .trade-coverage-summary span { padding: 7px 11px; border-radius: 999px; background: var(--surface-muted); color: var(--text-muted); font-size: 12px; }
 .trade-coverage-summary strong { color: var(--foreground); font-variant-numeric: tabular-nums; }
 .trade-board-controls { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px; }
-.trade-board-tabs { display: flex; padding: 4px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-muted); }
+.trade-board-tabs { display: flex; flex-wrap: wrap; max-width: 100%; padding: 4px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-muted); }
 .trade-board-tabs button { min-height: 44px; padding: 0 17px; border-radius: 9px; color: var(--text-body); font-size: 14px; font-weight: 650; transition: background 180ms, color 180ms, box-shadow 180ms; }
 .trade-board-tabs button.is-active { background: var(--positive); color: var(--background); box-shadow: 0 3px 9px rgba(0,0,0,.14); }
 .trade-board-sort, .trade-board-filters { display: flex; flex-wrap: wrap; gap: 8px; }

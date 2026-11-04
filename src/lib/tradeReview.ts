@@ -27,7 +27,7 @@ export type ReviewSide = {
   grades: { atTrade: TradeGradePhase; current: TradeGradePhase } | null;
 };
 export type ReviewTrade = { id: string; date: string; season?: string; sides: ReviewSide[] };
-export type ReviewSort = "newest" | "winsThen" | "winsNow" | "outcomeNow" | "improved" | "reversals" | "losses" | "largest";
+export type ReviewSort = "newest" | "winsThen" | "winsNow" | "outcomeNow" | "improved" | "reversals" | "losses" | "largest" | "unequalThen" | "unequalNow" | "equalThen" | "equalNow";
 export type ReviewMetric = "points" | "percent";
 export type ReviewFilters = { team: number | null; season: string; opponent: number | null; asset: "all" | "player" | "pick"; faab: "all" | "yes" | "no" };
 export type RankedTrade = { trade: ReviewTrade; side: ReviewSide | null; score: number | null };
@@ -53,6 +53,30 @@ function phaseEdge(side: ReviewSide, phase: "atTrade" | "current", metric: Revie
   return metric === "percent" ? grade.balance.edgePercent : grade.balance.adjustedEdge;
 }
 
+export function currentOutcomeGrade(side: ReviewSide): TradeGradePhase | null {
+  const assets = [...side.got, ...side.gave];
+  if (!assets.some(asset => asset.outcome)) return side.grades?.current ?? null;
+  const convert = (items: ReviewAsset[]) => items.map(asset => ({
+    ...asset,
+    currentValue: asset.outcome ? asset.outcome.currentValue : asset.currentValue,
+  }));
+  return calculateTradeSideGrades({ ...side, got: convert(side.got), gave: convert(side.gave) }).current;
+}
+
+export function isBalanceSort(sort: ReviewSort): boolean {
+  return sort === "unequalThen" || sort === "unequalNow" || sort === "equalThen" || sort === "equalNow";
+}
+
+function tradeValueGap(trade: ReviewTrade, sort: ReviewSort, metric: ReviewMetric): number | null {
+  const historical = sort === "unequalThen" || sort === "equalThen";
+  const grades = trade.sides.map(side => historical ? side.grades?.atTrade : currentOutcomeGrade(side));
+  if (grades.some(grade => !grade || grade.status === "INCOMPLETE")) return null;
+  const balances = grades.flatMap(grade => grade?.status === "READY" && grade.balance ? [grade.balance] : []);
+  if (!balances.length) return null;
+  // Use the largest team gap so a balanced team cannot hide a lopsided multi-team deal.
+  return Math.max(...balances.map(balance => Math.abs(metric === "percent" ? balance.edgePercent : balance.adjustedEdge)));
+}
+
 export function rankTrades(trades: ReviewTrade[], sort: ReviewSort, metric: ReviewMetric, filters: ReviewFilters): RankedTrade[] {
   const filtered = trades.filter(trade => {
     if (filters.season !== "all" && (trade.season ?? new Date(trade.date).getUTCFullYear().toString()) !== filters.season) return false;
@@ -63,7 +87,10 @@ export function rankTrades(trades: ReviewTrade[], sort: ReviewSort, metric: Revi
     if (filters.faab === "yes" && !hasFaab || filters.faab === "no" && hasFaab) return false;
     return true;
   });
+  const balanceSort = isBalanceSort(sort);
+  const closestFirst = sort === "equalThen" || sort === "equalNow";
   const ranked = filtered.map(trade => {
+    if (balanceSort) return { trade, side: null, score: tradeValueGap(trade, sort, metric) };
     const candidates = filters.team === null ? trade.sides : trade.sides.filter(side => side.rosterId === filters.team);
     const scores = candidates.map(side => {
       const then = phaseEdge(side, "atTrade", metric);
@@ -71,9 +98,8 @@ export function rankTrades(trades: ReviewTrade[], sort: ReviewSort, metric: Revi
       let score: number | null = null;
       if (sort === "winsThen") score = then !== null && eligiblePhase(side, "atTrade")?.result === "WON" ? then : null;
       if (sort === "outcomeNow") {
-        const convert = (items: ReviewAsset[]) => items.map(asset => ({ ...asset, currentValue: asset.outcome ? asset.outcome.currentValue : asset.currentValue }));
-        const outcome = calculateTradeSideGrades({ ...side, got: convert(side.got), gave: convert(side.gave) }).current;
-        score = outcome.status === 'READY' && outcome.result === 'WON' && outcome.balance ? (metric === 'percent' ? outcome.balance.edgePercent : outcome.balance.adjustedEdge) : null;
+        const outcome = currentOutcomeGrade(side);
+        score = outcome?.status === 'READY' && outcome.result === 'WON' && outcome.balance ? (metric === 'percent' ? outcome.balance.edgePercent : outcome.balance.adjustedEdge) : null;
       }
       if (sort === "winsNow") score = now !== null && eligiblePhase(side, "current")?.result === "WON" ? now : null;
       if (sort === "improved") score = then !== null && now !== null && now > then ? now - then : null;
@@ -92,7 +118,7 @@ export function rankTrades(trades: ReviewTrade[], sort: ReviewSort, metric: Revi
     scores.sort((a, b) => b.score - a.score);
     return { trade, side: scores[0]?.side ?? null, score: scores[0]?.score ?? null };
   }).filter(row => row.score !== null);
-  ranked.sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || b.trade.date.localeCompare(a.trade.date) || a.trade.id.localeCompare(b.trade.id));
+  ranked.sort((a, b) => (closestFirst ? (a.score ?? 0) - (b.score ?? 0) : (b.score ?? 0) - (a.score ?? 0)) || b.trade.date.localeCompare(a.trade.date) || a.trade.id.localeCompare(b.trade.id));
   return ranked;
 }
 
