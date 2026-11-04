@@ -69,3 +69,17 @@ test('daily historical fallback uses only the prior date and never the trade day
   assert.equal(price?.value,4000); assert.equal(price?.date,'2021-05-05');
   assert.equal(priorDayPrice(rows,Date.parse('2021-05-09T12:00:00Z'),[]),null);
 });
+
+test('recovered historical prices have unique identities, valid prior dates and official source links', async () => {
+  const { default: recovered } = await import('../data/trade-chart-prices.json');
+  const tradeById = new Map(history.seasons.flatMap(s => s.trades).map(t => [t.transaction_id,t]));
+  for (const [id,prices] of Object.entries(recovered.prices)) {
+    const trade = tradeById.get(id); assert.ok(trade, id);
+    for (const [asset,price] of Object.entries(prices)) {
+      assert.ok(Object.hasOwn(trade.adds ?? {}, asset.slice(7)), asset);
+      assert.equal(price.date,new Date(trade.created-86400000).toISOString().slice(0,10));
+      assert.ok(price.value>0 && price.value<=9999);
+      assert.ok(price.sourceUrls.every(url=>url.startsWith('https://keeptradecut.com/dynasty-rankings/players/')));
+    }
+  }
+});
