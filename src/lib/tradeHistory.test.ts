@@ -76,10 +76,12 @@ test('recovered historical prices have unique identities, valid prior dates and 
   for (const [id,prices] of Object.entries(recovered.prices)) {
     const trade = tradeById.get(id); assert.ok(trade, id);
     for (const [asset,price] of Object.entries(prices)) {
-      assert.ok(Object.hasOwn(trade.adds ?? {}, asset.slice(7)), asset);
+      if (asset.startsWith('player:')) assert.ok(Object.hasOwn(trade.adds ?? {}, asset.slice(7)), asset);
+      else assert.ok((trade.draft_picks as {season:string;round:number;roster_id:number}[]).some(p=>asset===`pick:${p.season}:${p.round}:${p.roster_id}`),asset);
       assert.equal(price.date,new Date(trade.created-86400000).toISOString().slice(0,10));
       assert.ok(price.value>0 && price.value<=9999);
-      assert.ok(price.sourceUrls.every(url=>url.startsWith('https://keeptradecut.com/dynasty-rankings/players/')));
+      assert.ok(price.sourceUrls.every(url=>url.startsWith('https://keeptradecut.com/dynasty-rankings/players/') || url === 'https://docs.google.com/spreadsheets/d/1n5aqip8iFCpltO8deiS7q9m3u_dFvKTZpwzfZXVTpgs/edit' || url === 'https://github.com/G-Sher/dynasty-daddy/blob/main/data/datasource.csv'));
+      if (price.method === 'KTC_ROUND_AVERAGE') assert.equal(price.sourceUrls.length,3);
     }
   }
 });

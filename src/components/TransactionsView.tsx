@@ -141,6 +141,7 @@ export default async function TransactionsPage({ searchParams, review = false }:
     const drafted = resolution ? playerBySleeper.get(resolution.playerId) : null;
     const draftedMarket = drafted ? currentMarket.get(drafted.id) : null;
     const frozen = frozenPrices.get(activeTransactionId)?.[`pick:${pick.season}:${pick.round}:${pick.roster_id}`];
+    const daily = recovered.prices[activeTransactionId]?.[`pick:${pick.season}:${pick.round}:${pick.roster_id}`];
     const currentValue = resolution ? null : currentPickMarketValue(pickMarket, Number(pick.season), pick.round, null);
     const currentObservedAt = currentValue === null ? null : pickMarket.filter(row => Number(row.season) === Number(pick.season) && row.round === pick.round).map(row => row.sourceUpdatedAt).filter(Boolean).sort()[0] ?? null;
     return {
@@ -148,7 +149,8 @@ export default async function TransactionsPage({ searchParams, review = false }:
       playerId: null,
       label: `${pick.season} Round ${pick.round} · ${teamName(pick.roster_id)} original`,
       assetType: "pick",
-      atTradeValue: frozen?.value ?? atTradeValue,
+      atTradeValue: frozen?.value ?? atTradeValue ?? daily?.value ?? null,
+      historicalDaily: !frozen && atTradeValue === null ? daily : undefined,
       currentValue,
       outcome: resolution ? { label: resolution.name, playerId: drafted?.id ?? null, sleeperId: resolution.playerId, pickNumber: resolution.overall, currentValue: draftedMarket && !draftedMarket.isStale ? draftedMarket.currentValue : null, sourceUrl: `https://sleeper.com/draft/nfl/${resolution.draftId}` } : undefined,
       priceSource: 'Generic round-level pick market',
