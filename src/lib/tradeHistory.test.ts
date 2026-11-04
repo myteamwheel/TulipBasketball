@@ -78,15 +78,21 @@ test('recovered historical prices have unique identities, valid prior dates and 
     for (const [asset,price] of Object.entries(prices)) {
       if (asset.startsWith('player:')) assert.ok(Object.hasOwn(trade.adds ?? {}, asset.slice(7)), asset);
       else assert.ok((trade.draft_picks as {season:string;round:number;roster_id:number}[]).some(p=>asset===`pick:${p.season}:${p.round}:${p.roster_id}`),asset);
-      if ('observedAt' in price && price.method === 'ARCHIVED_KTC_POST_TRADE') {
+      if ('observedAt' in price) {
         const elapsed = Date.parse(String(price.observedAt)) - trade.created;
-        assert.ok(elapsed > 0 && elapsed <= 86400000);
+        if (price.method === 'ARCHIVED_KTC_POST_TRADE') {
+          assert.ok(elapsed > 0 && elapsed <= 86400000);
+        } else {
+          assert.equal(price.method, 'ARCHIVED_KTC_PRE_TRADE');
+          assert.ok(asset.startsWith('pick:'));
+          assert.ok(elapsed <= 0 && elapsed >= -7 * 86400000);
+        }
         assert.equal(price.date, String(price.observedAt).slice(0,10));
       } else {
         assert.equal(price.date,new Date(trade.created-86400000).toISOString().slice(0,10));
       }
       assert.ok(price.value>0 && price.value<=9999);
-      assert.ok(price.sourceUrls.every(url=>url.startsWith('https://keeptradecut.com/dynasty-rankings/players/') || url === 'https://docs.google.com/spreadsheets/d/1n5aqip8iFCpltO8deiS7q9m3u_dFvKTZpwzfZXVTpgs/edit' || url === 'https://github.com/G-Sher/dynasty-daddy/blob/main/data/datasource.csv' || url === 'https://github.com/pstiehl/Dynasty-Football-Model/blob/main/data/consensus/history/ktc_values_2022-09-28.json'));
+      assert.ok(price.sourceUrls.every(url=>url.startsWith('https://keeptradecut.com/dynasty-rankings/players/') || url === 'https://docs.google.com/spreadsheets/d/1n5aqip8iFCpltO8deiS7q9m3u_dFvKTZpwzfZXVTpgs/edit' || url === 'https://github.com/G-Sher/dynasty-daddy/blob/main/data/datasource.csv' || url === 'https://github.com/pstiehl/Dynasty-Football-Model/blob/main/data/consensus/history/ktc_values_' + price.date + '.json' || /^https:\/\/web\.archive\.org\/web\/\d{14}id_\/https:\/\/keeptradecut\.com\/dynasty-rankings\/histories$/.test(url)));
       if (price.method === 'KTC_ROUND_AVERAGE') assert.equal(price.sourceUrls.length,3);
     }
   }
