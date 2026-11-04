@@ -1,3 +1,5 @@
+import recoveredJson from "@/data/trade-chart-prices.json";
+import type { RecoveredTradePrices } from "@/lib/historicalKtc";
 import { getLeagueHistory, getFrozenTradePrices } from "@/lib/leagueHistory";
 import { historicalManager, resolveDraftPick } from "@/lib/tradeLineage";
 import type { ReviewAsset } from "@/lib/tradeReview";
@@ -21,8 +23,9 @@ import { faabForRoster, parseFaabTransfers } from "@/lib/tradeFaab";
 const PAGE_SIZE = 15;
 type TxFilter = "all" | "trade" | "moves";
 type TradedPick = { season: string; round: number; roster_id: number; previous_owner_id: number; owner_id: number };
-type Asset = TradeGradeAsset & Pick<ReviewAsset, "outcome" | "journey" | "priceSource"> & { playerId: string | null; atMoveObservedAt: Date | null; atMoveTiming: TradeSnapshotTiming | null; currentObservedAt: string | null };
+type Asset = TradeGradeAsset & Pick<ReviewAsset, "outcome" | "journey" | "priceSource" | "historicalDaily"> & { playerId: string | null; atMoveObservedAt: Date | null; atMoveTiming: TradeSnapshotTiming | null; currentObservedAt: string | null };
 
+const recovered = recoveredJson as RecoveredTradePrices;
 const HISTORICAL_MARKET_WINDOW_MS = TRADE_SNAPSHOT_WINDOW_MS;
 
 function record(value: string | null): Record<string, number> {
@@ -106,7 +109,8 @@ export default async function TransactionsPage({ searchParams, review = false }:
 
   function playerAsset(sleeperId: string, date: Date): Asset {
     const player = playerBySleeper.get(sleeperId);
-    if (!player) return { id: `player:${sleeperId}`, playerId: null, label: history.players[sleeperId] ? `${history.players[sleeperId].name} (${history.players[sleeperId].position})` : `Sleeper player ${sleeperId}`, assetType: "player", atTradeValue: null, currentValue: null, currentObservedAt: null, atMoveObservedAt: null, atMoveTiming: null };
+    const daily = recovered.prices[activeTransactionId]?.["player:" + sleeperId];
+    if (!player) return { id: `player:${sleeperId}`, playerId: null, label: history.players[sleeperId] ? `${history.players[sleeperId].name} (${history.players[sleeperId].position})` : `Sleeper player ${sleeperId}`, assetType: "player", atTradeValue: daily?.value ?? null, historicalDaily: daily, currentValue: null, currentObservedAt: null, atMoveObservedAt: null, atMoveTiming: null };
     const atMove = selectTradeSnapshot(
       series.get(player.id) ?? [],
       date,
@@ -119,7 +123,8 @@ export default async function TransactionsPage({ searchParams, review = false }:
       playerId: player.id,
       label: `${player.fullName} (${player.position})`,
       assetType: "player",
-      atTradeValue: frozen?.value ?? atMove?.snapshot.value ?? null,
+      atTradeValue: frozen?.value ?? atMove?.snapshot.value ?? daily?.value ?? null,
+      historicalDaily: !frozen && !atMove ? daily : undefined,
       currentValue: market && !market.isStale ? market.currentValue : null,
       currentObservedAt: market && !market.isStale ? market.currentObservedAt : null,
       atMoveObservedAt: frozen ? new Date(frozen.observedAt) : atMove?.snapshot.observedAt ?? null,

@@ -61,3 +61,11 @@ test('drafted-player rankings preserve original-asset grades and exclude later r
   assert.equal(results.length,1);assert.equal(results[0].score,5000);
   assert.equal(side.grades.current.status,'INCOMPLETE');
 });
+
+test('daily historical fallback uses only the prior date and never the trade day or current quote', async () => {
+  const { priorDayPrice } = await import('./historicalKtc');
+  const rows = [{d:'210505',v:4000},{d:'210506',v:9000},{d:'261103',v:8000}];
+  const price = priorDayPrice(rows, Date.parse('2021-05-06T12:00:00Z'), ['https://keeptradecut.com']);
+  assert.equal(price?.value,4000); assert.equal(price?.date,'2021-05-05');
+  assert.equal(priorDayPrice(rows,Date.parse('2021-05-09T12:00:00Z'),[]),null);
+});

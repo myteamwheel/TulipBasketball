@@ -9,6 +9,7 @@ export type ReviewAsset = {
   atTradeValue: number | null;
   currentValue: number | null;
   priceSource?: string;
+  historicalDaily?: import("./historicalKtc").DailyTradePrice;
   outcome?: { label: string; playerId: string | null; sleeperId: string; pickNumber: number; currentValue: number | null; sourceUrl: string };
   journey?: { tradeId: string; date: string; label: string }[];
   currentObservedAt?: string | null;
