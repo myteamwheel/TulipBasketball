@@ -1,3 +1,6 @@
+import matchupData from "@/data/trade-matchups.json";
+import { tradeOnField, type MatchupWeek } from "@/lib/tradeOnField";
+import statsGuyArchive from "@/data/statsguy-historical-trades.json";
 import recoveredJson from "@/data/trade-chart-prices.json";
 import type { RecoveredTradePrices } from "@/lib/historicalKtc";
 import { getLeagueHistory, getFrozenTradePrices } from "@/lib/leagueHistory";
@@ -23,9 +26,10 @@ import { faabForRoster, parseFaabTransfers } from "@/lib/tradeFaab";
 const PAGE_SIZE = 15;
 type TxFilter = "all" | "trade" | "moves";
 type TradedPick = { season: string; round: number; roster_id: number; previous_owner_id: number; owner_id: number };
-type Asset = TradeGradeAsset & Pick<ReviewAsset, "outcome" | "journey" | "priceSource" | "historicalDaily"> & { playerId: string | null; atMoveObservedAt: Date | null; atMoveTiming: TradeSnapshotTiming | null; currentObservedAt: string | null };
+type Asset = TradeGradeAsset & { statsGuyValue?: number | null } & Pick<ReviewAsset, "outcome" | "journey" | "priceSource" | "historicalDaily"> & { playerId: string | null; atMoveObservedAt: Date | null; atMoveTiming: TradeSnapshotTiming | null; currentObservedAt: string | null };
 
 const recovered = recoveredJson as RecoveredTradePrices;
+const statsGuyHistory = statsGuyArchive as Record<string, { date: string; values: Record<string, number> }>;
 const HISTORICAL_MARKET_WINDOW_MS = TRADE_SNAPSHOT_WINDOW_MS;
 
 function record(value: string | null): Record<string, number> {
@@ -110,7 +114,8 @@ export default async function TransactionsPage({ searchParams, review = false }:
   function playerAsset(sleeperId: string, date: Date): Asset {
     const player = playerBySleeper.get(sleeperId);
     const daily = recovered.prices[activeTransactionId]?.["player:" + sleeperId];
-    if (!player) return { id: `player:${sleeperId}`, playerId: null, label: history.players[sleeperId] ? `${history.players[sleeperId].name} (${history.players[sleeperId].position})` : `Sleeper player ${sleeperId}`, assetType: "player", atTradeValue: daily?.value ?? null, historicalDaily: daily, currentValue: null, currentObservedAt: null, atMoveObservedAt: null, atMoveTiming: null };
+    const statsGuyValue = statsGuyHistory[activeTransactionId]?.values[sleeperId] ?? null;
+    if (!player) return { id: `player:${sleeperId}`, playerId: null, label: history.players[sleeperId] ? `${history.players[sleeperId].name} (${history.players[sleeperId].position})` : `Sleeper player ${sleeperId}`, assetType: "player", atTradeValue: daily?.value ?? null, statsGuyValue, historicalDaily: daily, currentValue: null, currentObservedAt: null, atMoveObservedAt: null, atMoveTiming: null };
     const atMove = selectTradeSnapshot(
       series.get(player.id) ?? [],
       date,
@@ -124,6 +129,7 @@ export default async function TransactionsPage({ searchParams, review = false }:
       label: `${player.fullName} (${player.position})`,
       assetType: "player",
       atTradeValue: frozen?.value ?? atMove?.snapshot.value ?? daily?.value ?? null,
+      statsGuyValue,
       historicalDaily: !frozen && !atMove ? daily : undefined,
       currentValue: market && !market.isStale ? market.currentValue : null,
       currentObservedAt: market && !market.isStale ? market.currentObservedAt : null,
@@ -150,6 +156,7 @@ export default async function TransactionsPage({ searchParams, review = false }:
       label: `${pick.season} Round ${pick.round} · ${teamName(pick.roster_id)} original`,
       assetType: "pick",
       atTradeValue: frozen?.value ?? atTradeValue ?? daily?.value ?? null,
+      statsGuyValue: statsGuyHistory[activeTransactionId]?.values[`pick:${pick.season}:${pick.round}`] ?? null,
       historicalDaily: !frozen && atTradeValue === null ? daily : undefined,
       currentValue,
       outcome: resolution ? { label: resolution.name, playerId: drafted?.id ?? null, sleeperId: resolution.playerId, pickNumber: resolution.overall, currentValue: draftedMarket && !draftedMarket.isStale ? draftedMarket.currentValue : null, sourceUrl: `https://sleeper.com/draft/nfl/${resolution.draftId}` } : undefined,
@@ -165,7 +172,7 @@ export default async function TransactionsPage({ searchParams, review = false }:
     const adds = record(tx.adds), drops = record(tx.drops), picks = array<TradedPick>(tx.draftPicks);
     const faab = parseFaabTransfers(tx.waiverBudget);
     const rosterIds = [...new Set([...array<number>(tx.rosterIdsInvolved), ...Object.values(adds), ...Object.values(drops), ...picks.flatMap((p) => [p.owner_id, p.previous_owner_id]), ...faab.flatMap(p => [p.sender, p.receiver])])];
-    const sides = rosterIds.map((rosterId) => {
+    let sides = rosterIds.map((rosterId) => {
       const gotPlayers = Object.entries(adds).filter(([, owner]) => owner === rosterId).map(([id]) => playerAsset(id, tx.sleeperCreatedAt));
       const gavePlayers = Object.entries(drops).filter(([, owner]) => owner === rosterId).map(([id]) => playerAsset(id, tx.sleeperCreatedAt));
       const gotPicks = picks.filter((p) => p.owner_id === rosterId).map((p) => pickAsset(p, tx.sleeperCreatedAt));
@@ -175,6 +182,8 @@ export default async function TransactionsPage({ searchParams, review = false }:
       return {
         rosterId: review ? identityNumber(activeLeagueId, rosterId) : rosterId,
         identityKey: historicalManager(history, activeLeagueId, rosterId).key,
+        onFieldCheckedAt: matchupData.checkedAt,
+        onField: review && tx.type === "trade" ? tradeOnField(matchupData.weeks as MatchupWeek[], activeLeagueId, tx.sleeperCreatedAt.getTime(), rosterId, Object.entries(adds).filter(([, owner]) => owner === rosterId).map(([id]) => id)) : null,
         name: teamName(rosterId),
         got,
         gave,
@@ -184,6 +193,22 @@ export default async function TransactionsPage({ searchParams, review = false }:
           : null,
       };
     }).filter((side) => side.got.length || side.gave.length || (side.faabSent ?? 0) > 0 || (side.faabReceived ?? 0) > 0);
+    const providerDate = statsGuyHistory[activeTransactionId]?.date;
+    const assets = sides.flatMap(side => [...side.got, ...side.gave]);
+    const canUseStatsGuy = !!providerDate && assets.length > 0 && assets.every(asset => asset.statsGuyValue != null && asset.statsGuyValue > 0);
+    if (tx.type === "trade" && canUseStatsGuy && sides.some(side => (side.grades?.atTrade.missingAssets.length ?? 0) > 0)) {
+      const convert = (asset: Asset): Asset => ({
+        ...asset,
+        atTradeValue: asset.statsGuyValue ?? null,
+        historicalDaily: { value: asset.statsGuyValue!, date: providerDate!, method: "STATSGUY_HISTORY", sourceUrls: ["https://statsguyfantasy.com/"] },
+        atMoveObservedAt: null,
+        atMoveTiming: null,
+      });
+      sides = sides.map(side => {
+        const got = side.got.map(convert), gave = side.gave.map(convert);
+        return { ...side, got, gave, grades: calculateTradeSideGrades({ got, gave, faabSent: side.faabSent, faabReceived: side.faabReceived }) };
+      });
+    }
     return { tx, sides, bid: waiverBid(tx.rawPayload), faab };
   });
 

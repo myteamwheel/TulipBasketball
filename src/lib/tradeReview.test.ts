@@ -100,3 +100,13 @@ test("current balance ranks a used pick by its drafted player, with missing outc
   pick.outcome.currentValue = null;
   assert.equal(rankTrades([deal], "unequalNow", "percent", filters).length, 0);
 });
+
+test("on-field contribution excludes a trade-week start and stops at roster departure", async () => {
+  const { tradeOnField } = await import('./tradeOnField');
+  const team = (week: number, hasPlayer: boolean, starts: boolean) => ({ season: '2023', leagueId: 'league', week, start: week * 1000, rows: [
+    {roster_id: 1, matchup_id: 1, points: 110, custom_points: null, players: hasPlayer ? ['p'] : [], starters: starts ? ['p'] : [], starters_points: starts ? [12] : []},
+    {roster_id: 2, matchup_id: 1, points: 100, custom_points: null, players: [], starters: [], starters_points: []},
+  ] });
+  const weeks = [team(1,true,true),team(2,true,true),team(3,false,false),team(4,true,true)];
+  assert.deepEqual(tradeOnField(weeks,'league',1000,1,['p']), {starts:1,points:12,wins:1,losses:0,ties:0,firstWeek:2,lastWeek:2});
+});

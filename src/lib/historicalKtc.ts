@@ -1,5 +1,5 @@
 /** KTC chart dates have day precision; never present them as intraday observations. */
-export type DailyTradePrice = { value: number; date: string; sourceUrls: string[]; observedAt?: string; method: 'PRIOR_DAY_KTC' | 'ARCHIVED_KTC_PLAYER' | 'ARCHIVED_KTC_ROUND_AVERAGE' | 'KTC_ROUND_AVERAGE' | 'ARCHIVED_KTC_POST_TRADE' | 'ARCHIVED_KTC_PRE_TRADE' };
+export type DailyTradePrice = { value: number; date: string; sourceUrls: string[]; observedAt?: string; method: 'PRIOR_DAY_KTC' | 'ARCHIVED_KTC_PLAYER' | 'ARCHIVED_KTC_ROUND_AVERAGE' | 'KTC_ROUND_AVERAGE' | 'ARCHIVED_KTC_POST_TRADE' | 'ARCHIVED_KTC_PRE_TRADE' | 'STATSGUY_HISTORY' };
 export type RecoveredTradePrices = { fetchedAt: string; prices: Record<string, Record<string, DailyTradePrice>>; matchedPlayers: number; missingPlayers: string[]; failures: string[] };
 export function priorDayPrice(rows: { d: string; v: number }[], tradeAt: number, sourceUrls: string[]): DailyTradePrice | null {
   // Use the preceding UTC calendar date. No same-day closing price/lookahead.

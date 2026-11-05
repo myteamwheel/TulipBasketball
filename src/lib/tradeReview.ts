@@ -19,6 +19,8 @@ export type ReviewAsset = {
 export type ReviewSide = {
   rosterId: number;
   identityKey?: string;
+  onField?: import("./tradeOnField").OnFieldContribution | null;
+  onFieldCheckedAt?: string;
   name: string;
   gave: ReviewAsset[];
   got: ReviewAsset[];
