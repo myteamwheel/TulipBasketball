@@ -17,6 +17,8 @@ export type TradeGradeAsset = {
   atTradeValue: number | null;
   currentValue: number | null;
   currentValueIsRetired?: boolean;
+  /** Explicitly disclosed approximation for a player absent from a complete current board. */
+  currentValueIsUnranked?: boolean;
 };
 
 export type TradeGradeLetter = "A+" | "A" | "A-" | "B+" | "B" | "B-" | "C+" | "C" | "D";
@@ -128,7 +130,7 @@ function calculatePhase(
   key: "atTradeValue" | "currentValue",
 ): TradeGradePhase {
   const assets = [...side.gave, ...side.got];
-  const usable = (asset: TradeGradeAsset) => isUsableValue(asset[key]) || (key === "currentValue" && asset.currentValueIsRetired === true && asset.currentValue === 0);
+  const usable = (asset: TradeGradeAsset) => isUsableValue(asset[key]) || (key === "currentValue" && (asset.currentValueIsRetired === true || asset.currentValueIsUnranked === true) && asset.currentValue === 0);
   const missingAssets = assets
     .filter((asset) => !usable(asset))
     .map((asset) => asset.label);

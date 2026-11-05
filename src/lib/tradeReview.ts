@@ -3,16 +3,18 @@ import type { TradeGradePhase, TradeSnapshotTiming } from "@/lib/tradeGrades";
 
 export type ReviewAsset = {
   id: string;
+  sleeperId?: string;
   playerId: string | null;
   label: string;
   assetType: "player" | "pick";
   atTradeValue: number | null;
   currentValue: number | null;
   currentValueIsRetired?: boolean;
+  currentValueIsUnranked?: boolean;
   retiredSource?: string;
   priceSource?: string;
   historicalDaily?: import("./historicalKtc").DailyTradePrice;
-  outcome?: { label: string; playerId: string | null; sleeperId: string; pickNumber: number; currentValue: number | null; sourceUrl: string };
+  outcome?: { label: string; playerId: string | null; sleeperId: string; pickNumber: number; currentValue: number | null; currentValueIsRetired?: boolean; currentValueIsUnranked?: boolean; retiredSource?: string; sourceUrl: string };
   journey?: { tradeId: string; date: string; label: string }[];
   currentObservedAt?: string | null;
   atMoveObservedAt: string | null;
@@ -30,21 +32,21 @@ export type ReviewSide = {
   faabReceived?: number;
   grades: { atTrade: TradeGradePhase; current: TradeGradePhase } | null;
 };
-export type ReviewTrade = { id: string; date: string; season?: string; sides: ReviewSide[] };
+export type ReviewTrade = { id: string; date: string; season?: string; sides: ReviewSide[]; currentValueSource?: "STATSGUY" };
 export type ReviewSort = "newest" | "winsThen" | "winsNow" | "outcomeNow" | "improved" | "reversals" | "losses" | "largest" | "unequalThen" | "unequalNow" | "equalThen" | "equalNow";
 export type ReviewMetric = "points" | "percent";
 export type ReviewFilters = { team: number | null; season: string; opponent: number | null; asset: "all" | "player" | "pick"; faab: "all" | "yes" | "no" };
 export type RankedTrade = { trade: ReviewTrade; side: ReviewSide | null; score: number | null };
 
 export function eligiblePhase(side: ReviewSide, phase: "atTrade" | "current"): TradeGradePhase | null {
-  const grade = side.grades?.[phase];
+  const grade = phase === "current" ? currentOutcomeGrade(side) : side.grades?.atTrade;
   return grade?.status === "READY" && grade.balance ? grade : null;
 }
 
 export function tradeWinner(trade: ReviewTrade, phase: "atTrade" | "current"): string {
   const rated = trade.sides.filter(side => eligiblePhase(side, phase));
   if (!rated.length) return "Unavailable";
-  if (trade.sides.some(side => side.grades?.[phase].status === "INCOMPLETE" || side.grades === null)) return "Unavailable";
+  if (trade.sides.some(side => (phase === "current" ? currentOutcomeGrade(side) : side.grades?.atTrade)?.status === "INCOMPLETE" || side.grades === null)) return "Unavailable";
   const winning = rated.filter(side => eligiblePhase(side, phase)?.result === "WON");
   if (winning.length === 1 && trade.sides.length === 2) return winning[0].name;
   if (winning.length > 0) return winning.length === 1 ? winning[0].name : "Multiple teams";
@@ -63,8 +65,17 @@ export function currentOutcomeGrade(side: ReviewSide): TradeGradePhase | null {
   const convert = (items: ReviewAsset[]) => items.map(asset => ({
     ...asset,
     currentValue: asset.outcome ? asset.outcome.currentValue : asset.currentValue,
+    currentValueIsRetired: asset.outcome ? asset.outcome.currentValueIsRetired : asset.currentValueIsRetired,
+    currentValueIsUnranked: asset.outcome ? asset.outcome.currentValueIsUnranked : asset.currentValueIsUnranked,
+    assetType: asset.outcome ? "player" as const : asset.assetType,
   }));
   return calculateTradeSideGrades({ ...side, got: convert(side.got), gave: convert(side.gave) }).current;
+}
+
+/** Raw point changes are meaningful only when both periods use the same scale. */
+export function comparablePointScales(trade: ReviewTrade): boolean {
+  const historicalStatsGuy = trade.sides.flatMap(side => [...side.got, ...side.gave]).some(asset => asset.historicalDaily?.method === "STATSGUY_HISTORY");
+  return (trade.currentValueSource === "STATSGUY") === historicalStatsGuy;
 }
 
 export function isBalanceSort(sort: ReviewSort): boolean {
@@ -95,6 +106,7 @@ export function rankTrades(trades: ReviewTrade[], sort: ReviewSort, metric: Revi
   const closestFirst = sort === "equalThen" || sort === "equalNow";
   const ranked = filtered.map(trade => {
     if (balanceSort) return { trade, side: null, score: tradeValueGap(trade, sort, metric) };
+    if (metric === "points" && (sort === "improved" || sort === "reversals") && !comparablePointScales(trade)) return { trade, side: null, score: null };
     const candidates = filters.team === null ? trade.sides : trade.sides.filter(side => side.rosterId === filters.team);
     const scores = candidates.map(side => {
       const then = phaseEdge(side, "atTrade", metric);
@@ -110,8 +122,8 @@ export function rankTrades(trades: ReviewTrade[], sort: ReviewSort, metric: Revi
       if (sort === "reversals") score = then !== null && now !== null && then < 0 && now > 0 ? now - then : null;
       if (sort === "losses") score = now !== null && eligiblePhase(side, "current")?.result === "LOST" ? -now : null;
       if (sort === "largest") {
-        const phase = trade.sides.every(item => item.grades?.current.status !== "INCOMPLETE" && item.grades !== null) ? "current" : "atTrade";
-        score = trade.sides.every(item => item.grades?.[phase].status !== "INCOMPLETE" && item.grades !== null)
+        const phase = trade.sides.every(item => currentOutcomeGrade(item)?.status !== "INCOMPLETE" && item.grades !== null) ? "current" : "atTrade";
+        score = trade.sides.every(item => (phase === "current" ? currentOutcomeGrade(item) : item.grades?.atTrade)?.status !== "INCOMPLETE" && item.grades !== null)
           ? trade.sides.reduce((total, item) => total + (eligiblePhase(item, phase)?.balance?.get.adjustedValue ?? 0), 0)
           : null;
         if (score === 0) score = null;
@@ -128,8 +140,12 @@ export function rankTrades(trades: ReviewTrade[], sort: ReviewSort, metric: Revi
 
 export function coverage(trades: ReviewTrade[]) {
   const total = trades.length;
-  const atTrade = trades.filter(trade => trade.sides.some(side => eligiblePhase(side, "atTrade"))).length;
-  const current = trades.filter(trade => trade.sides.some(side => eligiblePhase(side, "current"))).length;
-  const both = trades.filter(trade => trade.sides.some(side => eligiblePhase(side, "atTrade") && eligiblePhase(side, "current"))).length;
+  const complete = (trade: ReviewTrade, phase: "atTrade" | "current") => {
+    const grades = trade.sides.map(side => phase === "current" ? currentOutcomeGrade(side) : side.grades?.atTrade);
+    return grades.some(grade => grade?.status === "READY") && grades.every(grade => grade && grade.status !== "INCOMPLETE");
+  };
+  const atTrade = trades.filter(trade => complete(trade, "atTrade")).length;
+  const current = trades.filter(trade => complete(trade, "current")).length;
+  const both = trades.filter(trade => complete(trade, "atTrade") && complete(trade, "current")).length;
   return { total, atTrade, current, both };
 }

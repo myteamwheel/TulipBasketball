@@ -36,6 +36,14 @@ test("historical and current eligibility stay independent", () => {
   assert.equal(tradeWinner(missingThen, "current"), "Alpha");
 });
 
+test("coverage excludes trades with a missing team grade", () => {
+  const deal = trade("partial", "2025-10-01T12:00:00Z", [
+    side(1, "Alpha", [asset("sent", 1000, 1000)], [asset("got", 2000, 2000)]),
+    side(2, "Beta", [asset("missing", null, null)], [asset("other", 1000, 1000)]),
+  ]);
+  assert.deepEqual(coverage([deal]), { total: 1, atTrade: 0, current: 0, both: 0 });
+});
+
 test("recorded FAAB is excluded from a grade while player-for-FAAB remains rankable", () => {
   const deal = trade("cash", "2025-10-01T12:00:00.000Z", [
     side(1, "Alpha", [], [asset("player", 1200, 1400)], 25),
