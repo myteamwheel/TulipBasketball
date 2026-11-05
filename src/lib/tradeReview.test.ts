@@ -110,3 +110,13 @@ test("on-field contribution excludes a trade-week start and stops at roster depa
   const weeks = [team(1,true,true),team(2,true,true),team(3,false,false),team(4,true,true)];
   assert.deepEqual(tradeOnField(weeks,'league',1000,1,['p']), {starts:1,points:12,wins:1,losses:0,ties:0,firstWeek:2,lastWeek:2});
 });
+
+test("verified retirement permits an assumed zero current value without treating unknown prices as zero", () => {
+  const retired = { ...asset("Retired", 4000, 0), currentValueIsRetired: true };
+  const active = asset("Active", 2000, 1500);
+  const rated = side(1, "Team", [retired], [active]);
+  assert.equal(rated.grades?.current.status, "READY");
+  assert.equal(rated.grades?.current.balance?.adjustedEdge, 1500);
+  const unverified = side(1, "Team", [{ ...retired, currentValueIsRetired: false }], [active]);
+  assert.equal(unverified.grades?.current.status, "INCOMPLETE");
+});

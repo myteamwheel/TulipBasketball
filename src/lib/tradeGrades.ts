@@ -16,6 +16,7 @@ export type TradeGradeAsset = {
   assetType: "player" | "pick";
   atTradeValue: number | null;
   currentValue: number | null;
+  currentValueIsRetired?: boolean;
 };
 
 export type TradeGradeLetter = "A+" | "A" | "A-" | "B+" | "B" | "B-" | "C+" | "C" | "D";
@@ -127,8 +128,9 @@ function calculatePhase(
   key: "atTradeValue" | "currentValue",
 ): TradeGradePhase {
   const assets = [...side.gave, ...side.got];
+  const usable = (asset: TradeGradeAsset) => isUsableValue(asset[key]) || (key === "currentValue" && asset.currentValueIsRetired === true && asset.currentValue === 0);
   const missingAssets = assets
-    .filter((asset) => !isUsableValue(asset[key]))
+    .filter((asset) => !usable(asset))
     .map((asset) => asset.label);
 
   const sentFaab = Number.isFinite(side.faabSent) && (side.faabSent ?? 0) > 0;
@@ -152,7 +154,7 @@ function calculatePhase(
       grade: null,
       result: null,
       balance: null,
-      valuedAssets: assets.filter((asset) => isUsableValue(asset[key])).length,
+      valuedAssets: assets.filter(usable).length,
       totalAssets: assets.length,
       missingAssets,
       reason: "The Sleeper ledger does not include a complete give-and-get side for this team.",

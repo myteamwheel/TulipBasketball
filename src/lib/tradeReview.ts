@@ -8,6 +8,8 @@ export type ReviewAsset = {
   assetType: "player" | "pick";
   atTradeValue: number | null;
   currentValue: number | null;
+  currentValueIsRetired?: boolean;
+  retiredSource?: string;
   priceSource?: string;
   historicalDaily?: import("./historicalKtc").DailyTradePrice;
   outcome?: { label: string; playerId: string | null; sleeperId: string; pickNumber: number; currentValue: number | null; sourceUrl: string };
