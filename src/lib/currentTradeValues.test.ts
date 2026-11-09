@@ -26,6 +26,7 @@ function trade(a: ReviewAsset[], b: ReviewAsset[]): ReviewTrade {
 test("rejects stale, partial, or mismatched provider boards", () => {
   assert.ok(parseStatsGuySnapshot(players, picks, now, 2));
   assert.equal(parseStatsGuySnapshot({ ...players, total: 3 }, picks, now, 2), null);
+  assert.equal(parseStatsGuySnapshot({ ...players, players: [players.players[0], { id: "2", value: {} }] }, picks, now, 2), null);
   assert.equal(parseStatsGuySnapshot(players, picks, new Date("2026-11-07"), 2), null);
   assert.equal(parseStatsGuySnapshot(players, { ...picks, valuesAsOf: { sf_dynasty: "2026-11-03T13:00:00Z" } }, now, 2), null);
 });

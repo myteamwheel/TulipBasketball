@@ -24,6 +24,7 @@ export function parseStatsGuySnapshot(playersRaw: unknown, picksRaw: unknown, no
     const value = row.value?.sf_dynasty;
     if (typeof value === "number" && Number.isFinite(value) && value > 0) priceByPlayer.set(row.id, value);
   }
+  if (priceByPlayer.size < minimumPlayers) return null;
   const grouped = new Map<string, Map<string, number>>();
   for (const row of picks.picks) {
     const value = row.value?.sf_dynasty;
