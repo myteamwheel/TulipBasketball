@@ -39,7 +39,7 @@ function Leaderboards({picks,lens,setLens}:{picks:GradedPick[];lens:Lens;setLens
 
 function PickCard({p,today}:{p:GradedPick;today:string}) {
   return <article className={box+" p-3 sm:p-4"}>
-    <p className={'text-xs font-semibold '+muted}>{p.year} · {p.auction ? "Startup auction" : "Pick"} {pickLabel(p)} · {p.pos}</p>
+    <p className={'text-xs font-semibold '+muted}>{p.year} · Pick {pickLabel(p)} · {p.pos}</p>
     <h3 className="mt-1 text-lg font-bold">{p.profile ? <a className="hover:underline" href={p.profile}>{p.name}</a> : p.name}</h3>
     <p className={'mb-3 text-sm '+muted}>Picked by <strong>{p.manager ?? "Unknown selector"}</strong>{p.team && p.team!==p.manager ? " · "+p.team : ""}</p>
     <div className="grid grid-cols-2 overflow-hidden rounded-lg border border-[var(--border)]">
@@ -73,7 +73,7 @@ export default function DraftGradesBoard({rows,checked,today}:{rows:GradedPick[]
     <p className={muted}>{rows.length} selections since {seasons.at(-1)}. Follow each player from draft day through today, credited to the manager who selected him.</p>
     <a href="#draft-leaders" className="inline-block py-1 font-semibold text-[var(--info)] underline">See drafter leaderboard ↓</a></header>
     <details className={box+" p-3 text-sm"}><summary className="cursor-pointer font-semibold">How grades, KTC values and fantasy points work</summary><div className={'mt-2 max-w-3xl space-y-2 '+muted}>
-      <p>Each pick starts at 80/100 for meeting its cost. We rank the selections within their draft by slot, or by winning bid in an auction. Every percentile point a player beats or misses that expectation adds or subtracts one score point. Ties share a rank. Grades start at 90 for A, 80 for B, 70 for C and 60 for D.</p>
+      <p>Each pick starts at 80/100 for meeting its cost. We rank the selections within their draft by draft slot. Every percentile point a player beats or misses that expectation adds or subtracts one score point. Ties share a rank. Grades start at 90 for A, 80 for B, 70 for C and 60 for D.</p>
       <p>At draft compares Superflex KTC values from the day before the draft opened, looking back up to seven days. Now gives equal weight to current KTC rank and total fantasy points scored since selection. If one measure is unavailable, the other carries the grade. Market comparisons include only selections with a dated price. Scores cap at 0 and 100. Best and worst picks use the uncapped difference.</p>
       <p>Two-year values use the anniversary or the closest earlier quote within 14 days. Every market value shows its source date. A reported zero is shown as 0. A missing price is shown as unavailable.</p>
       <p>Points use each season’s league scoring across regular-season games played, including time on other fantasy rosters. PPG divides total points by Sleeper games played. Season team names and selectors come from Sleeper’s league and draft records. Production checked {checked}.</p>

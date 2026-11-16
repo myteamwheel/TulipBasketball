@@ -7,7 +7,10 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Draft Grades · Dynasty Boys" };
 
 export default async function DraftGradesPage() {
-  const picks: Selection[] = archive.picks;
+  const picks: Selection[] = archive.picks.filter(pick => !pick.auction).map(pick => ({
+    ...pick,
+    team: !pick.team && pick.manager?.toLowerCase() === "jeffsharpington" ? "Jeff" : pick.team,
+  }));
   const live = await currentDraftQuotes([...new Set(picks.map(p=>p.playerId))]);
   const today = new Date().toISOString().slice(0,10);
   const rows = gradeDrafts(picks.map(p=>{

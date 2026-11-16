@@ -98,7 +98,7 @@ while league_id:
     assert len(stats[year]) > 100
     users = {u["user_id"]: u for u in api(year+"users", "league/"+league_id+"/users")}
     for draft in api("drafts-"+league_id, "league/"+league_id+"/drafts"):
-        if draft["status"] != "complete":
+        if draft["status"] != "complete" or draft["type"] == "auction":
             continue
         did = draft["draft_id"]
         picks = api("picks-"+did, "draft/"+did+"/picks")
@@ -161,7 +161,7 @@ jobs = [(year,d,start,users,p) for year,d,start,users,picks in drafts for p in p
 with ThreadPoolExecutor(max_workers=4) as pool:
     selections = list(pool.map(collect,jobs))
 previous = json.loads(OUT.read_text())["picks"] if OUT.exists() else []
-old_ids = {p["id"] for p in previous}
+old_ids = {p["id"] for p in previous if not p["auction"]}
 if not old_ids.issubset({p["id"] for p in selections}):
     raise ValueError("Previous selections missing; retaining prior archive")
 result = {"checked":today.isoformat(),"picks":selections}
