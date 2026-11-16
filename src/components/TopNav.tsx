@@ -15,6 +15,7 @@ type NavGroup = {
 const groups: NavGroup[] = [
   { label: "My Team", href: "/" },
   { label: "Trade Review", href: "/trade-review" },
+  { label: "Draft Grades", href: "/draft-grades" },
   {
     label: "Team Outlook",
     href: "/team-outlook",
@@ -80,7 +81,7 @@ export default function TopNav() {
   const openMenuId = openGroup
     ? `nav-menu-${openGroup.label.toLowerCase().replaceAll(" ", "-")}`
     : undefined;
-  const mobilePrimaryActive = ["/", "/trade-review", "/team-outlook", "/trade-finder"].some(
+  const mobilePrimaryActive = ["/", "/trade-review", "/draft-grades", "/trade-finder"].some(
     href => href === "/" ? pathname === "/" : pathname.startsWith(href),
   );
   const mobileMoreOpen = openMenu?.label === "More" && openMenu.pathname === pathname;
@@ -186,7 +187,7 @@ export default function TopNav() {
         {[
           { label: "Team", href: "/" },
           { label: "Review", href: "/trade-review" },
-          { label: "Outlook", href: "/team-outlook" },
+          { label: "Drafts", href: "/draft-grades" },
           { label: "Trade Lab", href: "/trade-finder" },
         ].map(item => {
           const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
@@ -194,7 +195,7 @@ export default function TopNav() {
         })}
         <button type="button" aria-label="More navigation" aria-expanded={mobileMoreOpen} aria-controls="mobile-more-menu" onClick={() => setOpenMenu(mobileMoreOpen ? null : { label: "More", pathname })} className={"min-h-11 rounded-md px-1 text-xs font-semibold " + (mobileMoreOpen || !mobilePrimaryActive ? "bg-emerald-700 text-white" : "text-neutral-500")}>More ▾</button>
       </div>
-      {mobileMoreOpen ? <div id="mobile-more-menu" className="absolute inset-x-0 top-full z-50 grid max-h-[70vh] grid-cols-2 gap-1 overflow-y-auto rounded-b-xl border border-neutral-700 bg-neutral-900 p-2 shadow-xl lg:hidden">{groups.flatMap(group => [{ href: group.href, label: group.label }, ...(group.links ?? [])]).filter(item => !["/", "/trade-review", "/team-outlook", "/trade-finder"].includes(item.href)).map(item => <Link key={item.href} href={item.href} aria-current={pathname === item.href ? "page" : undefined} onClick={() => setOpenMenu(null)} className={`flex min-h-11 items-center rounded-md px-3 text-sm hover:bg-neutral-800 ${pathname === item.href ? "bg-emerald-950 text-emerald-300" : "text-neutral-200"}`}>{item.label}</Link>)}<div className="col-span-2 border-t border-neutral-800 pt-2"><MotionToggle /></div></div> : null}
+      {mobileMoreOpen ? <div id="mobile-more-menu" className="absolute inset-x-0 top-full z-50 grid max-h-[70vh] grid-cols-2 gap-1 overflow-y-auto rounded-b-xl border border-neutral-700 bg-neutral-900 p-2 shadow-xl lg:hidden">{groups.flatMap(group => [{ href: group.href, label: group.label }, ...(group.links ?? [])]).filter(item => !["/", "/trade-review", "/draft-grades", "/trade-finder"].includes(item.href)).map(item => <Link key={item.href} href={item.href} aria-current={pathname === item.href ? "page" : undefined} onClick={() => setOpenMenu(null)} className={`flex min-h-11 items-center rounded-md px-3 text-sm hover:bg-neutral-800 ${pathname === item.href ? "bg-emerald-950 text-emerald-300" : "text-neutral-200"}`}>{item.label}</Link>)}<div className="col-span-2 border-t border-neutral-800 pt-2"><MotionToggle /></div></div> : null}
       {openGroup?.links?.length ? (
         <div
           id={openMenuId}
