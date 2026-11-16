@@ -18,8 +18,12 @@ function leaders(group: GradedPick[], lens: Lens) {
   return managers.filter(m=>m.average===managers[0].average).map(m=>`${m.name} (${m.graded})`).join(" · ");
 }
 
-function Leaderboards({picks,lens,setLens}:{picks:GradedPick[];lens:Lens;setLens:(value:Lens)=>void}) {
-  const managers = rankManagers(picks,lens);
+function Leaderboards({picks: picksAll,lens,setLens,currentManagers}:{picks:GradedPick[];lens:Lens;setLens:(value:Lens)=>void;currentManagers:{id:string;name:string}[]}) {
+  const [styleSort,setStyleSort] = useState("deviation");
+  const current = new Map(currentManagers.map(m => [m.id,m.name]));
+  const picks = picksAll.filter(p => p.owner && current.has(p.owner)).map(p => ({...p, manager:current.get(p.owner!) ?? p.manager}));
+  const rankedManagers = rankManagers(picks,lens);
+  const managers = [...rankedManagers, ...currentManagers.filter(m => !rankedManagers.some(r => r.owner === m.id)).map(m => ({owner:m.id,name:m.name,count:0,graded:0,sum:0,fs:0,average:null}))];
   const ranked = picks.filter(p=>p[lens] !== null).sort((a,b)=>b[lens]!.edge-a[lens]!.edge);
   const best = ranked[0], worst = ranked.at(-1);
   const awards = (p:GradedPick|undefined) => !p ? "No graded selections" : ranked.filter(r=>Math.abs(r[lens]!.edge-p[lens]!.edge)<1e-9).map(r=>`${r.name} · ${r.year} ${pickLabel(r)} · ${r.manager ?? "Selector unknown"}`).join(" / ");
@@ -27,12 +31,30 @@ function Leaderboards({picks,lens,setLens}:{picks:GradedPick[];lens:Lens;setLens
   const years = [...new Set(picks.map(p=>p.year))].sort((a,b)=>b-a);
   const rookie = picks.filter(p=>!p.auction);
   const rounds = [...new Set(rookie.map(p=>p.round))].sort((a,b)=>a-b);
+  const managerStyles = managers.map(manager => {
+    const selections = picks.filter(p => p.owner === manager.owner);
+    const deviations = selections.flatMap(p => {
+      if (!p.at) return [];
+      const board = picksAll.filter(x => x.draft === p.draft && x.at);
+      if (board.length < 2) return [];
+      const consensus = 1 + board.filter(x => x.at!.value > p.at!.value).length +
+        (board.filter(x => x.at!.value === p.at!.value).length - 1) / 2;
+      const actual = 1 + board.filter(x => x.overall < p.overall).length;
+      return [{ reach: consensus - actual, score:p.outcome?.score ?? null }];
+    });
+    const reaches = deviations.filter(d => d.reach > 0 && d.score !== null);
+    return {...manager, sample:deviations.length,
+      deviation: deviations.length ? deviations.reduce((n,d)=>n+Math.abs(d.reach),0)/deviations.length : null,
+      reachCount:reaches.length,
+      payoff:reaches.length ? reaches.reduce((n,d)=>n+d.score!,0)/reaches.length : null};
+  });
   return <section id="draft-leaders" className="scroll-mt-40 space-y-4">
-    <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-2xl font-bold">Drafter leaderboard</h2><p className={muted}>All managers in the selected season. Tied picks share honors.</p></div>
+    <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-2xl font-bold">Drafter leaderboard</h2><p className={muted}>Current managers only, credited for selections they personally made. Tied picks share honors.</p></div>
       <label className="text-xs">Rank using<select className={control} value={lens} onChange={e=>setLens(e.target.value as Lens)}><option value="outcome">Grade now</option><option value="entry">Grade at draft</option></select></label></div>
     <div className="grid gap-2 sm:grid-cols-3">{[["Best pick",awards(best)],["Worst pick",awards(worst)],["Most F selections",maxF ? managers.filter(m=>m.fs===maxF).map(m=>m.name).join(" · ")+` (${maxF})` : "None"]].map(([label,v])=><div key={label} className={box+" p-3"}><h3 className={'text-xs font-semibold '+muted}>{label}</h3><p className="mt-1 font-semibold">{v}</p></div>)}</div>
     <div className={box+" overflow-hidden"}><table className="w-full text-left text-sm"><caption className="p-3 text-left font-semibold">Best to worst by average score</caption><thead className="bg-[var(--surface-muted)] text-xs"><tr>{["Manager","Graded / picks","Avg / 100","Fs"].map(c=><th key={c} className="p-2 sm:p-3">{c}</th>)}</tr></thead>
       <tbody>{managers.map(m=><tr key={m.owner} className="border-t border-[var(--border)]"><th className="break-all p-2 text-left font-semibold sm:p-3">{m.name}</th><td className="p-2">{m.graded} / {m.count}</td><td className="p-2 font-bold">{m.average?.toFixed(1) ?? "—"}</td><td className="p-2">{m.fs}</td></tr>)}</tbody></table></div>
+    <div className={box+" overflow-x-auto"}><table className="w-full text-left text-sm"><caption className="p-3 text-left font-semibold">Drafting style · current managers <label className="ml-2 text-xs font-normal">Sort <select className={control} value={styleSort} onChange={e=>setStyleSort(e.target.value)}><option value="deviation">Most off-script</option><option value="safe">Most consensus-aligned</option><option value="best">Best reach outcomes</option><option value="worst">Worst reach outcomes</option></select></label></caption><thead className="bg-[var(--surface-muted)] text-xs"><tr>{["Manager","Compared","Avg deviation","Reaches","Reach grade now"].map(c=><th key={c} className="p-2">{c}</th>)}</tr></thead><tbody>{managerStyles.sort((a,b)=>{ const x=styleSort === "best" || styleSort === "worst" ? a.payoff : a.deviation; const y=styleSort === "best" || styleSort === "worst" ? b.payoff : b.deviation; return x === null ? (y === null ? 0 : 1) : y === null ? -1 : (styleSort === "safe" || styleSort === "worst" ? x-y : y-x); }).map(m=><tr key={m.owner} className="border-t border-[var(--border)]"><th className="p-2 text-left">{m.name}</th><td className="p-2">{m.sample}</td><td className="p-2">{m.deviation?.toFixed(1) ?? "—"} spots</td><td className="p-2">{m.reachCount}</td><td className="p-2">{m.payoff?.toFixed(1) ?? "—"}</td></tr>)}</tbody></table><p className={'p-3 text-xs '+muted}>Consensus is estimated from KTC values before the draft among players selected in that draft. Average deviation is the absolute difference between draft order and KTC order. Reaches were selected earlier than their KTC order. A lower deviation suggests a safer, more consensus-aligned drafter. Reach grade is the average current score for reaches with a current grade. Counts show the sample; this is not Sleeper mock ADP.</p></div>
     <div className="grid gap-3 sm:grid-cols-2">{[["Best drafter by year",years.map(y=>[String(y),leaders(picks.filter(p=>p.year===y),lens)])],["Best drafter by rookie round",rounds.map(r=>["Round "+r,leaders(rookie.filter(p=>p.round===r),lens)])]].map(([title,items])=><div key={String(title)} className={box+" p-4"}><h3 className="font-bold">{String(title)}</h3><p className={'mb-2 text-xs '+muted}>By average score · graded picks in parentheses</p>{(items as string[][]).length===0 && <p className={muted}>No rookie rounds in this season.</p>}{(items as string[][]).map(([key,val])=><div key={key} className="grid grid-cols-[4.25rem_1fr] gap-2 border-t border-[var(--border)] py-2 text-sm"><strong>{key}</strong><span>{val}</span></div>)}</div>)}</div>
   </section>;
 }
@@ -72,7 +94,7 @@ function PickCard({p,today,rows}:{p:GradedPick;today:string;rows:GradedPick[]}) 
   </article>;
 }
 
-export default function DraftGradesBoard({rows,checked,today}:{rows:GradedPick[];checked:string;today:string}) {
+export default function DraftGradesBoard({rows,checked,today,currentManagers}:{rows:GradedPick[];checked:string;today:string;currentManagers:{id:string;name:string}[]}) {
   const [year,setYear]=useState("all"),[owner,setOwner]=useState("all"),[search,setSearch]=useState(""),[order,setOrder]=useState("board"),[page,setPage]=useState(0),[lens,setLens]=useState<Lens>("outcome");
   const seasons=[...new Set(rows.map(p=>p.year))].sort((a,b)=>b-a);
   const season=useMemo(()=>rows.filter(p=>year==="all" || p.year===Number(year)),[rows,year]);
@@ -107,5 +129,5 @@ export default function DraftGradesBoard({rows,checked,today}:{rows:GradedPick[]
       <p aria-live="polite" className={'text-sm '+muted}>{filtered.length ? `${page*PAGE+1}–${Math.min(filtered.length,(page+1)*PAGE)} of ${filtered.length} selections` : "No selections match these filters."}</p>
       <div className="grid gap-3 md:grid-cols-2">{filtered.slice(page*PAGE,(page+1)*PAGE).map(p=><PickCard key={p.id} p={p} today={today} rows={rows}/>)}</div>
       {pages>1 && <nav aria-label="Draft selection pages" className="flex items-center justify-center gap-4 text-sm"><button className="min-h-11 px-2 disabled:opacity-40" disabled={page===0} onClick={()=>setPage(page-1)}>← Previous</button><span>{page+1} / {pages}</span><button className="min-h-11 px-2 disabled:opacity-40" disabled={page+1>=pages} onClick={()=>setPage(page+1)}>Next →</button></nav>}
-    </section><Leaderboards picks={season} lens={lens} setLens={setLens}/></div>;
+    </section><Leaderboards picks={season} lens={lens} setLens={setLens} currentManagers={currentManagers}/></div>;
 }
