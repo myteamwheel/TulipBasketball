@@ -21,5 +21,16 @@ test("valuable late selection retains at least a C despite a nearby star", () =>
 });
 test("missing current quotes never create opportunity penalties", () => {
   const board = [pick(1,3000), {...pick(2,9000),now:null}];
-  assert.equal(gradeDrafts(board,"2026-11-15")[0].outcome,null);
+  assert.equal(gradeDrafts(board,"2026-11-15")[0].outcome!.penalty,0);
+});
+test("productive prior seasons improve an older pick even after current value falls", () => {
+  const base = {...pick(25,700,3), year:2022, start:"2022-05-01", seasons:[]};
+  const productive = {...base, seasons:[{year:2022,games:15,points:200},{year:2023,games:15,points:200}]};
+  assert.ok(gradeDrafts([productive],"2026-11-15")[0].outcome!.score > gradeDrafts([base],"2026-11-15")[0].outcome!.score);
+});
+test("nearby same-position alternatives carry more weight", () => {
+  const base = pick(1,3000);
+  const same = {...pick(2,6000),pos:"WR"};
+  const different = {...same,pos:"RB"};
+  assert.ok(gradeDrafts([base,same],"2026-11-15")[0].outcome!.penalty > gradeDrafts([base,different],"2026-11-15")[0].outcome!.penalty);
 });

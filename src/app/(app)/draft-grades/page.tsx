@@ -1,6 +1,7 @@
 import archive from "@/data/draft-selections.json";
 import DraftGradesBoard from "@/components/DraftGradesBoard";
 import { currentDraftQuotes } from "@/lib/draftMarket";
+import { draftContributions, contributionChecked } from "@/lib/draftContributions";
 import { getLeagueHistory } from "@/lib/leagueHistory";
 import { gradeDrafts, type Selection } from "@/lib/draftGrades";
 
@@ -20,5 +21,5 @@ export default async function DraftGradesPage() {
     const quote = live.get(p.playerId);
     return quote && (!p.now || quote.date >= p.now.date) ? {...p, now:quote} : p;
   }),today);
-  return <DraftGradesBoard rows={rows} checked={archive.checked} today={today} currentManagers={currentManagers} />;
+  return <DraftGradesBoard rows={rows} checked={archive.checked} today={today} currentManagers={currentManagers} contributions={draftContributions(picks, history)} contributionChecked={contributionChecked} />;
 }

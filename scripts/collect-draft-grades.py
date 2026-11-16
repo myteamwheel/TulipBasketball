@@ -74,7 +74,8 @@ if len(catalog) < 800 or not 0 <= (today-board_date).days <= 7:
     raise ValueError("Incomplete or outdated KTC catalog")
 by_name = index_by(catalog, lambda p: (norm(p["playerName"]), p["position"]))
 by_id = {str(p["playerID"]): p for p in catalog}
-overrides = dict(re.findall(r'sleeperId: "(\d+)".*?ktcId: "(\d+)"', Path("src/lib/ktcIdentityOverrides.ts").read_text()))
+overrides = {"8151": "1227"}
+overrides.update(dict(re.findall(r'sleeperId: "(\d+)".*?ktcId: "(\d+)"', Path("src/lib/ktcIdentityOverrides.ts").read_text())))
 sheet = list(csv.reader(io.StringIO(download("sf.csv", ARCHIVE))))
 assert sheet[0][0] == "Date" and len(sheet) > 1000
 columns = index_by(range(1,len(sheet[0])), lambda i: norm(sheet[0][i]))
@@ -125,7 +126,7 @@ def collect(job):
     anniversary = start + timedelta(days=730) if start.month == 2 and start.day == 29 else start.replace(year=start.year+2)
     before = start-timedelta(days=1)
     profile = "https://keeptradecut.com/dynasty-rankings/players/"+player["slug"] if player else None
-    if player and (not series_value(series,before,0) or (anniversary <= today and not series_value(series,anniversary,0)) or not series_value(series,today,1)):
+    if player and (not series_value(series,before,0) or (anniversary <= today and not series_value(series,anniversary,0)) or not series_value(series,today,1) or any(start.replace(year=start.year+y) <= today and not series_value(series,start.replace(year=start.year+y),0) for y in (1,3))):
         try:
             text = download("profile-"+str(player["playerID"]), profile)
         except subprocess.CalledProcessError:
@@ -136,6 +137,7 @@ def collect(job):
             for pt in json.loads(chart[1])["overallValue"]:
                 d = pt["d"]
                 series["20"+d[:2]+"-"+d[2:4]+"-"+d[4:]] = ktc(pt["v"])
+    milestones = {years: series_value(series, start.replace(year=start.year + years), 14) for years in (1, 3)}
     now = series_value(series,today,7)
     if player and (not now or board_date.isoformat() > now["date"]):
         value = ktc(player["superflexValues"]["value"])
@@ -158,7 +160,7 @@ def collect(job):
                 bid=int(meta["amount"]) if draft["type"]=="auction" else None,playerId=pid,name=name,pos=meta["position"],
                 owner=owner,manager=user.get("display_name") or owner,team=(user.get("metadata") or {}).get("team_name"),
                 profile=profile,at=series_value(series,before,7),two=series_value(series,anniversary,14),due=anniversary.isoformat(),
-                now=now,games=games,points=round(points,2),seasons=sorted(seasons,key=lambda s:s["year"]))
+                now=now,one=milestones[1],three=milestones[3],games=games,points=round(points,2),seasons=sorted(seasons,key=lambda s:s["year"]))
 jobs = [(year,d,start,users,p) for year,d,start,users,picks in drafts for p in picks]
 # One job per selection. A player can be drafted twice; use independent temporary files for concurrent downloads.
 with ThreadPoolExecutor(max_workers=4) as pool:

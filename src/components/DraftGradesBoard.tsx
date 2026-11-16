@@ -1,5 +1,6 @@
 "use client";
 
+import type { DraftContribution } from "@/lib/draftContributions";
 import { useMemo, useState } from "react";
 import { pickLabel, rankManagers, type Grade, type GradedPick, type Lens } from "@/lib/draftGrades";
 
@@ -59,7 +60,7 @@ function Leaderboards({picks: picksAll,lens,setLens,currentManagers}:{picks:Grad
   </section>;
 }
 
-function PickCard({p,today,rows}:{p:GradedPick;today:string;rows:GradedPick[]}) {
+function PickCard({p,today,rows,contribution,contributionChecked}:{p:GradedPick;today:string;rows:GradedPick[];contribution?:DraftContribution;contributionChecked:string}) {
   const alternatives = rows.filter(candidate => candidate.draft === p.draft && candidate.overall > p.overall && candidate.overall <= p.overall + 4);
   const comparable = alternatives.filter(candidate => candidate.current !== null);
   const better = p.current ? comparable.filter(candidate => candidate.current!.value > p.current!.value).sort((a,b) => a.overall-b.overall) : [];
@@ -76,12 +77,26 @@ function PickCard({p,today,rows}:{p:GradedPick;today:string;rows:GradedPick[]}) 
       <p className="font-semibold">Next four picks · hindsight</p>
       {better.length ? <><p className={muted}>{better.length} of {comparable.length} comparable selections have higher current KTC value.</p><ul className="mt-1 space-y-1">{better.map(candidate=><li key={candidate.id}><strong>{candidate.name}</strong> · {pickLabel(candidate)} · {format(candidate.current!.value)} KTC · +{format(candidate.current!.value-p.current!.value)} · {candidate.outcome ? candidate.outcome.letter + " " + candidate.outcome.score + "/100" : "Unrated"}</li>)}</ul></> :
         <p className={muted}>{!p.current ? "Current value unavailable for this selection." : !alternatives.length ? "No later picks in this draft." : !comparable.length ? "Current values unavailable for the next picks." : "No higher current KTC value among the next four picks with available values."}</p>}
-      {p.outcome && p.outcome.penalty > 0 && <p className={'mt-1 text-xs '+muted}>Nearby alternatives reduced this score by {p.outcome.penalty} points before any minimum score.</p>}
+      {p.outcome && p.outcome.penalty > 0 && <p className={'mt-1 text-xs '+muted}>Nearby alternatives reduced this score by {p.outcome.penalty} points.</p>}
       {comparable.length < alternatives.length && <p className={'text-xs '+muted}>{alternatives.length-comparable.length} of the next {alternatives.length} picks lack a current value.</p>}
     </div>
     <dl className="mt-3 grid grid-cols-2 gap-3 text-sm"><div><dt className={'text-xs '+muted}>KTC at two years</dt><dd className="font-semibold">{p.two ? format(p.two.value) : p.due>today ? "Not due yet" : "Unavailable"}</dd><dd className={'text-xs '+muted}>{p.two ? (p.two.date!==p.due ? "Approx. · " : "")+p.two.date : (p.due>today ? "Due " : "Target ")+p.due}</dd></div>
       <div><dt className={'text-xs '+muted}>Fantasy points / game</dt><dd className="font-semibold">{p.games ? (p.points/p.games).toFixed(2) : "—"}</dd><dd className={'text-xs '+muted}>{format(p.games)} {p.games === 1 ? "game" : "games"} since draft</dd></div>
       <div><dt className={'text-xs '+muted}>Total fantasy points</dt><dd className="font-semibold">{p.games ? format(Math.round(p.points * 100) / 100) : "—"}</dd></div></dl>
+    <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+      {([[1,p.one],[3,p.three]] as const).map(([years,quote]) => {
+        const due = new Date(p.start + "T00:00:00Z");
+        due.setUTCFullYear(due.getUTCFullYear() + years);
+        const date = due.toISOString().slice(0,10);
+        return <div key={years}><p className={'text-xs '+muted}>KTC at {years} {years === 1 ? "year" : "years"}</p><p className="font-semibold">{quote ? format(quote.value) : date > today ? "Not due yet" : "Unavailable"}</p><p className={'text-xs '+muted}>{quote ? (quote.date !== date ? "Approx. · " : "") + quote.date : (date > today ? "Due " : "Target ") + date}</p></div>;
+      })}
+    </div>
+    <div className="mt-3 rounded-lg bg-[var(--surface-muted)] p-3 text-sm">
+      <p className="font-semibold">For the drafting manager</p>
+      <p>{contribution?.starts ? `${contribution.starts} recorded starts · ${format(contribution.points)} starting points` : "No starts found in the available matchup records."}</p>
+      {contribution?.seasons.map(season=><p key={season.year} className={muted}>{season.year} · {season.starts} starts · {format(season.points)} points</p>)}
+      <p className={'text-xs '+muted}>Completed league matchups checked through {contributionChecked}. Includes starts after reacquisition. Records may be incomplete.</p>
+    </div>
     <div className="mt-3 border-t border-[var(--border)] pt-3">
       <p className="text-sm font-semibold">Fantasy points per game by season</p>
       <p className={'text-xs '+muted}>Regular-season averages since selection · league scoring</p>
@@ -94,7 +109,7 @@ function PickCard({p,today,rows}:{p:GradedPick;today:string;rows:GradedPick[]}) 
   </article>;
 }
 
-export default function DraftGradesBoard({rows,checked,today,currentManagers}:{rows:GradedPick[];checked:string;today:string;currentManagers:{id:string;name:string}[]}) {
+export default function DraftGradesBoard({rows,checked,today,currentManagers,contributions,contributionChecked}:{rows:GradedPick[];checked:string;today:string;currentManagers:{id:string;name:string}[];contributions:Record<string,DraftContribution>;contributionChecked:string}) {
   const [year,setYear]=useState("all"),[owner,setOwner]=useState("all"),[search,setSearch]=useState(""),[order,setOrder]=useState("board"),[page,setPage]=useState(0),[lens,setLens]=useState<Lens>("outcome");
   const seasons=[...new Set(rows.map(p=>p.year))].sort((a,b)=>b-a);
   const season=useMemo(()=>rows.filter(p=>year==="all" || p.year===Number(year)),[rows,year]);
@@ -115,9 +130,10 @@ export default function DraftGradesBoard({rows,checked,today,currentManagers}:{r
     <p className={muted}>{rows.length} selections since {seasons.at(-1)}. Follow each player from draft day through today, credited to the manager who selected him.</p>
     <a href="#draft-leaders" className="inline-block py-1 font-semibold text-[var(--info)] underline">See drafter leaderboard ↓</a></header>
     <details className={box+" p-3 text-sm"}><summary className="cursor-pointer font-semibold">How grades, KTC values and fantasy points work</summary><div className={'mt-2 max-w-3xl space-y-2 '+muted}>
-      <p>Each pick starts at 80/100 for meeting its cost. We rank the selections within their draft by draft slot. Every percentile point a player beats or misses that expectation adds or subtracts one score point. Ties share a rank. Grades start at 90 for A, 80 for B, 70 for C and 60 for D.</p>
-      <p>At draft compares Superflex KTC values from the day before the draft opened, looking back up to seven days. Now compares the player’s current KTC rank among that draft class with the draft slot. Up to four subsequent selections can reduce each grade based on their value advantage, with maximum deductions of 12, 9, 6 and 4 points in rounds one through four. In rounds three and four, a player worth at least 3,000 receives at least 70. Missing values receive no penalty. Fantasy points per game are displayed separately. A player’s value can increase while their grade falls if other players in the class gained more. Market comparisons include only selections with a dated price. Scores cap at 0 and 100. Best and worst picks use the uncapped difference.</p>
-      <p>Two-year values use the anniversary or the closest earlier quote within 14 days. Every market value shows its source date. A reported zero is shown as 0. A missing price is shown as unavailable.</p>
+      <p>At draft compares the selection with the draft-day KTC order among players selected in the same draft. This is a market estimate rather than Sleeper mock ADP. It does not use future outcomes.</p>
+      <p>Now combines current KTC value relative to round expectations with fantasy production across every season since the draft. Position-adjusted points per game and games played contribute to the production score, which gains weight as the pick ages. When current KTC is unavailable, an older pick can still receive a production-based grade. Recent picks are preliminary.</p>
+      <p>Higher-valued players picked in the next four spots can reduce the current score. Same-position alternatives and those taken within two picks carry more weight, especially in early rounds. Missing values do not count as zero. Fantasy production covers all NFL teams; the drafting-manager box separately shows recorded fantasy lineup starts.</p>
+      <p>Anniversary values use the date or the closest earlier quote within 14 days. Every market value shows its source date. A reported zero is shown as 0. A missing price is shown as unavailable.</p>
       <p>Points use each season’s league scoring across regular-season games played, including time on other fantasy rosters. PPG divides total points by Sleeper games played. Season team names and selectors come from Sleeper’s league and draft records. Production checked {checked}.</p>
       <p><a className="underline" href="https://docs.sleeper.com/#get-all-picks-in-a-draft">Sleeper draft records</a> · <a className="underline" href="https://docs.google.com/spreadsheets/d/1n5aqip8iFCpltO8deiS7q9m3u_dFvKTZpwzfZXVTpgs/edit#gid=991742784">Historical Superflex archive</a></p>
     </div></details>
@@ -127,7 +143,7 @@ export default function DraftGradesBoard({rows,checked,today,currentManagers}:{r
       <label className="text-xs">Order by<select className={control} value={order} onChange={e=>{setOrder(e.target.value);setPage(0)}}>{[["board","Draft order"],["entry-desc","Best at draft"],["entry-asc","Worst at draft"],["outcome-desc","Best now"],["outcome-asc","Worst now"],["ppg","Highest PPG"]].map(([k,v])=><option value={k} key={k}>{v}</option>)}</select></label>
       <label className="text-xs">Player<input type="search" className={control} placeholder="Search players" value={search} onChange={e=>{setSearch(e.target.value);setPage(0)}}/></label></div>
       <p aria-live="polite" className={'text-sm '+muted}>{filtered.length ? `${page*PAGE+1}–${Math.min(filtered.length,(page+1)*PAGE)} of ${filtered.length} selections` : "No selections match these filters."}</p>
-      <div className="grid gap-3 md:grid-cols-2">{filtered.slice(page*PAGE,(page+1)*PAGE).map(p=><PickCard key={p.id} p={p} today={today} rows={rows}/>)}</div>
+      <div className="grid gap-3 md:grid-cols-2">{filtered.slice(page*PAGE,(page+1)*PAGE).map(p=><PickCard key={p.id} p={p} today={today} rows={rows} contribution={contributions[p.id]} contributionChecked={contributionChecked}/>)}</div>
       {pages>1 && <nav aria-label="Draft selection pages" className="flex items-center justify-center gap-4 text-sm"><button className="min-h-11 px-2 disabled:opacity-40" disabled={page===0} onClick={()=>setPage(page-1)}>← Previous</button><span>{page+1} / {pages}</span><button className="min-h-11 px-2 disabled:opacity-40" disabled={page+1>=pages} onClick={()=>setPage(page+1)}>Next →</button></nav>}
     </section><Leaderboards picks={season} lens={lens} setLens={setLens} currentManagers={currentManagers}/></div>;
 }
