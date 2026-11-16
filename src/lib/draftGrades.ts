@@ -50,18 +50,15 @@ export function gradeDrafts(picks: Selection[], asOf: string): GradedPick[] {
     const entryMarket = percentiles(entryBoard,p=>p.at!.value);
     const nowMarket = percentiles(board,p=>fresh(p)?.value ?? null);
     const nowCost = percentiles(board.filter(p=>fresh(p)),cost);
-    const played = board.some(p=>p.games > 0);
-    const production = percentiles(board,p=>p.points);
-    const productionCost = percentiles(board,cost);
     return board.map(p=>{
       const relative = (market: Map<string,number>, expected: Map<string,number>) => {
         const m = market.get(p.id), e = expected.get(p.id);
         return m === undefined || e === undefined ? null : m-e;
       };
       const entry = relative(entryMarket,entryCost);
-      const signals = [relative(nowMarket,nowCost), played ? relative(production,productionCost) : null].filter((n): n is number => n !== null);
+      const currentEdge = relative(nowMarket,nowCost);
       return { ...p, entry: entry === null ? null : grade(entry), current:fresh(p),
-        outcome:signals.length ? grade(signals.reduce((a,b)=>a+b,0)/signals.length) : null };
+        outcome:currentEdge === null ? null : grade(currentEdge) };
     });
   });
 }

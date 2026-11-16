@@ -45,10 +45,10 @@ function PickCard({p,today}:{p:GradedPick;today:string}) {
     <div className="grid grid-cols-2 overflow-hidden rounded-lg border border-[var(--border)]">
       {([["At draft",p.entry,p.at],["Now",p.outcome,p.current]] as const).map(([title,g,quote])=><div key={title} className="min-w-0 border-r border-[var(--border)] bg-[var(--surface-muted)] p-2 last:border-0 sm:p-3">
         <div className={'text-xs font-semibold '+muted}>{title}</div><div className="my-1 flex items-center gap-2"><Badge g={g}/><span className="text-sm">{g ? g.score+"/100" : "Unrated"}</span></div>
-        <p className="text-sm font-semibold">{quote ? format(quote.value)+" KTC" : "KTC unavailable"}</p><p className={'text-xs '+muted}>{quote?.date ?? (title==="Now" && g ? "Production only" : "No dated quote")}</p></div>)}
+        <p className="text-sm font-semibold">{quote ? format(quote.value)+" KTC" : "KTC unavailable"}</p><p className={'text-xs '+muted}>{quote?.date ?? "No dated quote"}</p></div>)}
     </div>
     <dl className="mt-3 grid grid-cols-2 gap-3 text-sm"><div><dt className={'text-xs '+muted}>KTC at two years</dt><dd className="font-semibold">{p.two ? format(p.two.value) : p.due>today ? "Not due yet" : "Unavailable"}</dd><dd className={'text-xs '+muted}>{p.two ? (p.two.date!==p.due ? "Approx. · " : "")+p.two.date : (p.due>today ? "Due " : "Target ")+p.due}</dd></div>
-      <div><dt className={'text-xs '+muted}>Fantasy points / game</dt><dd className="font-semibold">{p.games ? (p.points/p.games).toFixed(2) : "—"}</dd><dd className={'text-xs '+muted}>{format(p.games)} games since draft</dd></div></dl>
+      <div><dt className={'text-xs '+muted}>Fantasy points / game</dt><dd className="font-semibold">{p.games ? (p.points/p.games).toFixed(2) : "—"}</dd><dd className={'text-xs '+muted}>{format(p.games)} {p.games === 1 ? "game" : "games"} since draft</dd></div></dl>
   </article>;
 }
 
@@ -74,7 +74,7 @@ export default function DraftGradesBoard({rows,checked,today}:{rows:GradedPick[]
     <a href="#draft-leaders" className="inline-block py-1 font-semibold text-[var(--info)] underline">See drafter leaderboard ↓</a></header>
     <details className={box+" p-3 text-sm"}><summary className="cursor-pointer font-semibold">How grades, KTC values and fantasy points work</summary><div className={'mt-2 max-w-3xl space-y-2 '+muted}>
       <p>Each pick starts at 80/100 for meeting its cost. We rank the selections within their draft by draft slot. Every percentile point a player beats or misses that expectation adds or subtracts one score point. Ties share a rank. Grades start at 90 for A, 80 for B, 70 for C and 60 for D.</p>
-      <p>At draft compares Superflex KTC values from the day before the draft opened, looking back up to seven days. Now gives equal weight to current KTC rank and total fantasy points scored since selection. If one measure is unavailable, the other carries the grade. Market comparisons include only selections with a dated price. Scores cap at 0 and 100. Best and worst picks use the uncapped difference.</p>
+      <p>At draft compares Superflex KTC values from the day before the draft opened, looking back up to seven days. Now compares the player’s current KTC rank among that draft class with the draft slot. Fantasy points per game are displayed separately. A player’s value can increase while their grade falls if other players in the class gained more. Market comparisons include only selections with a dated price. Scores cap at 0 and 100. Best and worst picks use the uncapped difference.</p>
       <p>Two-year values use the anniversary or the closest earlier quote within 14 days. Every market value shows its source date. A reported zero is shown as 0. A missing price is shown as unavailable.</p>
       <p>Points use each season’s league scoring across regular-season games played, including time on other fantasy rosters. PPG divides total points by Sleeper games played. Season team names and selectors come from Sleeper’s league and draft records. Production checked {checked}.</p>
       <p><a className="underline" href="https://docs.sleeper.com/#get-all-picks-in-a-draft">Sleeper draft records</a> · <a className="underline" href="https://docs.google.com/spreadsheets/d/1n5aqip8iFCpltO8deiS7q9m3u_dFvKTZpwzfZXVTpgs/edit#gid=991742784">Historical Superflex archive</a></p>
