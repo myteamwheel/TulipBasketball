@@ -34,3 +34,16 @@ test("nearby same-position alternatives carry more weight", () => {
   const different = {...same,pos:"RB"};
   assert.ok(gradeDrafts([base,same],"2026-11-15")[0].outcome!.penalty > gradeDrafts([base,different],"2026-11-15")[0].outcome!.penalty);
 });
+test("a young pick maintaining its draft value is not marked a bust", () => {
+  const p = {...pick(3,5743),year:2026,start:"2026-06-01",at:{value:5617,date:"2026-05-31"},seasons:[{year:2026,games:1,points:2.2}]};
+  assert.ok(gradeDrafts([p],"2026-11-16")[0].outcome!.score >= 80);
+});
+test("a missing historical quote for a recent pick is explicitly unrated", () => {
+  const p = {...pick(1,4000),year:2026,start:"2026-06-01",at:null,seasons:[]};
+  assert.equal(gradeDrafts([p],"2026-11-16")[0].outcome,null);
+});
+test("increasing current value does not reduce a pick grade with identical context", () => {
+  const base = {...pick(1,4000),year:2026,start:"2026-06-01",at:{value:4000,date:"2026-05-31"}};
+  const improved = {...base,now:{value:6000,date:"2026-11-15"}};
+  assert.ok(gradeDrafts([improved],"2026-11-16")[0].outcome!.score >= gradeDrafts([base],"2026-11-16")[0].outcome!.score);
+});

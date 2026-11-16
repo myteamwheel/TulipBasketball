@@ -51,15 +51,19 @@ export function gradeDrafts(picks: Selection[], asOf: string): GradedPick[] {
     const opportunity = Math.min(2, Math.max(1, elapsedSeasons(p, asOf)));
     const production = Math.min(100, productionTotal / opportunity * 85);
     const elapsedYears = Math.max(0, (Date.parse(asOf) - Date.parse(p.start)) / (365.25 * 86400000));
-    const expectedValue = [0, 6000, 3500, 1800, 900][Math.min(p.round, 4)];
-    const marketScore = current ? Math.max(0, Math.min(100, 70 + 25 * Math.log2((current.value + 500) / (expectedValue + 500)))) : null;
-    // Preserve demonstrated career contribution, while reducing the weight of
-    // production for new drafts that have not had time to mature.
-    const productionWeight = Math.min(0.5, Math.max(0, elapsedYears - 0.5) * 0.25);
-    const performance = p.seasons && elapsedYears >= 1 ? production : null;
+    // Compare a player with the price paid at the time, rather than a fixed
+    // first-round threshold. Missing historical market data remains ungraded.
+    const marketScore = current && p.at
+      ? Math.max(0, Math.min(100, 80 + 18 * Math.log2((current.value + 750) / (p.at.value + 750))))
+      : null;
+    // Recent selections have had little time to play. For older picks, credit
+    // all productive seasons and normalize expectations by draft investment.
+    const productionWeight = Math.min(0.35, Math.max(0, elapsedYears - 1) * 0.18);
+    const roundBaseline = [0, 48, 36, 25, 16][Math.min(p.round, 4)];
+    const performance = p.seasons && elapsedYears >= 1 ? Math.max(0, Math.min(100, 70 + (production - roundBaseline) * 0.6)) : null;
     let raw: number | null = marketScore;
     if (marketScore !== null && performance !== null) raw = marketScore * (1 - productionWeight) + performance * productionWeight;
-    if (marketScore === null && performance !== null && elapsedYears >= 2) raw = performance;
+    if (marketScore === null && current && performance !== null && elapsedYears >= 2) raw = performance;
     const alternatives = board.filter(x => x.overall > p.overall && x.overall <= p.overall + 4);
     const penalty = current ? alternatives.reduce((sum, x) => {
       const other = fresh(x);
