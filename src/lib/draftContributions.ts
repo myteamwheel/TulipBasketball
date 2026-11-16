@@ -33,4 +33,6 @@ export function draftContributions(picks: Selection[], history: LeagueHistory) {
   }
   return result;
 }
-export const contributionChecked = matchupArchive.checkedAt.slice(0,10);
+export const contributionChecked = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", dateStyle: "medium" }).format(new Date(matchupArchive.checkedAt));
+const latestWeek = matchupArchive.weeks.at(-1);
+export const contributionCoverage = latestWeek ? `${latestWeek.season} week ${latestWeek.week}` : "unavailable";

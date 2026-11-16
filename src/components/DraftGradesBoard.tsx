@@ -60,7 +60,7 @@ function Leaderboards({picks: picksAll,lens,setLens,currentManagers}:{picks:Grad
   </section>;
 }
 
-function PickCard({p,today,rows,contribution,contributionChecked}:{p:GradedPick;today:string;rows:GradedPick[];contribution?:DraftContribution;contributionChecked:string}) {
+function PickCard({p,today,rows,contribution,contributionChecked,contributionCoverage}:{p:GradedPick;today:string;rows:GradedPick[];contribution?:DraftContribution;contributionChecked:string;contributionCoverage:string}) {
   const alternatives = rows.filter(candidate => candidate.draft === p.draft && candidate.overall > p.overall && candidate.overall <= p.overall + 4);
   const comparable = alternatives.filter(candidate => candidate.current !== null);
   const better = p.current ? comparable.filter(candidate => candidate.current!.value > p.current!.value).sort((a,b) => a.overall-b.overall) : [];
@@ -95,7 +95,7 @@ function PickCard({p,today,rows,contribution,contributionChecked}:{p:GradedPick;
       <p className="font-semibold">For the drafting manager</p>
       <p>{contribution?.starts ? `${contribution.starts} recorded starts · ${format(contribution.points)} starting points` : "No starts found in the available matchup records."}</p>
       {contribution?.seasons.map(season=><p key={season.year} className={muted}>{season.year} · {season.starts} starts · {format(season.points)} points</p>)}
-      <p className={'text-xs '+muted}>Completed league matchups checked through {contributionChecked}. Includes starts after reacquisition. Records may be incomplete.</p>
+      <p className={'text-xs '+muted}>Latest completed matchup data: {contributionCoverage}. Checked {contributionChecked}. Includes starts after reacquisition. Records may be incomplete.</p>
     </div>
     <div className="mt-3 border-t border-[var(--border)] pt-3">
       <p className="text-sm font-semibold">Fantasy points per game by season</p>
@@ -109,7 +109,7 @@ function PickCard({p,today,rows,contribution,contributionChecked}:{p:GradedPick;
   </article>;
 }
 
-export default function DraftGradesBoard({rows,checked,today,currentManagers,contributions,contributionChecked}:{rows:GradedPick[];checked:string;today:string;currentManagers:{id:string;name:string}[];contributions:Record<string,DraftContribution>;contributionChecked:string}) {
+export default function DraftGradesBoard({rows,checked,today,currentManagers,contributions,contributionChecked,contributionCoverage}:{rows:GradedPick[];checked:string;today:string;currentManagers:{id:string;name:string}[];contributions:Record<string,DraftContribution>;contributionChecked:string;contributionCoverage:string}) {
   const [year,setYear]=useState("all"),[owner,setOwner]=useState("all"),[search,setSearch]=useState(""),[order,setOrder]=useState("board"),[page,setPage]=useState(0),[lens,setLens]=useState<Lens>("outcome");
   const seasons=[...new Set(rows.map(p=>p.year))].sort((a,b)=>b-a);
   const season=useMemo(()=>rows.filter(p=>year==="all" || p.year===Number(year)),[rows,year]);
@@ -143,7 +143,7 @@ export default function DraftGradesBoard({rows,checked,today,currentManagers,con
       <label className="text-xs">Order by<select className={control} value={order} onChange={e=>{setOrder(e.target.value);setPage(0)}}>{[["board","Draft order"],["entry-desc","Best at draft"],["entry-asc","Worst at draft"],["outcome-desc","Best now"],["outcome-asc","Worst now"],["ppg","Highest PPG"]].map(([k,v])=><option value={k} key={k}>{v}</option>)}</select></label>
       <label className="text-xs">Player<input type="search" className={control} placeholder="Search players" value={search} onChange={e=>{setSearch(e.target.value);setPage(0)}}/></label></div>
       <p aria-live="polite" className={'text-sm '+muted}>{filtered.length ? `${page*PAGE+1}–${Math.min(filtered.length,(page+1)*PAGE)} of ${filtered.length} selections` : "No selections match these filters."}</p>
-      <div className="grid gap-3 md:grid-cols-2">{filtered.slice(page*PAGE,(page+1)*PAGE).map(p=><PickCard key={p.id} p={p} today={today} rows={rows} contribution={contributions[p.id]} contributionChecked={contributionChecked}/>)}</div>
+      <div className="grid gap-3 md:grid-cols-2">{filtered.slice(page*PAGE,(page+1)*PAGE).map(p=><PickCard key={p.id} p={p} today={today} rows={rows} contribution={contributions[p.id]} contributionChecked={contributionChecked} contributionCoverage={contributionCoverage}/>)}</div>
       {pages>1 && <nav aria-label="Draft selection pages" className="flex items-center justify-center gap-4 text-sm"><button className="min-h-11 px-2 disabled:opacity-40" disabled={page===0} onClick={()=>setPage(page-1)}>← Previous</button><span>{page+1} / {pages}</span><button className="min-h-11 px-2 disabled:opacity-40" disabled={page+1>=pages} onClick={()=>setPage(page+1)}>Next →</button></nav>}
     </section><Leaderboards picks={season} lens={lens} setLens={setLens} currentManagers={currentManagers}/></div>;
 }
