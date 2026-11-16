@@ -58,7 +58,17 @@ function PickCard({p,today,rows}:{p:GradedPick;today:string;rows:GradedPick[]}) 
       {comparable.length < alternatives.length && <p className={'text-xs '+muted}>{alternatives.length-comparable.length} of the next {alternatives.length} picks lack a current value.</p>}
     </div>
     <dl className="mt-3 grid grid-cols-2 gap-3 text-sm"><div><dt className={'text-xs '+muted}>KTC at two years</dt><dd className="font-semibold">{p.two ? format(p.two.value) : p.due>today ? "Not due yet" : "Unavailable"}</dd><dd className={'text-xs '+muted}>{p.two ? (p.two.date!==p.due ? "Approx. · " : "")+p.two.date : (p.due>today ? "Due " : "Target ")+p.due}</dd></div>
-      <div><dt className={'text-xs '+muted}>Fantasy points / game</dt><dd className="font-semibold">{p.games ? (p.points/p.games).toFixed(2) : "—"}</dd><dd className={'text-xs '+muted}>{format(p.games)} {p.games === 1 ? "game" : "games"} since draft</dd></div></dl>
+      <div><dt className={'text-xs '+muted}>Fantasy points / game</dt><dd className="font-semibold">{p.games ? (p.points/p.games).toFixed(2) : "—"}</dd><dd className={'text-xs '+muted}>{format(p.games)} {p.games === 1 ? "game" : "games"} since draft</dd></div>
+      <div><dt className={'text-xs '+muted}>Total fantasy points</dt><dd className="font-semibold">{p.games ? format(Math.round(p.points * 100) / 100) : "—"}</dd></div></dl>
+    <div className="mt-3 border-t border-[var(--border)] pt-3">
+      <p className="text-sm font-semibold">Fantasy points per game by season</p>
+      <p className={'text-xs '+muted}>Regular-season averages since selection · league scoring</p>
+      {p.seasons?.length ? <div className="mt-2 space-y-1">{p.seasons.map(season => {
+        const avg = season.points / season.games;
+        const max = Math.max(...p.seasons!.map(s => s.points / s.games), 1);
+        return <div key={season.year} className="grid grid-cols-[3rem_1fr_3.5rem] items-center gap-2 text-xs"><span>{season.year}</span><div className="h-2 rounded-full bg-[var(--surface-raised)]"><div className="h-2 rounded-full bg-emerald-500" style={{width: Math.max(0,avg) / max * 100 + "%"}} /></div><span className="text-right font-semibold">{avg.toFixed(1)}</span></div>;
+      })}</div> : <p className={'mt-2 text-sm '+muted}>No games recorded since selection.</p>}
+    </div>
   </article>;
 }
 

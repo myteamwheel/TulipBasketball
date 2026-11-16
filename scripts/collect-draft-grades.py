@@ -142,6 +142,7 @@ def collect(job):
         if value is not None:
             now = {"value": value, "date": board_date.isoformat()}
     points, games = 0, 0
+    seasons = []
     for season in stats:
         if season < year:
             continue
@@ -149,13 +150,15 @@ def collect(job):
         gp = int(line.get("gp",0))
         if gp:
             games += gp
-            points += sum(line.get(k,0)*v for k,v in scoring[season].items())
+            season_points = sum(line.get(k,0)*v for k,v in scoring[season].items())
+            points += season_points
+            seasons.append({"year": int(season), "games": gp, "points": round(season_points, 2)})
     return dict(id=draft["draft_id"]+"-"+str(pick["pick_no"]),draft=draft["draft_id"],year=int(year),auction=draft["type"]=="auction",
                 start=start.isoformat(),overall=pick["pick_no"],round=pick["round"],teams=draft["settings"]["teams"],
                 bid=int(meta["amount"]) if draft["type"]=="auction" else None,playerId=pid,name=name,pos=meta["position"],
                 owner=owner,manager=user.get("display_name") or owner,team=(user.get("metadata") or {}).get("team_name"),
                 profile=profile,at=series_value(series,before,7),two=series_value(series,anniversary,14),due=anniversary.isoformat(),
-                now=now,games=games,points=round(points,2))
+                now=now,games=games,points=round(points,2),seasons=sorted(seasons,key=lambda s:s["year"]))
 jobs = [(year,d,start,users,p) for year,d,start,users,picks in drafts for p in picks]
 # One job per selection. A player can be drafted twice; use independent temporary files for concurrent downloads.
 with ThreadPoolExecutor(max_workers=4) as pool:

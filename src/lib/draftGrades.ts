@@ -3,7 +3,7 @@ export type Selection = {
   id: string; draft: string; year: number; auction: boolean; start: string; overall: number;
   round: number; teams: number; bid: number | null; playerId: string; name: string; pos: string;
   owner: string | null; manager: string | null; team: string | null; profile: string | null;
-  at: Quote | null; two: Quote | null; due: string; now: Quote | null; games: number; points: number;
+  at: Quote | null; two: Quote | null; due: string; now: Quote | null; games: number; points: number; seasons?: {year:number; games:number; points:number}[];
 };
 export type Grade = { letter: string; score: number; edge: number };
 export type GradedPick = Selection & { entry: Grade | null; outcome: Grade | null; current: Quote | null };
