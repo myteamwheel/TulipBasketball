@@ -38,10 +38,9 @@ function Leaderboards({picks,lens,setLens}:{picks:GradedPick[];lens:Lens;setLens
 }
 
 function PickCard({p,today,rows}:{p:GradedPick;today:string;rows:GradedPick[]}) {
-  const alternatives = rows.filter(candidate => candidate.draft === p.draft && candidate.overall > p.overall && candidate.overall <= p.overall + 5);
+  const alternatives = rows.filter(candidate => candidate.draft === p.draft && candidate.overall > p.overall && candidate.overall <= p.overall + 4);
   const comparable = alternatives.filter(candidate => candidate.current !== null);
-  const best = comparable.sort((a,b) => b.current!.value - a.current!.value)[0];
-  const better = p.current && best && best.current!.value > p.current.value ? best : null;
+  const better = p.current ? comparable.filter(candidate => candidate.current!.value > p.current!.value).sort((a,b) => a.overall-b.overall) : [];
   return <article className={box+" p-3 sm:p-4"}>
     <p className={'text-xs font-semibold '+muted}>{p.year} · Pick {pickLabel(p)} · {p.pos}</p>
     <h3 className="mt-1 text-lg font-bold">{p.profile ? <a className="hover:underline" href={p.profile}>{p.name}</a> : p.name}</h3>
@@ -52,9 +51,10 @@ function PickCard({p,today,rows}:{p:GradedPick;today:string;rows:GradedPick[]}) 
         <p className="text-sm font-semibold">{quote ? format(quote.value)+" KTC" : "KTC unavailable"}</p><p className={'text-xs '+muted}>{quote?.date ?? "No dated quote"}</p></div>)}
     </div>
     <div className="mt-3 rounded-lg bg-[var(--surface-muted)] p-3 text-sm">
-      <p className="font-semibold">Next five picks · hindsight</p>
-      {better ? <p><strong>{better.name}</strong> · {pickLabel(better)} · {format(better.current!.value)} KTC · {better.outcome ? better.outcome.letter + " " + better.outcome.score + "/100" : "Unrated"}<br/><span className={muted}>+{format(better.current!.value - p.current!.value)} KTC compared with {p.name}. Available at this pick.</span></p> :
-        <p className={muted}>{!p.current ? "Current value unavailable for this selection." : !alternatives.length ? "No later picks in this draft." : !comparable.length ? "Current values unavailable for the next picks." : "No higher current KTC value among the next five picks with available values."}</p>}
+      <p className="font-semibold">Next four picks · hindsight</p>
+      {better.length ? <><p className={muted}>{better.length} of {comparable.length} comparable selections have higher current KTC value.</p><ul className="mt-1 space-y-1">{better.map(candidate=><li key={candidate.id}><strong>{candidate.name}</strong> · {pickLabel(candidate)} · {format(candidate.current!.value)} KTC · +{format(candidate.current!.value-p.current!.value)} · {candidate.outcome ? candidate.outcome.letter + " " + candidate.outcome.score + "/100" : "Unrated"}</li>)}</ul></> :
+        <p className={muted}>{!p.current ? "Current value unavailable for this selection." : !alternatives.length ? "No later picks in this draft." : !comparable.length ? "Current values unavailable for the next picks." : "No higher current KTC value among the next four picks with available values."}</p>}
+      {p.outcome && p.outcome.penalty > 0 && <p className={'mt-1 text-xs '+muted}>Nearby alternatives reduced this score by {p.outcome.penalty} points before any minimum score.</p>}
       {comparable.length < alternatives.length && <p className={'text-xs '+muted}>{alternatives.length-comparable.length} of the next {alternatives.length} picks lack a current value.</p>}
     </div>
     <dl className="mt-3 grid grid-cols-2 gap-3 text-sm"><div><dt className={'text-xs '+muted}>KTC at two years</dt><dd className="font-semibold">{p.two ? format(p.two.value) : p.due>today ? "Not due yet" : "Unavailable"}</dd><dd className={'text-xs '+muted}>{p.two ? (p.two.date!==p.due ? "Approx. · " : "")+p.two.date : (p.due>today ? "Due " : "Target ")+p.due}</dd></div>
@@ -94,7 +94,7 @@ export default function DraftGradesBoard({rows,checked,today}:{rows:GradedPick[]
     <a href="#draft-leaders" className="inline-block py-1 font-semibold text-[var(--info)] underline">See drafter leaderboard ↓</a></header>
     <details className={box+" p-3 text-sm"}><summary className="cursor-pointer font-semibold">How grades, KTC values and fantasy points work</summary><div className={'mt-2 max-w-3xl space-y-2 '+muted}>
       <p>Each pick starts at 80/100 for meeting its cost. We rank the selections within their draft by draft slot. Every percentile point a player beats or misses that expectation adds or subtracts one score point. Ties share a rank. Grades start at 90 for A, 80 for B, 70 for C and 60 for D.</p>
-      <p>At draft compares Superflex KTC values from the day before the draft opened, looking back up to seven days. Now compares the player’s current KTC rank among that draft class with the draft slot. Fantasy points per game are displayed separately. A player’s value can increase while their grade falls if other players in the class gained more. Market comparisons include only selections with a dated price. Scores cap at 0 and 100. Best and worst picks use the uncapped difference.</p>
+      <p>At draft compares Superflex KTC values from the day before the draft opened, looking back up to seven days. Now compares the player’s current KTC rank among that draft class with the draft slot. Up to four subsequent selections can reduce each grade based on their value advantage, with maximum deductions of 12, 9, 6 and 4 points in rounds one through four. In rounds three and four, a player worth at least 3,000 receives at least 70. Missing values receive no penalty. Fantasy points per game are displayed separately. A player’s value can increase while their grade falls if other players in the class gained more. Market comparisons include only selections with a dated price. Scores cap at 0 and 100. Best and worst picks use the uncapped difference.</p>
       <p>Two-year values use the anniversary or the closest earlier quote within 14 days. Every market value shows its source date. A reported zero is shown as 0. A missing price is shown as unavailable.</p>
       <p>Points use each season’s league scoring across regular-season games played, including time on other fantasy rosters. PPG divides total points by Sleeper games played. Season team names and selectors come from Sleeper’s league and draft records. Production checked {checked}.</p>
       <p><a className="underline" href="https://docs.sleeper.com/#get-all-picks-in-a-draft">Sleeper draft records</a> · <a className="underline" href="https://docs.google.com/spreadsheets/d/1n5aqip8iFCpltO8deiS7q9m3u_dFvKTZpwzfZXVTpgs/edit#gid=991742784">Historical Superflex archive</a></p>

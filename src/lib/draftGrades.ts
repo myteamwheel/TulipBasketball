@@ -5,7 +5,7 @@ export type Selection = {
   owner: string | null; manager: string | null; team: string | null; profile: string | null;
   at: Quote | null; two: Quote | null; due: string; now: Quote | null; games: number; points: number; seasons?: {year:number; games:number; points:number}[];
 };
-export type Grade = { letter: string; score: number; edge: number };
+export type Grade = { letter: string; score: number; edge: number; penalty: number };
 export type GradedPick = Selection & { entry: Grade | null; outcome: Grade | null; current: Quote | null };
 export type Lens = "entry" | "outcome";
 
@@ -30,9 +30,20 @@ function percentiles(picks: Selection[], metric: (p: Selection) => number | null
   return result;
 }
 
-function grade(edge: number): Grade {
-  const score = Math.round(Math.max(0,Math.min(100,80+100*edge)));
-  return { score, edge, letter: score >= 90 ? "A" : score >= 80 ? "B" : score >= 70 ? "C" : score >= 60 ? "D" : "F" };
+function grade(edge: number, pick: Selection, board: Selection[], quote: (p: Selection) => Quote | null): Grade {
+  const value = quote(pick)?.value;
+  const limits = [0, 12, 9, 6, 4];
+  const limit = limits[Math.min(pick.round, 4)];
+  const alternatives = board.filter(other => other.overall > pick.overall && other.overall <= pick.overall + 4);
+  const penalty = value === undefined ? 0 : alternatives.reduce((sum, other) => {
+    const alternative = quote(other)?.value;
+    if (alternative === undefined || alternative <= value) return sum;
+    return sum + limit / 4 * Math.min(1, (alternative - value) / Math.max(1000, value));
+  }, 0);
+  const floor = pick.round >= 3 && value !== undefined && value >= 3000 ? 70 : 0;
+  const adjusted = Math.max(floor, Math.min(100, 80 + 100 * edge - penalty));
+  const score = Math.round(adjusted);
+  return { score, edge: (adjusted - 80) / 100, penalty: Math.round(penalty * 10) / 10, letter: score >= 90 ? "A" : score >= 80 ? "B" : score >= 70 ? "C" : score >= 60 ? "D" : "F" };
 }
 
 export function gradeDrafts(picks: Selection[], asOf: string): GradedPick[] {
@@ -57,8 +68,8 @@ export function gradeDrafts(picks: Selection[], asOf: string): GradedPick[] {
       };
       const entry = relative(entryMarket,entryCost);
       const currentEdge = relative(nowMarket,nowCost);
-      return { ...p, entry: entry === null ? null : grade(entry), current:fresh(p),
-        outcome:currentEdge === null ? null : grade(currentEdge) };
+      return { ...p, entry: entry === null ? null : grade(entry,p,board, x=>x.at), current:fresh(p),
+        outcome:currentEdge === null ? null : grade(currentEdge,p,board,fresh) };
     });
   });
 }
