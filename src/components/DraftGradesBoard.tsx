@@ -37,7 +37,11 @@ function Leaderboards({picks,lens,setLens}:{picks:GradedPick[];lens:Lens;setLens
   </section>;
 }
 
-function PickCard({p,today}:{p:GradedPick;today:string}) {
+function PickCard({p,today,rows}:{p:GradedPick;today:string;rows:GradedPick[]}) {
+  const alternatives = rows.filter(candidate => candidate.draft === p.draft && candidate.overall > p.overall && candidate.overall <= p.overall + 5);
+  const comparable = alternatives.filter(candidate => candidate.current !== null);
+  const best = comparable.sort((a,b) => b.current!.value - a.current!.value)[0];
+  const better = p.current && best && best.current!.value > p.current.value ? best : null;
   return <article className={box+" p-3 sm:p-4"}>
     <p className={'text-xs font-semibold '+muted}>{p.year} · Pick {pickLabel(p)} · {p.pos}</p>
     <h3 className="mt-1 text-lg font-bold">{p.profile ? <a className="hover:underline" href={p.profile}>{p.name}</a> : p.name}</h3>
@@ -46,6 +50,12 @@ function PickCard({p,today}:{p:GradedPick;today:string}) {
       {([["At draft",p.entry,p.at],["Now",p.outcome,p.current]] as const).map(([title,g,quote])=><div key={title} className="min-w-0 border-r border-[var(--border)] bg-[var(--surface-muted)] p-2 last:border-0 sm:p-3">
         <div className={'text-xs font-semibold '+muted}>{title}</div><div className="my-1 flex items-center gap-2"><Badge g={g}/><span className="text-sm">{g ? g.score+"/100" : "Unrated"}</span></div>
         <p className="text-sm font-semibold">{quote ? format(quote.value)+" KTC" : "KTC unavailable"}</p><p className={'text-xs '+muted}>{quote?.date ?? "No dated quote"}</p></div>)}
+    </div>
+    <div className="mt-3 rounded-lg bg-[var(--surface-muted)] p-3 text-sm">
+      <p className="font-semibold">Next five picks · hindsight</p>
+      {better ? <p><strong>{better.name}</strong> · {pickLabel(better)} · {format(better.current!.value)} KTC · {better.outcome ? better.outcome.letter + " " + better.outcome.score + "/100" : "Unrated"}<br/><span className={muted}>+{format(better.current!.value - p.current!.value)} KTC compared with {p.name}. Available at this pick.</span></p> :
+        <p className={muted}>{!p.current ? "Current value unavailable for this selection." : !alternatives.length ? "No later picks in this draft." : !comparable.length ? "Current values unavailable for the next picks." : "No higher current KTC value among the next five picks with available values."}</p>}
+      {comparable.length < alternatives.length && <p className={'text-xs '+muted}>{alternatives.length-comparable.length} of the next {alternatives.length} picks lack a current value.</p>}
     </div>
     <dl className="mt-3 grid grid-cols-2 gap-3 text-sm"><div><dt className={'text-xs '+muted}>KTC at two years</dt><dd className="font-semibold">{p.two ? format(p.two.value) : p.due>today ? "Not due yet" : "Unavailable"}</dd><dd className={'text-xs '+muted}>{p.two ? (p.two.date!==p.due ? "Approx. · " : "")+p.two.date : (p.due>today ? "Due " : "Target ")+p.due}</dd></div>
       <div><dt className={'text-xs '+muted}>Fantasy points / game</dt><dd className="font-semibold">{p.games ? (p.points/p.games).toFixed(2) : "—"}</dd><dd className={'text-xs '+muted}>{format(p.games)} {p.games === 1 ? "game" : "games"} since draft</dd></div></dl>
@@ -85,7 +95,7 @@ export default function DraftGradesBoard({rows,checked,today}:{rows:GradedPick[]
       <label className="text-xs">Order by<select className={control} value={order} onChange={e=>{setOrder(e.target.value);setPage(0)}}>{[["board","Draft order"],["entry-desc","Best at draft"],["entry-asc","Worst at draft"],["outcome-desc","Best now"],["outcome-asc","Worst now"],["ppg","Highest PPG"]].map(([k,v])=><option value={k} key={k}>{v}</option>)}</select></label>
       <label className="text-xs">Player<input type="search" className={control} placeholder="Search players" value={search} onChange={e=>{setSearch(e.target.value);setPage(0)}}/></label></div>
       <p aria-live="polite" className={'text-sm '+muted}>{filtered.length ? `${page*PAGE+1}–${Math.min(filtered.length,(page+1)*PAGE)} of ${filtered.length} selections` : "No selections match these filters."}</p>
-      <div className="grid gap-3 md:grid-cols-2">{filtered.slice(page*PAGE,(page+1)*PAGE).map(p=><PickCard key={p.id} p={p} today={today}/>)}</div>
+      <div className="grid gap-3 md:grid-cols-2">{filtered.slice(page*PAGE,(page+1)*PAGE).map(p=><PickCard key={p.id} p={p} today={today} rows={rows}/>)}</div>
       {pages>1 && <nav aria-label="Draft selection pages" className="flex items-center justify-center gap-4 text-sm"><button className="min-h-11 px-2 disabled:opacity-40" disabled={page===0} onClick={()=>setPage(page-1)}>← Previous</button><span>{page+1} / {pages}</span><button className="min-h-11 px-2 disabled:opacity-40" disabled={page+1>=pages} onClick={()=>setPage(page+1)}>Next →</button></nav>}
     </section><Leaderboards picks={season} lens={lens} setLens={setLens}/></div>;
 }
