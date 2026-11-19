@@ -20,8 +20,13 @@ function makeGrade(raw: number, penalty = 0): Grade {
     letter: score >= 90 ? "A" : score >= 80 ? "B" : score >= 70 ? "C" : score >= 60 ? "D" : "F" };
 }
 
-function elapsedSeasons(p: Selection, asOf: string) {
-  return Math.max(1, Number(asOf.slice(0, 4)) - p.year + 1);
+/** Draft-day KTC value at the equivalent rank among the players actually
+ * selected in this draft. It is a class-relative estimate, not pick ADP. */
+function slotBenchmark(pick: Selection, board: Selection[]): number | null {
+  const values = board.flatMap(p => p.at ? [p.at.value] : []).sort((a, b) => b - a);
+  if (values.length < 8 || values.length / board.length < 0.75) return null;
+  const rank = Math.round((pick.overall - 1) * (values.length - 1) / Math.max(1, board.length - 1));
+  return values[rank];
 }
 
 export function gradeDrafts(picks: Selection[], asOf: string): GradedPick[] {
@@ -32,50 +37,44 @@ export function gradeDrafts(picks: Selection[], asOf: string): GradedPick[] {
 
   return [...drafts.values()].flatMap(board => board.map(p => {
     const current = fresh(p);
-    const valued = board.filter(x => x.at);
-    const draftRank = p.at ? 1 + valued.filter(x => x.at!.value > p.at!.value).length : null;
-    const selectedRank = 1 + valued.filter(x => x.overall < p.overall).length;
-    // A dated KTC ranking is a proxy for draft-day consensus, not Sleeper ADP.
-    const entry = draftRank === null || valued.length < 2 ? null :
-      makeGrade(80 + Math.max(-12, Math.min(12, (selectedRank - draftRank) * 1.2)));
+    const benchmark = slotBenchmark(p, board);
+    const entry = p.at && benchmark !== null
+      ? makeGrade(80 + 16 * Math.log2((p.at.value + 750) / (benchmark + 750))) : null;
+    const years = Math.max(0, (Date.parse(asOf) - Date.parse(p.start)) / (365.25 * 86400000));
+    // Anniversary quotes represent earlier market value while the asset was
+    // developing. An undated, future, or absent observation is never zero.
+    const checkpoints = [p.one, p.two, p.three].filter((q): q is Quote => Boolean(q && q.date <= asOf));
+    const averageHistory = checkpoints.length
+      ? checkpoints.reduce((sum, quote) => sum + quote.value, 0) / checkpoints.length : null;
+    const marketValue = current && averageHistory !== null
+      ? 0.7 * current.value + 0.3 * averageHistory : current?.value;
+    const cushion = [0, 750, 1250, 2000, 3000][Math.min(p.round, 4)];
+    const marketScore = marketValue !== undefined && benchmark !== null
+      ? 80 + 22 * Math.log2((marketValue + cushion) / (benchmark + cushion)) : null;
 
-    const seasons = p.seasons ?? [];
-    const pointsPerGameTarget: Record<string, number> = { QB: 18, RB: 12, WR: 12, TE: 9 };
-    const target = pointsPerGameTarget[p.pos] ?? 12;
-    // Reward useful seasons over the entire career since selection. A single
-    // cameo cannot represent a full productive season.
-    const productionTotal = seasons.reduce((sum, season) => {
-      const ppg = season.points / season.games;
-      return sum + Math.min(1, season.games / 10) * Math.max(0, Math.min(1.2, ppg / target));
+    const target: Record<string, number> = { QB: 18, RB: 12, WR: 12, TE: 9 };
+    const seasonCredit = (p.seasons ?? []).reduce((sum, season) => {
+      if (season.games <= 0) return sum;
+      const quality = Math.max(0, Math.min(1.25, season.points / season.games / (target[p.pos] ?? 12)));
+      return sum + quality * Math.min(1, season.games / 12);
     }, 0);
-    const opportunity = Math.min(2, Math.max(1, elapsedSeasons(p, asOf)));
-    const production = Math.min(100, productionTotal / opportunity * 85);
-    const elapsedYears = Math.max(0, (Date.parse(asOf) - Date.parse(p.start)) / (365.25 * 86400000));
-    // Compare a player with the price paid at the time, rather than a fixed
-    // first-round threshold. Missing historical market data remains ungraded.
-    const marketScore = current && p.at
-      ? Math.max(0, Math.min(100, 80 + 18 * Math.log2((current.value + 750) / (p.at.value + 750))))
-      : null;
-    // Recent selections have had little time to play. For older picks, credit
-    // all productive seasons and normalize expectations by draft investment.
-    const productionWeight = Math.min(0.35, Math.max(0, elapsedYears - 1) * 0.18);
-    const roundBaseline = [0, 48, 36, 25, 16][Math.min(p.round, 4)];
-    const performance = p.seasons && elapsedYears >= 1 ? Math.max(0, Math.min(100, 70 + (production - roundBaseline) * 0.6)) : null;
-    let raw: number | null = marketScore;
-    if (marketScore !== null && performance !== null) raw = marketScore * (1 - productionWeight) + performance * productionWeight;
-    if (marketScore === null && current && performance !== null && elapsedYears >= 2) raw = performance;
+    // Credit sustained production and discount tiny samples. Older selections
+    // have had more opportunity to produce. Recent picks stay provisional.
+    const productionAdjustment = years >= 1 && p.seasons
+      ? Math.max(-14, Math.min(14, 9 * seasonCredit - ([0, 12, 8, 6, 6][Math.min(p.round, 4)] + (seasonCredit < 0.35 && years >= 2 ? 4 : 0)) * Math.min(1, years / 2)))
+      : 0;
     const alternatives = board.filter(x => x.overall > p.overall && x.overall <= p.overall + 4);
-    const penalty = current ? alternatives.reduce((sum, x) => {
-      const other = fresh(x);
-      if (!other || other.value <= current.value) return sum;
-      const distance = x.overall - p.overall;
-      const samePosition = x.pos === p.pos ? 1.5 : 1;
-      const proximity = distance <= 2 ? 1.25 : 1;
-      const roundWeight = [0, 2.4, 1.8, 1.1, 0.6][Math.min(p.round, 4)];
-      const gap = Math.min(1, (other.value - current.value) / Math.max(2000, current.value));
-      return sum + roundWeight * samePosition * proximity * gap;
+    const roundWeight = [0, 2.4, 1.8, 1.1, 0.6][Math.min(p.round, 4)];
+    const penalty = current ? alternatives.reduce((sum, other) => {
+      const value = fresh(other)?.value;
+      if (value === undefined || value <= current.value * 1.1) return sum;
+      const position = other.pos === p.pos ? 1.5 : 1;
+      const proximity = other.overall - p.overall <= 2 ? 1.25 : 1;
+      const gap = Math.min(1, (value - current.value) / Math.max(2000, current.value));
+      return sum + roundWeight * position * proximity * gap;
     }, 0) : 0;
-    return { ...p, entry, current, outcome: raw === null ? null : makeGrade(raw, Math.min(10, penalty)) };
+    const outcome = marketScore === null ? null : makeGrade(marketScore + productionAdjustment, Math.min(10, penalty));
+    return { ...p, entry, current, outcome };
   }));
 }
 

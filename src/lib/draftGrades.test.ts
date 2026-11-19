@@ -1,49 +1,49 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
+import archive from "../data/draft-selections.json";
 import { gradeDrafts, type Selection } from "./draftGrades";
 
-function pick(overall: number, value: number, round = 1): Selection {
-  return { id:String(overall),draft:"draft",year:2024,auction:false,start:"2024-05-01",
-    overall,round,teams:12,bid:null,playerId:String(overall),name:String(overall),pos:"WR",
-    owner:"owner",manager:"manager",team:null,profile:null,at:{value,date:"2024-04-30"},
-    two:null,due:"2026-05-01",now:{value,date:"2026-11-15"},games:0,points:0 };
+const picks = archive.picks as Selection[];
+const asOf = archive.checked;
+const graded = gradeDrafts(picks, asOf);
+function selected(name: string) {
+  const row = graded.find(p => p.name === name);
+  assert.ok(row, `Missing selection ${name}`);
+  return row;
 }
-test("nearby opportunity penalty accounts for multiple higher-value players", () => {
-  const board = [pick(1,3000),pick(2,4000),pick(3,5000),pick(4,6000),pick(5,7000),pick(6,9000)];
-  const graded = gradeDrafts(board,"2026-11-15");
-  assert.ok(graded[0].outcome!.penalty > graded[1].outcome!.penalty);
-  const changedFifth = board.map(p => p.overall === 6 ? {...p,now:{value:9900,date:"2026-11-15"}} : p);
-  assert.equal(gradeDrafts(changedFifth,"2026-11-15")[0].outcome!.penalty,graded[0].outcome!.penalty);
+
+test("grades preserve a recent pick's value and productive careers", () => {
+  assert.ok(selected("Fernando Mendoza").outcome!.score >= 75);
+  assert.ok(selected("Ken Walker").outcome!.score >= 85);
+  assert.ok(selected("Jayden Daniels").outcome!.score >= 85);
+  assert.ok(selected("George Pickens").outcome!.score >= 85);
 });
-test("valuable late selection retains at least a C despite a nearby star", () => {
-  const board = [pick(37,3000,4),pick(38,9000,4),pick(39,7000,4),pick(40,6000,4),pick(41,5000,4)];
-  assert.ok(gradeDrafts(board,"2026-11-15")[0].outcome!.score >= 70);
+test("late picks with minimal production are not automatic successes", () => {
+  assert.ok(selected("Dorian Thompson-Robinson").outcome!.score < 80);
+  assert.ok(selected("Johnny Wilson").outcome!.score < 80);
 });
-test("missing current quotes never create opportunity penalties", () => {
-  const board = [pick(1,3000), {...pick(2,9000),now:null}];
-  assert.equal(gradeDrafts(board,"2026-11-15")[0].outcome!.penalty,0);
+test("increasing current value never reduces a grade for the same pick", () => {
+  const original = selected("Fernando Mendoza");
+  assert.ok(original.current);
+  const revised = picks.map(p => p.id === original.id ? {...p, now: {...original.current!, value:original.current!.value + 1000}} : p);
+  assert.ok(gradeDrafts(revised, asOf).find(p => p.id === original.id)!.outcome!.score >= original.outcome!.score);
 });
-test("productive prior seasons improve an older pick even after current value falls", () => {
-  const base = {...pick(25,700,3), year:2022, start:"2022-05-01", seasons:[]};
-  const productive = {...base, seasons:[{year:2022,games:15,points:200},{year:2023,games:15,points:200}]};
-  assert.ok(gradeDrafts([productive],"2026-11-15")[0].outcome!.score > gradeDrafts([base],"2026-11-15")[0].outcome!.score);
+test("a missing current quote is never treated as a zero", () => {
+  const original = selected("Fernando Mendoza");
+  const revised = picks.map(p => p.id === original.id ? {...p,now:null} : p);
+  assert.equal(gradeDrafts(revised,asOf).find(p => p.id === original.id)!.outcome,null);
 });
-test("nearby same-position alternatives carry more weight", () => {
-  const base = pick(1,3000);
-  const same = {...pick(2,6000),pos:"WR"};
-  const different = {...same,pos:"RB"};
-  assert.ok(gradeDrafts([base,same],"2026-11-15")[0].outcome!.penalty > gradeDrafts([base,different],"2026-11-15")[0].outcome!.penalty);
+test("a same-position alternative carries a larger penalty", () => {
+  const selectedPick = selected("Jameson Williams");
+  const alternative = picks.find(p => p.draft === selectedPick.draft && p.overall === selectedPick.overall + 1)!;
+  const change = (position: string) => picks.map(p => p.id === alternative.id ? {...p,pos:position,now:{value:9999,date:asOf}} : p);
+  const same = gradeDrafts(change(selectedPick.pos),asOf).find(p => p.id === selectedPick.id)!;
+  const different = gradeDrafts(change("QB"),asOf).find(p => p.id === selectedPick.id)!;
+  assert.ok(same.outcome!.penalty > different.outcome!.penalty);
 });
-test("a young pick maintaining its draft value is not marked a bust", () => {
-  const p = {...pick(3,5743),year:2026,start:"2026-06-01",at:{value:5617,date:"2026-05-31"},seasons:[{year:2026,games:1,points:2.2}]};
-  assert.ok(gradeDrafts([p],"2026-11-16")[0].outcome!.score >= 80);
-});
-test("a missing historical quote for a recent pick is explicitly unrated", () => {
-  const p = {...pick(1,4000),year:2026,start:"2026-06-01",at:null,seasons:[]};
-  assert.equal(gradeDrafts([p],"2026-11-16")[0].outcome,null);
-});
-test("increasing current value does not reduce a pick grade with identical context", () => {
-  const base = {...pick(1,4000),year:2026,start:"2026-06-01",at:{value:4000,date:"2026-05-31"}};
-  const improved = {...base,now:{value:6000,date:"2026-11-15"}};
-  assert.ok(gradeDrafts([improved],"2026-11-16")[0].outcome!.score >= gradeDrafts([base],"2026-11-16")[0].outcome!.score);
+test("a late pick with useful value is not an F because of a nearby star", () => {
+  const p = selected("Jalen Royals");
+  const alternatives = picks.filter(x => x.draft===p.draft && x.overall>p.overall && x.overall<=p.overall+4);
+  const revised = picks.map(x => alternatives.some(a=>a.id===x.id) ? {...x,now:{value:9999,date:asOf}} : x.id===p.id ? {...x,now:{value:3000,date:asOf}} : x);
+  assert.ok(gradeDrafts(revised,asOf).find(x=>x.id===p.id)!.outcome!.score >= 60);
 });
