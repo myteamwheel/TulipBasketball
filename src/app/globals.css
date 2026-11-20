@@ -485,3 +485,21 @@ html { scroll-padding-top: 150px; }
 }
 @media (prefers-reduced-motion: reduce) { .trade-change-line .trade-advantage-track i { transition: none; } }
 html[data-motion='reduced'] .trade-change-line .trade-advantage-track i { transition: none; }
+
+/* Keep both grading periods aligned, and give the complete packages room below. */
+.trade-matrix-head, .trade-matrix-row {
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr);
+}
+.trade-team { align-items: center; }
+.trade-received-packages { margin-top: 14px; }
+.trade-received-packages h4 { color: var(--text-muted); font-size: 12px; font-weight: 700; margin: 0 0 8px; }
+.trade-received-packages-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); gap: 10px; }
+.trade-received-package { min-width: 0; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-muted); }
+.trade-received-package > strong { display: block; font-size: 14px; overflow-wrap: anywhere; }
+@media (max-width: 480px) {
+  .trade-matrix-head, .trade-matrix-row { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) minmax(0, 1fr); }
+  .trade-team { padding: 10px 7px; }
+  .trade-grade { padding: 10px 3px; }
+  .trade-grade > span { font-size: 12px; }
+  .trade-grade strong { font-size: 18px; overflow-wrap: anywhere; text-align: center; }
+}
