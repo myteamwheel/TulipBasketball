@@ -503,3 +503,8 @@ html[data-motion='reduced'] .trade-change-line .trade-advantage-track i { transi
   .trade-grade > span { font-size: 12px; }
   .trade-grade strong { font-size: 18px; overflow-wrap: anywhere; text-align: center; }
 }
+
+@media (max-width: 480px) {
+  .trade-matrix-head { position: static; }
+  .trade-grade small { display: inline; font-size: 10px; }
+}
