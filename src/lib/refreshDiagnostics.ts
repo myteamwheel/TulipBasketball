@@ -1,10 +1,10 @@
 type SourceStatus = { source: string; enabled: boolean; ok: boolean; message?: string };
 export function refreshDiagnostics(errors: { source: string; message: string }[], sources: SourceStatus[], status: string) {
-  const result = errors.filter(error => !error.source.toLowerCase().includes("fantasycalc"));
+  const result = errors.filter(error => !["fantasycalc", "statsguy"].some(retired => error.source.toLowerCase().includes(retired)));
   for (const source of sources.filter(source =>
     source.enabled &&
     !source.ok &&
-    !source.source.toLowerCase().includes("fantasycalc")
+    !["fantasycalc", "statsguy"].some(retired => source.source.toLowerCase().includes(retired))
   )) {
     if (!result.some(error => error.source.toLowerCase() === source.source.toLowerCase())) result.push({ source: source.source, message: source.message || "Source refresh failed; its values were excluded." });
   }

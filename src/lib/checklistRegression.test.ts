@@ -37,11 +37,12 @@ test("failed sources are named and retired-source diagnostics are omitted", () =
     [{ source: "fantasycalc", message: "Excluded from consensus" }],
     [
       { source: "FANTASYCALC", enabled: true, ok: false, message: "No longer current" },
-      { source: "STATSGUY", enabled: true, ok: false, message: "Feed unavailable" },
+      { source: "DYNASTY_DEALER", enabled: true, ok: false, message: "Feed unavailable" },
+      { source: "STATSGUY", enabled: true, ok: false, message: "Removed source" },
     ],
     "PARTIAL_FAILURE",
   );
-  assert.deepEqual(errors, [{ source: "STATSGUY", message: "Feed unavailable" }]);
+  assert.deepEqual(errors, [{ source: "DYNASTY_DEALER", message: "Feed unavailable" }]);
   assert.match(refreshDiagnostics([], [], "PARTIAL_FAILURE")[0].message, /No specific failing source/);
 });
 test("IR checks honor league eligibility flags", () => {

@@ -1,8 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { MARKET_SOURCE_MAX_AGE_MS } from "@/lib/config";
+import { approvedConsensusSources } from "@/lib/marketEligibility";
 import type { CurrentMarketMix } from "@/lib/marketSources";
-
-const TRUSTED = new Set(["KTC", "DYNASTY_DEALER", "STATSGUY"]);
 
 type LatestMarketRow = {
   playerId: string;
@@ -26,15 +25,6 @@ function freshTimestamp(sourceUpdatedAt: Date | null, observedAt: Date): boolean
   return Number.isFinite(age) && age >= 0 && age <= MARKET_SOURCE_MAX_AGE_MS;
 }
 
-function safeSources(value: string): string[] {
-  try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed.map(String).filter((source) => TRUSTED.has(source)) : [];
-  } catch {
-    return [];
-  }
-}
-
 /**
  * Current UI market data is validated per player and per source. Fetch only the
  * newest row that can affect a current decision; historical observations stay
@@ -54,7 +44,6 @@ export async function getFreshCurrentMarketMix(playerIds: string[]): Promise<Map
       ktcValue: null,
       tradyrValue: null,
       dynastyDealerValue: null,
-      statsGuyValue: null,
     });
   }
   if (!uniquePlayerIds.length) return result;
@@ -65,7 +54,7 @@ export async function getFreshCurrentMarketMix(playerIds: string[]): Promise<Map
         "playerId", "source"::text AS "source", "rawValue", "normalizedValue", "observedAt", "sourceUpdatedAt"
       FROM "MarketObservation"
       WHERE "playerId" = ANY(${uniquePlayerIds}::text[])
-        AND "source" IN ('KTC', 'DYNASTY_DEALER', 'STATSGUY')
+        AND "source" IN ('KTC', 'DYNASTY_DEALER')
       ORDER BY "playerId", "source", "observedAt" DESC, "createdAt" DESC
     `,
     prisma.$queryRaw<LatestConsensusRow[]>`
@@ -84,10 +73,8 @@ export async function getFreshCurrentMarketMix(playerIds: string[]): Promise<Map
     const row = result.get(playerId)!;
     const ktc = latestByPlayerSource.get(`${playerId}:KTC`);
     const dealer = latestByPlayerSource.get(`${playerId}:DYNASTY_DEALER`);
-    const statsGuy = latestByPlayerSource.get(`${playerId}:STATSGUY`);
     if (ktc && freshTimestamp(ktc.sourceUpdatedAt, ktc.observedAt)) row.ktcValue = ktc.rawValue;
     if (dealer && freshTimestamp(dealer.sourceUpdatedAt, dealer.observedAt)) row.dynastyDealerValue = dealer.normalizedValue;
-    if (statsGuy && freshTimestamp(statsGuy.sourceUpdatedAt, statsGuy.observedAt)) row.statsGuyValue = statsGuy.normalizedValue;
   }
 
   for (const c of consensus) {
@@ -95,8 +82,8 @@ export async function getFreshCurrentMarketMix(playerIds: string[]): Promise<Map
     if (!row) continue;
     const age = Date.now() - c.observedAt.getTime();
     if (!Number.isFinite(age) || age < 0 || age > MARKET_SOURCE_MAX_AGE_MS) continue;
-    const sources = safeSources(c.sourcesUsed);
-    if (!sources.includes("KTC") || sources.length < 2) continue;
+    const sources = approvedConsensusSources(c.sourcesUsed);
+    if (!sources) continue;
     const allFresh = sources.every((source) => {
       const obs = latestByPlayerSource.get(`${c.playerId}:${source}`);
       return !!obs && freshTimestamp(obs.sourceUpdatedAt, obs.observedAt);

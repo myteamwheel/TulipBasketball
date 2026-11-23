@@ -32,7 +32,7 @@ export type ReviewSide = {
   faabReceived?: number;
   grades: { atTrade: TradeGradePhase; current: TradeGradePhase } | null;
 };
-export type ReviewTrade = { id: string; date: string; season?: string; sides: ReviewSide[]; currentValueSource?: "STATSGUY" };
+export type ReviewTrade = { id: string; date: string; season?: string; sides: ReviewSide[] };
 export type ReviewSort = "newest" | "winsThen" | "winsNow" | "outcomeNow" | "improved" | "reversals" | "losses" | "largest" | "unequalThen" | "unequalNow" | "equalThen" | "equalNow";
 export type ReviewMetric = "points" | "percent";
 export type ReviewFilters = { team: number | null; season: string; opponent: number | null; asset: "all" | "player" | "pick"; faab: "all" | "yes" | "no" };
@@ -74,8 +74,7 @@ export function currentOutcomeGrade(side: ReviewSide): TradeGradePhase | null {
 
 /** Raw point changes are meaningful only when both periods use the same scale. */
 export function comparablePointScales(trade: ReviewTrade): boolean {
-  const historicalStatsGuy = trade.sides.flatMap(side => [...side.got, ...side.gave]).some(asset => asset.historicalDaily?.method === "STATSGUY_HISTORY");
-  return (trade.currentValueSource === "STATSGUY") === historicalStatsGuy;
+  return trade.sides.every(side => [...side.got, ...side.gave].every(asset => !asset.historicalDaily || !asset.historicalDaily.method || asset.historicalDaily.method.includes("KTC")));
 }
 
 export function isBalanceSort(sort: ReviewSort): boolean {

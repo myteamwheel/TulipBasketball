@@ -82,14 +82,13 @@ test('used picks and estimated zeroes appear in the main current comparison',()=
  const picked={...asset('2024 Round 1',2500),assetType:'pick' as const,currentValue:null,outcome:{label:'Selected Player',playerId:null,sleeperId:'999',pickNumber:4,currentValue:0,currentValueIsUnranked:true,sourceUrl:'https://sleeper.com'}};
  const acquired={...asset('Active Player',4000),currentValue:3000};
  const rows=[{rosterId:1,name:'Team One',got:[acquired],gave:[picked],grades:calculateTradeSideGrades({got:[acquired],gave:[picked]})},{rosterId:2,name:'Team Two',got:[picked],gave:[acquired],grades:calculateTradeSideGrades({got:[picked],gave:[acquired]})}];
- const trade={id:'one',date:'2026-11-04T12:00:00Z',sides:rows,currentValueSource:'STATSGUY' as const};
+ const trade={id:'one',date:'2026-11-04T12:00:00Z',sides:rows};
  const html=renderToStaticMarkup(React.createElement(TradeReviewCard,{sides:rows,trade}));
  const matrix=html.slice(html.indexOf('class="trade-matrix"'),html.indexOf('class="trade-change-line'));
  assert.match(matrix,/Selected Player/);
  assert.match(matrix,/unranked · estimated 0/);
  assert.match(matrix,/<strong>A\+<\/strong>/);
- assert.match(html,/Now:.*Stats Guy Fantasy/);
- assert.doesNotMatch(html,/Advantage change for/);
+ assert.doesNotMatch(html,/Stats Guy/i);
 });
 test('Excel export round-trip remains compatible with the UUID override',async()=>{
  const ExcelJS=await import('exceljs');

@@ -15,11 +15,6 @@ export const TRADYR_REFRESH_ENABLED =
   Boolean(TRADYR_API_KEY) && process.env.TRADYR_REFRESH_ENABLED !== "false";
 export const DYNASTY_DEALER_REFRESH_ENABLED =
   process.env.DYNASTY_DEALER_REFRESH_ENABLED !== "false";
-// Stats Guy Fantasy publishes a documented, no-key Superflex dynasty API with
-// daily snapshots. It is eligible only while the provider timestamp passes the
-// same freshness guard as every other current market source.
-export const STATSGUY_REFRESH_ENABLED =
-  process.env.STATSGUY_REFRESH_ENABLED !== "false";
 export const KTC_AUTO_REFRESH_ENABLED = KTC_DIRECT_REFRESH_ENABLED;
 export const AUTO_REFRESH_ON_VISIT = false;
 
@@ -32,12 +27,10 @@ export const MARKET_SOURCE_MAX_AGE_MS =
 export const CONSENSUS_WEIGHTS = {
   KTC: 0.55,
   DYNASTY_DEALER: 0.25,
-  STATSGUY: 0.2,
 } as const;
 export const CONSENSUS_TRUSTED_SOURCES = [
   "KTC",
   "DYNASTY_DEALER",
-  "STATSGUY",
 ] as const;
 export const DIAGNOSTIC_MARKET_SOURCES = [] as const;
 export const SECONDARY_KTC_DIVERGENCE_LIMIT = Number(

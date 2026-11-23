@@ -29,7 +29,7 @@ import {
 import { recordAuditSnapshot, type AuditSnapshotData } from "@/lib/audit";
 import { refreshTradeFinderCache } from "@/lib/tradeFinder";
 
-const VISIBLE_SOURCES = new Set(["KTC", "DYNASTY_DEALER", "STATSGUY"]);
+const VISIBLE_SOURCES = new Set(["KTC", "DYNASTY_DEALER"]);
 const REFRESH_LOCK_KEY = 731521527;
 
 export interface RefreshRunView {
@@ -97,7 +97,8 @@ function toView(run: {
 }): RefreshRunView {
   const summary = parseSummary(run.summary);
   const mappingWarnings = parseJsonArray(run.mappingWarnings);
-  const errors = parseJsonArray(run.errors) as { source: string; message: string }[];
+  const errors = (parseJsonArray(run.errors) as { source: string; message: string }[])
+    .filter(error => !error.source.toLowerCase().includes("statsguy"));
   const statuses = visibleStatuses(summary.marketSourceStatuses);
   const ktc = statuses.find((s) => s.source === "KTC");
   const rawDraft = summary.draftPickMarket;
@@ -115,7 +116,7 @@ function toView(run: {
     finishedAt: run.finishedAt?.toISOString() ?? null,
     requestedSources: parseJsonArray(run.requestedSources)
       .map(String)
-      .filter(Boolean),
+      .filter((source) => Boolean(source) && source.toLowerCase() !== "statsguy"),
     sleeperSyncOk: run.sleeperSyncOk,
     ktcSyncOk: run.ktcSyncOk,
     draftPickMarketOk: draftStale !== null ? !draftStale : draftError ? false : null,
@@ -242,7 +243,6 @@ export async function startRefresh(): Promise<{ runId: string }> {
         "ktc",
         "full_ktc_universe",
         "dynasty_dealer",
-        "statsguy",
         "consensus",
         "draft_pick_market",
         "traded_pick_ownership",
@@ -495,7 +495,7 @@ async function executeRefresh(runId: string) {
   const trustedOptionalFailures = marketSourceStatuses.filter(
     (s) =>
       s.enabled &&
-      (s.source === "DYNASTY_DEALER" || s.source === "STATSGUY") &&
+      s.source === "DYNASTY_DEALER" &&
       !s.ok,
   ).length;
   const footballUsageOk = !sleeperSyncOk || footballUsage !== null;

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { normalizePlayerName } from "@/lib/normalize";
+import { approvedConsensusSources } from "@/lib/marketEligibility";
 import {
   CONSENSUS_TRUSTED_SOURCES,
   CONSENSUS_WEIGHTS,
@@ -8,7 +9,6 @@ import {
   MARKET_SOURCE_MAX_AGE_MS,
   SECONDARY_KTC_DIVERGENCE_LIMIT,
   SLEEPER_LEAGUE_ID,
-  STATSGUY_REFRESH_ENABLED,
   TRADYR_API_KEY,
 } from "@/lib/config";
 import { commitKtcImport, type KtcImportRow } from "@/lib/ktcImport";
@@ -22,9 +22,8 @@ export type MarketSourceKey =
   | "KTC"
   | "TRADYR"
   | "DYNASTY_DEALER"
-  | "FANTASYCALC"
-  | "STATSGUY";
-export type TrustedMarketSourceKey = "KTC" | "DYNASTY_DEALER" | "STATSGUY";
+  | "FANTASYCALC";
+export type TrustedMarketSourceKey = "KTC" | "DYNASTY_DEALER";
 const marketDb = prisma;
 
 export interface MarketSourceStatus {
@@ -77,7 +76,6 @@ const FANTASYCALC_URL =
   "https://api.fantasycalc.com/values/current?isDynasty=true&numQbs=2&numTeams=12&ppr=0.5";
 const FANTASYCALC_CADENCE_URL = "https://fantasycalc.com/trade-value-chart";
 const FANTASYCALC_HOME_URL = "https://fantasycalc.com/";
-const STATSGUY_URL = "https://api.statsguyfantasy.com/api/v1/rankings?format=sf_dynasty&limit=1000";
 const MIN_PROVIDER_ROWS = 200;
 
 function sourceAge(sourceUpdatedAt: Date, now = new Date()): number {
@@ -841,75 +839,6 @@ export async function fetchFantasyCalcSnapshot(): Promise<ProviderSnapshot> {
   };
 }
 
-interface StatsGuyPlayer {
-  id?: string;
-  name?: string;
-  team?: string;
-  position?: string;
-  value?: number;
-  rank?: number;
-  positionRank?: number;
-}
-interface StatsGuyResponse {
-  total?: number;
-  asOf?: string;
-  rankings?: StatsGuyPlayer[];
-}
-
-export async function fetchStatsGuySnapshot(): Promise<ProviderSnapshot> {
-  const fetchedAt = new Date();
-  const response = await fetch(STATSGUY_URL, {
-    cache: "no-store",
-    signal: withTimeout(20000),
-    headers: { Accept: "application/json", "Cache-Control": "no-cache" },
-  });
-  if (!response.ok)
-    throw new Error(`Stats Guy Fantasy API failed (${response.status})`);
-  const data = (await response.json()) as StatsGuyResponse;
-  const asOf = data.asOf;
-  if (!asOf)
-    throw new Error("Stats Guy Fantasy did not return rankings.asOf");
-  const sourceUpdatedAt = new Date(asOf);
-  assertFresh("Stats Guy Fantasy", sourceUpdatedAt, fetchedAt);
-  const players = Array.isArray(data.rankings) ? data.rankings : [];
-  const rows: ProviderRow[] = players.flatMap((player) => {
-    const value = Number(player.value);
-    const name = player.name?.trim();
-    if (!player.id || !name || !Number.isFinite(value) || value <= 0) return [];
-    return [
-      {
-        sleeperId: String(player.id),
-        name,
-        position: player.position,
-        team: player.team,
-        rawValue: Math.round(value),
-        rank: Number.isFinite(Number(player.rank))
-          ? Number(player.rank)
-          : undefined,
-        positionRank: Number.isFinite(Number(player.positionRank))
-          ? Number(player.positionRank)
-          : undefined,
-        metadata: {
-          attribution: "Stats Guy Fantasy",
-          attributionUrl: "https://statsguyfantasy.com/",
-        },
-      },
-    ];
-  });
-  if (rows.length < MIN_PROVIDER_ROWS)
-    throw new Error(
-      `Stats Guy Fantasy returned only ${rows.length} valued players; refusing partial snapshot`,
-    );
-  return {
-    source: "STATSGUY",
-    sourceUrl: STATSGUY_URL,
-    fetchedAt,
-    sourceUpdatedAt,
-    rows,
-    message: `Stats Guy Fantasy official API; values as of ${sourceUpdatedAt.toISOString()}`,
-  };
-}
-
 async function currentLeaguePlayers() {
   const entries = await prisma.ownershipInterval.findMany({
     where: {
@@ -940,7 +869,7 @@ function isTrustedConsensusSource(
 }
 
 function fallbackKtcScaleFactor(source: MarketSourceKey): number {
-  // Tradyr publishes a 0-1000 composite; DD/FantasyCalc/StatsGuy are already
+  // Tradyr publishes a 0-1000 composite; DD/FantasyCalc are already
   // approximately 0-10000. Actual league-overlap calibration replaces these
   // fallbacks whenever enough simultaneous KTC observations exist.
   if (source === "TRADYR") return 10;
@@ -1269,12 +1198,6 @@ export async function refreshLiveMarketSources(
       fetchDynastyDealerSnapshot,
       refreshRunId,
     ),
-    runSource(
-      "STATSGUY",
-      STATSGUY_REFRESH_ENABLED,
-      fetchStatsGuySnapshot,
-      refreshRunId,
-    ),
   ]);
   const statuses = [ktc, ...rest];
   const consensusPlayersStored = await buildConsensus(refreshRunId);
@@ -1297,7 +1220,6 @@ export interface CurrentMarketMix {
   ktcValue: number | null;
   tradyrValue: number | null;
   dynastyDealerValue: number | null;
-  statsGuyValue: number | null;
 }
 
 export async function getCurrentMarketMix(
@@ -1314,7 +1236,6 @@ export async function getCurrentMarketMix(
       ktcValue: null,
       tradyrValue: null,
       dynastyDealerValue: null,
-      statsGuyValue: null,
     });
   if (playerIds.length === 0) return result;
   const [consensus, market] = await Promise.all([
@@ -1330,19 +1251,18 @@ export async function getCurrentMarketMix(
   const seenConsensus = new Set<string>();
   for (const c of consensus) {
     if (seenConsensus.has(c.playerId)) continue;
+    const sources = approvedConsensusSources(c.sourcesUsed);
+    if (!sources) continue;
     seenConsensus.add(c.playerId);
     const row = result.get(c.playerId)!;
     row.consensusValue = c.value;
     row.consensusObservedAt = c.observedAt.toISOString();
     row.consensusSourceCount = c.sourceCount;
-    try {
-      row.consensusSources = JSON.parse(c.sourcesUsed);
-    } catch {
-      row.consensusSources = [];
-    }
+    row.consensusSources = sources;
   }
   const seenSource = new Set<string>();
   for (const m of market) {
+    if (m.source === "STATSGUY") continue; // Ignore legacy records from the removed provider.
     const key = `${m.playerId}:${m.source}`;
     if (seenSource.has(key)) continue;
     seenSource.add(key);
@@ -1353,7 +1273,6 @@ export async function getCurrentMarketMix(
     if (m.source === "TRADYR") row.tradyrValue = m.normalizedValue;
     if (m.source === "DYNASTY_DEALER")
       row.dynastyDealerValue = m.normalizedValue;
-    if (m.source === "STATSGUY") row.statsGuyValue = m.normalizedValue;
   }
   return result;
 }
@@ -1375,7 +1294,6 @@ export async function getLatestMarketSourceStatuses(): Promise<
     "TRADYR",
     "DYNASTY_DEALER",
     "FANTASYCALC",
-    "STATSGUY",
   ] as MarketSourceKey[]) {
     const obs = await marketDb.marketObservation.findFirst({
       where: { source },

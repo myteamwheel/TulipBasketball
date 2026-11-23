@@ -1,9 +1,7 @@
 import { getDataHealth } from "@/lib/dataHealth";
 import { verifiedRetirement } from "@/lib/verifiedRetirements";
-import { fetchStatsGuyCurrentSnapshot, withStatsGuyCurrentFallback } from "@/lib/currentTradeValues";
 import matchupData from "@/data/trade-matchups.json";
 import { tradeOnField, type MatchupWeek } from "@/lib/tradeOnField";
-import statsGuyArchive from "@/data/statsguy-historical-trades.json";
 import recoveredJson from "@/data/trade-chart-prices.json";
 import type { RecoveredTradePrices } from "@/lib/historicalKtc";
 import { getLeagueHistory, getFrozenTradePrices } from "@/lib/leagueHistory";
@@ -29,10 +27,9 @@ import { faabForRoster, parseFaabTransfers } from "@/lib/tradeFaab";
 const PAGE_SIZE = 15;
 type TxFilter = "all" | "trade" | "moves";
 type TradedPick = { season: string; round: number; roster_id: number; previous_owner_id: number; owner_id: number };
-type Asset = TradeGradeAsset & { statsGuyValue?: number | null; sleeperId?: string } & Pick<ReviewAsset, "outcome" | "journey" | "priceSource" | "historicalDaily" | "retiredSource"> & { playerId: string | null; atMoveObservedAt: Date | null; atMoveTiming: TradeSnapshotTiming | null; currentObservedAt: string | null };
+type Asset = TradeGradeAsset & { sleeperId?: string } & Pick<ReviewAsset, "outcome" | "journey" | "priceSource" | "historicalDaily" | "retiredSource"> & { playerId: string | null; atMoveObservedAt: Date | null; atMoveTiming: TradeSnapshotTiming | null; currentObservedAt: string | null };
 
 const recovered = recoveredJson as RecoveredTradePrices;
-const statsGuyHistory = statsGuyArchive as Record<string, { date: string; values: Record<string, number> }>;
 const HISTORICAL_MARKET_WINDOW_MS = TRADE_SNAPSHOT_WINDOW_MS;
 
 function record(value: string | null): Record<string, number> {
@@ -58,11 +55,10 @@ export default async function TransactionsPage({ searchParams, review = false }:
   const total = await prisma.transaction.count({ where });
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const page = Math.min(requestedPage, totalPages);
-  const [storedTransactions, managers, pickMarket, statsGuyCurrent] = await Promise.all([
+  const [storedTransactions, managers, pickMarket] = await Promise.all([
     prisma.transaction.findMany({ where, orderBy: { sleeperCreatedAt: "desc" }, ...(review ? {} : { skip: (page - 1) * PAGE_SIZE, take: PAGE_SIZE }) }),
     prisma.manager.findMany({ where: { league: { sleeperId: SLEEPER_LEAGUE_ID } } }),
     fetchFreshDraftPickMarketValues().catch(() => []),
-    review ? fetchStatsGuyCurrentSnapshot() : Promise.resolve(null),
   ]);
   const [history, frozenPrices] = await Promise.all([getLeagueHistory(), getFrozenTradePrices()]);
   const currentLeague = history.seasons.find(s => s.leagueId === SLEEPER_LEAGUE_ID);
@@ -119,8 +115,7 @@ export default async function TransactionsPage({ searchParams, review = false }:
     const player = playerBySleeper.get(sleeperId);
     const retiredSource = verifiedRetirement(sleeperId, player?.nflTeam);
     const daily = recovered.prices[activeTransactionId]?.["player:" + sleeperId];
-    const statsGuyValue = statsGuyHistory[activeTransactionId]?.values[sleeperId] ?? null;
-    if (!player) return { id: `player:${sleeperId}`, sleeperId, playerId: null, label: history.players[sleeperId] ? `${history.players[sleeperId].name} (${history.players[sleeperId].position})` : `Sleeper player ${sleeperId}`, assetType: "player", atTradeValue: daily?.value ?? null, statsGuyValue, historicalDaily: daily, currentValue: retiredSource ? 0 : null, currentValueIsRetired: !!retiredSource, retiredSource, currentObservedAt: null, atMoveObservedAt: null, atMoveTiming: null };
+    if (!player) return { id: `player:${sleeperId}`, sleeperId, playerId: null, label: history.players[sleeperId] ? `${history.players[sleeperId].name} (${history.players[sleeperId].position})` : `Sleeper player ${sleeperId}`, assetType: "player", atTradeValue: daily?.value ?? null, historicalDaily: daily, currentValue: retiredSource ? 0 : null, currentValueIsRetired: !!retiredSource, retiredSource, currentObservedAt: null, atMoveObservedAt: null, atMoveTiming: null };
     const atMove = selectTradeSnapshot(
       series.get(player.id) ?? [],
       date,
@@ -136,7 +131,6 @@ export default async function TransactionsPage({ searchParams, review = false }:
       label: `${player.fullName} (${player.position})`,
       assetType: "player",
       atTradeValue: frozen?.value ?? atMove?.snapshot.value ?? daily?.value ?? null,
-      statsGuyValue,
       historicalDaily: !frozen && !atMove ? daily : undefined,
       currentValue: market && !market.isStale && market.currentValue !== null ? market.currentValue : retiredEstimate ? 0 : null,
       currentValueIsRetired: retiredEstimate,
@@ -167,7 +161,6 @@ export default async function TransactionsPage({ searchParams, review = false }:
       label: `${pick.season} Round ${pick.round} · ${teamName(pick.roster_id)} original`,
       assetType: "pick",
       atTradeValue: frozen?.value ?? atTradeValue ?? daily?.value ?? null,
-      statsGuyValue: statsGuyHistory[activeTransactionId]?.values[`pick:${pick.season}:${pick.round}`] ?? null,
       historicalDaily: !frozen && atTradeValue === null ? daily : undefined,
       currentValue,
       outcome: resolution ? { label: resolution.name, playerId: drafted?.id ?? null, sleeperId: resolution.playerId, pickNumber: resolution.overall, currentValue: draftedMarket && !draftedMarket.isStale && draftedMarket.currentValue !== null ? draftedMarket.currentValue : draftedRetiredEstimate ? 0 : null, currentValueIsRetired: draftedRetiredEstimate, retiredSource: draftedRetiredEstimate ? draftedRetirement : undefined, sourceUrl: `https://sleeper.com/draft/nfl/${resolution.draftId}` } : undefined,
@@ -183,7 +176,7 @@ export default async function TransactionsPage({ searchParams, review = false }:
     const adds = record(tx.adds), drops = record(tx.drops), picks = array<TradedPick>(tx.draftPicks);
     const faab = parseFaabTransfers(tx.waiverBudget);
     const rosterIds = [...new Set([...array<number>(tx.rosterIdsInvolved), ...Object.values(adds), ...Object.values(drops), ...picks.flatMap((p) => [p.owner_id, p.previous_owner_id]), ...faab.flatMap(p => [p.sender, p.receiver])])];
-    let sides = rosterIds.map((rosterId) => {
+    const sides = rosterIds.map((rosterId) => {
       const gotPlayers = Object.entries(adds).filter(([, owner]) => owner === rosterId).map(([id]) => playerAsset(id, tx.sleeperCreatedAt));
       const gavePlayers = Object.entries(drops).filter(([, owner]) => owner === rosterId).map(([id]) => playerAsset(id, tx.sleeperCreatedAt));
       const gotPicks = picks.filter((p) => p.owner_id === rosterId).map((p) => pickAsset(p, tx.sleeperCreatedAt));
@@ -204,22 +197,6 @@ export default async function TransactionsPage({ searchParams, review = false }:
           : null,
       };
     }).filter((side) => side.got.length || side.gave.length || (side.faabSent ?? 0) > 0 || (side.faabReceived ?? 0) > 0);
-    const providerDate = statsGuyHistory[activeTransactionId]?.date;
-    const assets = sides.flatMap(side => [...side.got, ...side.gave]);
-    const canUseStatsGuy = !!providerDate && assets.length > 0 && assets.every(asset => asset.statsGuyValue != null && asset.statsGuyValue > 0);
-    if (tx.type === "trade" && canUseStatsGuy && sides.some(side => (side.grades?.atTrade.missingAssets.length ?? 0) > 0)) {
-      const convert = (asset: Asset): Asset => ({
-        ...asset,
-        atTradeValue: asset.statsGuyValue ?? null,
-        historicalDaily: { value: asset.statsGuyValue!, date: providerDate!, method: "STATSGUY_HISTORY", sourceUrls: ["https://statsguyfantasy.com/"] },
-        atMoveObservedAt: null,
-        atMoveTiming: null,
-      });
-      sides = sides.map(side => {
-        const got = side.got.map(convert), gave = side.gave.map(convert);
-        return { ...side, got, gave, grades: calculateTradeSideGrades({ got, gave, faabSent: side.faabSent, faabReceived: side.faabReceived }) };
-      });
-    }
     return { tx, sides, bid: waiverBid(tx.rawPayload), faab };
   });
 
@@ -233,7 +210,7 @@ export default async function TransactionsPage({ searchParams, review = false }:
         gave: side.gave.map(asset => ({ ...asset, atMoveObservedAt: asset.atMoveObservedAt?.toISOString() ?? null })),
         got: side.got.map(asset => ({ ...asset, atMoveObservedAt: asset.atMoveObservedAt?.toISOString() ?? null })),
       })),
-    })).map(trade => withStatsGuyCurrentFallback(trade, statsGuyCurrent));
+    }));
     for (const trade of trades) for (const side of trade.sides) for (const asset of side.got) {
       const later = trades.filter(next => next.date > trade.date && next.sides.some(s => s.got.some(a => a.id === asset.id || (asset.outcome?.playerId && a.playerId === asset.outcome.playerId)))).sort((a,b) => a.date.localeCompare(b.date));
       asset.journey = later.map(next => ({ tradeId: next.id, date: next.date, label: next.sides.map(s => s.name).join(' ↔ ') }));
