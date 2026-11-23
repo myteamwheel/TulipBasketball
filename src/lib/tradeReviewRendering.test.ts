@@ -97,6 +97,14 @@ test('daily archive fallback displays its KTC quote date',()=>{
  const html=renderToStaticMarkup(React.createElement(TradeReviewCard,{sides:rows}));
  assert.match(html,/KTC daily quote 2026-11-22/);
 });
+test('converted historical values are labeled as estimates and attributed',()=>{
+ const selected={...asset('Player',2500),atTradeValue:2000,historicalDaily:{value:2000,date:'2022-06-03',observedAt:'2022-06-03T03:32:01Z',originalValue:800,method:'DYNASTYPROCESS_ESTIMATE' as const,sourceUrls:['https://github.com/dynastyprocess/data/blob/example/files/values.csv']}};
+ const other=asset('Other',3000);
+ const rows=[{rosterId:1,name:'Team One',got:[selected],gave:[other],grades:calculateTradeSideGrades({got:[selected],gave:[other]})},{rosterId:2,name:'Team Two',got:[other],gave:[selected],grades:calculateTradeSideGrades({got:[other],gave:[selected]})}];
+ const html=renderToStaticMarkup(React.createElement(TradeReviewCard,{sides:rows}));
+ assert.match(html,/DynastyProcess 800 → KTC scale/);
+ assert.match(html,/At-trade grade includes converted DynastyProcess estimates/);
+});
 test('Excel export round-trip remains compatible with the UUID override',async()=>{
  const ExcelJS=await import('exceljs');
  const book=new ExcelJS.default.Workbook();

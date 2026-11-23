@@ -6,6 +6,7 @@ import profileArchive from "@/data/trade-profile-quotes.json";
 import { recentDraftTradeQuotes } from "@/lib/draftTradeQuotes";
 import { tradeOnField, type MatchupWeek } from "@/lib/tradeOnField";
 import recoveredJson from "@/data/trade-chart-prices.json";
+import expertEstimatesJson from "@/data/dynastyprocess-historical-estimates.json";
 import { priorDayPrice, type RecoveredTradePrices } from "@/lib/historicalKtc";
 import { getLeagueHistory, getFrozenTradePrices } from "@/lib/leagueHistory";
 import { historicalManager, resolveDraftPick } from "@/lib/tradeLineage";
@@ -33,6 +34,7 @@ type TradedPick = { season: string; round: number; roster_id: number; previous_o
 type Asset = TradeGradeAsset & { sleeperId?: string } & Pick<ReviewAsset, "outcome" | "journey" | "priceSource" | "historicalDaily" | "retiredSource" | "currentDailyDate"> & { playerId: string | null; atMoveObservedAt: Date | null; atMoveTiming: TradeSnapshotTiming | null; currentObservedAt: string | null };
 
 const recovered = recoveredJson as RecoveredTradePrices;
+const expertEstimates = expertEstimatesJson as Pick<RecoveredTradePrices, "prices">;
 const HISTORICAL_MARKET_WINDOW_MS = TRADE_SNAPSHOT_WINDOW_MS;
 
 function record(value: string | null): Record<string, number> {
@@ -121,7 +123,8 @@ export default async function TransactionsPage({ searchParams, review = false }:
     const retiredSource = verifiedRetirement(sleeperId, player?.nflTeam);
     const profile = profileHistory.get(sleeperId);
     const daily = recovered.prices[activeTransactionId]?.["player:" + sleeperId] ??
-      (profile ? priorDayPrice(profile.history, date.getTime(), [profile.profile]) : null);
+      (profile ? priorDayPrice(profile.history, date.getTime(), [profile.profile]) : null) ??
+      expertEstimates.prices[activeTransactionId]?.["player:" + sleeperId];
     const archiveQuote = draftQuotes.get(sleeperId);
     if (!player) return { id: `player:${sleeperId}`, sleeperId, playerId: null, label: history.players[sleeperId] ? `${history.players[sleeperId].name} (${history.players[sleeperId].position})` : `Sleeper player ${sleeperId}`, assetType: "player", atTradeValue: daily?.value ?? null, historicalDaily: daily, currentValue: archiveQuote?.value ?? (retiredSource ? 0 : null), currentValueIsRetired: !archiveQuote && !!retiredSource, retiredSource: !archiveQuote ? retiredSource : undefined, currentDailyDate: archiveQuote?.date ?? null, currentObservedAt: null, atMoveObservedAt: null, atMoveTiming: null };
     const atMove = selectTradeSnapshot(
@@ -163,7 +166,7 @@ export default async function TransactionsPage({ searchParams, review = false }:
     const draftedRetirement = resolution ? verifiedRetirement(resolution.playerId, drafted?.nflTeam) : undefined;
     const draftedRetiredEstimate = !!draftedRetirement && !draftedQuote && (!draftedMarket || draftedMarket.isStale || draftedMarket.currentValue === null);
     const frozen = frozenPrices.get(activeTransactionId)?.[`pick:${pick.season}:${pick.round}:${pick.roster_id}`];
-    const daily = recovered.prices[activeTransactionId]?.[`pick:${pick.season}:${pick.round}:${pick.roster_id}`];
+    const daily = recovered.prices[activeTransactionId]?.[`pick:${pick.season}:${pick.round}:${pick.roster_id}`] ?? expertEstimates.prices[activeTransactionId]?.[`pick:${pick.season}:${pick.round}:${pick.roster_id}`];
     const currentValue = resolution ? null : currentPickMarketValue(pickMarket, Number(pick.season), pick.round, null);
     const currentObservedAt = currentValue === null ? null : pickMarket.filter(row => Number(row.season) === Number(pick.season) && row.round === pick.round).map(row => row.sourceUpdatedAt).filter(Boolean).sort()[0] ?? null;
     return {

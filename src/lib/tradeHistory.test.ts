@@ -75,6 +75,26 @@ test('duplicate identical KTC daily points are accepted, conflicting values are 
   assert.equal(priorDayPrice([{d:'210505',v:400},{d:'210505',v:400}],trade,[])?.value,400);
   assert.equal(priorDayPrice([{d:'210505',v:400},{d:'210505',v:401}],trade,[]),null);
 });
+test('converted expert estimates use verified pre-trade snapshots and never replace recovered KTC prices', async () => {
+  const { default: converted } = await import('../data/dynastyprocess-historical-estimates.json');
+  const { default: recovered } = await import('../data/trade-chart-prices.json');
+  const trades = new Map(history.seasons.flatMap(s => s.trades).map(t => [t.transaction_id,t]));
+  for (const [id, prices] of Object.entries(converted.prices)) {
+    const trade = trades.get(id); assert.ok(trade, id);
+    for (const [asset, raw] of Object.entries(prices)) {
+      const price = raw as { value:number; date:string; observedAt:string; originalValue:number; calibrationSamples:number; typicalError:number; method:string; sourceUrls:string[] };
+      assert.equal(price.method,'DYNASTYPROCESS_ESTIMATE');
+      if (asset.startsWith('player:')) assert.ok(Object.hasOwn(trade.adds ?? {}, asset.slice(7)), asset);
+      else assert.ok((trade.draft_picks as {season:string;round:number;roster_id:number}[]).some(p => asset === `pick:${p.season}:${p.round}:${p.roster_id}`), asset);
+      assert.ok(!Object.hasOwn((recovered.prices as Record<string,Record<string,unknown>>)[id] ?? {},asset));
+      assert.ok(Date.parse(price.observedAt) <= trade.created && Date.parse(price.observedAt) >= trade.created - 7 * 86400000);
+      assert.ok(price.date <= price.observedAt.slice(0,10));
+      assert.ok(price.value > 0 && price.value <= 9999 && price.originalValue > 0);
+      assert.ok(price.calibrationSamples >= 100 && price.typicalError <= 600);
+      assert.match(price.sourceUrls[0],/^https:\/\/github\.com\/dynastyprocess\/data\/blob\//);
+    }
+  }
+});
 
 test('recovered historical prices have unique identities, valid prior dates and official source links', async () => {
   const { default: recovered } = await import('../data/trade-chart-prices.json');
