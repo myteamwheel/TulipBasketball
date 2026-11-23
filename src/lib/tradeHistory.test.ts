@@ -69,6 +69,12 @@ test('daily historical fallback uses only the prior date and never the trade day
   assert.equal(price?.value,4000); assert.equal(price?.date,'2021-05-05');
   assert.equal(priorDayPrice(rows,Date.parse('2021-05-09T12:00:00Z'),[]),null);
 });
+test('duplicate identical KTC daily points are accepted, conflicting values are withheld', async () => {
+  const { priorDayPrice } = await import('./historicalKtc');
+  const trade = Date.parse('2021-05-06T12:00:00Z');
+  assert.equal(priorDayPrice([{d:'210505',v:400},{d:'210505',v:400}],trade,[])?.value,400);
+  assert.equal(priorDayPrice([{d:'210505',v:400},{d:'210505',v:401}],trade,[]),null);
+});
 
 test('recovered historical prices have unique identities, valid prior dates and official source links', async () => {
   const { default: recovered } = await import('../data/trade-chart-prices.json');

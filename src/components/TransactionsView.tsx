@@ -1,9 +1,12 @@
 import { getDataHealth } from "@/lib/dataHealth";
 import { verifiedRetirement } from "@/lib/verifiedRetirements";
 import matchupData from "@/data/trade-matchups.json";
+import draftArchive from "@/data/draft-selections.json";
+import profileArchive from "@/data/trade-profile-quotes.json";
+import { recentDraftTradeQuotes } from "@/lib/draftTradeQuotes";
 import { tradeOnField, type MatchupWeek } from "@/lib/tradeOnField";
 import recoveredJson from "@/data/trade-chart-prices.json";
-import type { RecoveredTradePrices } from "@/lib/historicalKtc";
+import { priorDayPrice, type RecoveredTradePrices } from "@/lib/historicalKtc";
 import { getLeagueHistory, getFrozenTradePrices } from "@/lib/leagueHistory";
 import { historicalManager, resolveDraftPick } from "@/lib/tradeLineage";
 import type { ReviewAsset, ReviewTrade } from "@/lib/tradeReview";
@@ -27,7 +30,7 @@ import { faabForRoster, parseFaabTransfers } from "@/lib/tradeFaab";
 const PAGE_SIZE = 15;
 type TxFilter = "all" | "trade" | "moves";
 type TradedPick = { season: string; round: number; roster_id: number; previous_owner_id: number; owner_id: number };
-type Asset = TradeGradeAsset & { sleeperId?: string } & Pick<ReviewAsset, "outcome" | "journey" | "priceSource" | "historicalDaily" | "retiredSource"> & { playerId: string | null; atMoveObservedAt: Date | null; atMoveTiming: TradeSnapshotTiming | null; currentObservedAt: string | null };
+type Asset = TradeGradeAsset & { sleeperId?: string } & Pick<ReviewAsset, "outcome" | "journey" | "priceSource" | "historicalDaily" | "retiredSource" | "currentDailyDate"> & { playerId: string | null; atMoveObservedAt: Date | null; atMoveTiming: TradeSnapshotTiming | null; currentObservedAt: string | null };
 
 const recovered = recoveredJson as RecoveredTradePrices;
 const HISTORICAL_MARKET_WINDOW_MS = TRADE_SNAPSHOT_WINDOW_MS;
@@ -101,6 +104,8 @@ export default async function TransactionsPage({ searchParams, review = false }:
   const sleeperIds = [...new Set([...transactions.flatMap((tx) => [...Object.keys(record(tx.adds)), ...Object.keys(record(tx.drops))]), ...history.seasons.flatMap(s => s.drafts.flatMap(d => d.picks.map(p => p.playerId)))])];
   const players = await prisma.player.findMany({ where: { sleeperId: { in: sleeperIds } }, select: { id: true, sleeperId: true, fullName: true, position: true, nflTeam: true } });
   const [series, currentMarket] = await Promise.all([getObservationSeries(players.map((p) => p.id)), computeMarketDataForPlayers(players.map((p) => p.id))]);
+  const draftQuotes = recentDraftTradeQuotes([...draftArchive.picks, ...profileArchive.quotes], new Date());
+  const profileHistory = new Map(profileArchive.quotes.map(quote => [quote.playerId, quote]));
   const managerByRoster = new Map(managers.map((m) => [m.sleeperRosterId, m]));
   const playerBySleeper = new Map(players.map((p) => [p.sleeperId, p]));
   const pickSnapshots = historicalPickSnapshots(refreshRuns);
@@ -114,16 +119,20 @@ export default async function TransactionsPage({ searchParams, review = false }:
   function playerAsset(sleeperId: string, date: Date): Asset {
     const player = playerBySleeper.get(sleeperId);
     const retiredSource = verifiedRetirement(sleeperId, player?.nflTeam);
-    const daily = recovered.prices[activeTransactionId]?.["player:" + sleeperId];
-    if (!player) return { id: `player:${sleeperId}`, sleeperId, playerId: null, label: history.players[sleeperId] ? `${history.players[sleeperId].name} (${history.players[sleeperId].position})` : `Sleeper player ${sleeperId}`, assetType: "player", atTradeValue: daily?.value ?? null, historicalDaily: daily, currentValue: retiredSource ? 0 : null, currentValueIsRetired: !!retiredSource, retiredSource, currentObservedAt: null, atMoveObservedAt: null, atMoveTiming: null };
+    const profile = profileHistory.get(sleeperId);
+    const daily = recovered.prices[activeTransactionId]?.["player:" + sleeperId] ??
+      (profile ? priorDayPrice(profile.history, date.getTime(), [profile.profile]) : null);
+    const archiveQuote = draftQuotes.get(sleeperId);
+    if (!player) return { id: `player:${sleeperId}`, sleeperId, playerId: null, label: history.players[sleeperId] ? `${history.players[sleeperId].name} (${history.players[sleeperId].position})` : `Sleeper player ${sleeperId}`, assetType: "player", atTradeValue: daily?.value ?? null, historicalDaily: daily, currentValue: archiveQuote?.value ?? (retiredSource ? 0 : null), currentValueIsRetired: !archiveQuote && !!retiredSource, retiredSource: !archiveQuote ? retiredSource : undefined, currentDailyDate: archiveQuote?.date ?? null, currentObservedAt: null, atMoveObservedAt: null, atMoveTiming: null };
     const atMove = selectTradeSnapshot(
       series.get(player.id) ?? [],
       date,
       (observation) => observation.validationStatus === "VALID",
     );
     const market = currentMarket.get(player.id);
+    const fallback = (!market || market.isStale || market.currentValue === null) ? archiveQuote : undefined;
     const frozen = frozenPrices.get(activeTransactionId)?.[player.id];
-    const retiredEstimate = !!retiredSource && (!market || market.isStale || market.currentValue === null);
+    const retiredEstimate = !!retiredSource && !fallback && (!market || market.isStale || market.currentValue === null);
     return {
       id: player.id,
       sleeperId,
@@ -132,7 +141,8 @@ export default async function TransactionsPage({ searchParams, review = false }:
       assetType: "player",
       atTradeValue: frozen?.value ?? atMove?.snapshot.value ?? daily?.value ?? null,
       historicalDaily: !frozen && !atMove ? daily : undefined,
-      currentValue: market && !market.isStale && market.currentValue !== null ? market.currentValue : retiredEstimate ? 0 : null,
+      currentValue: market && !market.isStale && market.currentValue !== null ? market.currentValue : fallback?.value ?? (retiredEstimate ? 0 : null),
+      currentDailyDate: fallback?.date ?? null,
       currentValueIsRetired: retiredEstimate,
       retiredSource: retiredEstimate ? retiredSource : undefined,
       currentObservedAt: market && !market.isStale ? market.currentObservedAt : null,
@@ -149,8 +159,9 @@ export default async function TransactionsPage({ searchParams, review = false }:
     const resolution = resolveDraftPick(history, pick.season, pick.round, pick.roster_id);
     const drafted = resolution ? playerBySleeper.get(resolution.playerId) : null;
     const draftedMarket = drafted ? currentMarket.get(drafted.id) : null;
+    const draftedQuote = resolution && (!draftedMarket || draftedMarket.isStale || draftedMarket.currentValue === null) ? draftQuotes.get(resolution.playerId) : undefined;
     const draftedRetirement = resolution ? verifiedRetirement(resolution.playerId, drafted?.nflTeam) : undefined;
-    const draftedRetiredEstimate = !!draftedRetirement && (!draftedMarket || draftedMarket.isStale || draftedMarket.currentValue === null);
+    const draftedRetiredEstimate = !!draftedRetirement && !draftedQuote && (!draftedMarket || draftedMarket.isStale || draftedMarket.currentValue === null);
     const frozen = frozenPrices.get(activeTransactionId)?.[`pick:${pick.season}:${pick.round}:${pick.roster_id}`];
     const daily = recovered.prices[activeTransactionId]?.[`pick:${pick.season}:${pick.round}:${pick.roster_id}`];
     const currentValue = resolution ? null : currentPickMarketValue(pickMarket, Number(pick.season), pick.round, null);
@@ -163,7 +174,8 @@ export default async function TransactionsPage({ searchParams, review = false }:
       atTradeValue: frozen?.value ?? atTradeValue ?? daily?.value ?? null,
       historicalDaily: !frozen && atTradeValue === null ? daily : undefined,
       currentValue,
-      outcome: resolution ? { label: resolution.name, playerId: drafted?.id ?? null, sleeperId: resolution.playerId, pickNumber: resolution.overall, currentValue: draftedMarket && !draftedMarket.isStale && draftedMarket.currentValue !== null ? draftedMarket.currentValue : draftedRetiredEstimate ? 0 : null, currentValueIsRetired: draftedRetiredEstimate, retiredSource: draftedRetiredEstimate ? draftedRetirement : undefined, sourceUrl: `https://sleeper.com/draft/nfl/${resolution.draftId}` } : undefined,
+      outcome: resolution ? { label: resolution.name, playerId: drafted?.id ?? null, sleeperId: resolution.playerId, pickNumber: resolution.overall, currentValue: draftedMarket && !draftedMarket.isStale && draftedMarket.currentValue !== null ? draftedMarket.currentValue : draftedQuote?.value ?? (draftedRetiredEstimate ? 0 : null), currentValueIsRetired: draftedRetiredEstimate, retiredSource: draftedRetiredEstimate ? draftedRetirement : undefined, sourceUrl: `https://sleeper.com/draft/nfl/${resolution.draftId}` } : undefined,
+      currentDailyDate: draftedQuote?.date ?? null,
       priceSource: 'Generic round-level pick market',
       currentObservedAt,
       atMoveObservedAt: frozen ? new Date(frozen.observedAt) : snapshot?.snapshot.observedAt ?? null,

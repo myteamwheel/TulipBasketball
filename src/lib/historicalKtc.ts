@@ -6,7 +6,9 @@ export function priorDayPrice(rows: { d: string; v: number }[], tradeAt: number,
   const date = new Date(tradeAt - 86400000).toISOString().slice(0, 10);
   const compressed = date.slice(2).replaceAll('-', '');
   const matches = rows.filter(row => row.d === compressed && Number.isFinite(row.v) && row.v > 0 && row.v <= 9999);
-  if (matches.length !== 1) return null;
+  // KTC can repeat the same daily point. Identical duplicates are harmless;
+  // conflicting values remain ambiguous at day precision and are withheld.
+  if (!matches.length || new Set(matches.map(row => row.v)).size !== 1) return null;
   return { value: matches[0].v, date, sourceUrls, method: 'PRIOR_DAY_KTC' };
 }
 export function parseKtcDailyHistory(html: string, expectedId: number): { d: string; v: number }[] {

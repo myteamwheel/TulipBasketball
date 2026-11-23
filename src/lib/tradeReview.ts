@@ -17,6 +17,7 @@ export type ReviewAsset = {
   outcome?: { label: string; playerId: string | null; sleeperId: string; pickNumber: number; currentValue: number | null; currentValueIsRetired?: boolean; currentValueIsUnranked?: boolean; retiredSource?: string; sourceUrl: string };
   journey?: { tradeId: string; date: string; label: string }[];
   currentObservedAt?: string | null;
+  currentDailyDate?: string | null;
   atMoveObservedAt: string | null;
   atMoveTiming: TradeSnapshotTiming | null;
 };

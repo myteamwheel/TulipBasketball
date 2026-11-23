@@ -90,6 +90,13 @@ test('used picks and estimated zeroes appear in the main current comparison',()=
  assert.match(matrix,/<strong>A\+<\/strong>/);
  assert.doesNotMatch(html,/Stats Guy/i);
 });
+test('daily archive fallback displays its KTC quote date',()=>{
+ const selected={...asset('Selected Player',2500),currentValue:450,currentDailyDate:'2026-11-22'};
+ const other={...asset('Other Player',3000),currentValue:2000};
+ const rows=[{rosterId:1,name:'Team One',got:[selected],gave:[other],grades:calculateTradeSideGrades({got:[selected],gave:[other]})},{rosterId:2,name:'Team Two',got:[other],gave:[selected],grades:calculateTradeSideGrades({got:[other],gave:[selected]})}];
+ const html=renderToStaticMarkup(React.createElement(TradeReviewCard,{sides:rows}));
+ assert.match(html,/KTC daily quote 2026-11-22/);
+});
 test('Excel export round-trip remains compatible with the UUID override',async()=>{
  const ExcelJS=await import('exceljs');
  const book=new ExcelJS.default.Workbook();
