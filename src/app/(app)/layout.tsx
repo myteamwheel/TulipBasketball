@@ -15,7 +15,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
               <span>Dynasty Boys</span>
               <span className="hidden sm:inline"> <span className="text-emerald-500">·</span> Market Terminal</span>
             </div>
-            <div className="flex shrink-0 items-center gap-3"><span className="hidden text-[10px] text-neutral-600 md:inline">Read-only · auto sync ~8 a.m. ET</span><span className="hidden lg:block"><MotionToggle /></span><ThemeToggle /></div>
+            <div className="flex shrink-0 items-center gap-3"><span className="hidden text-[10px] text-neutral-600 md:inline">Read-only · data updates daily</span><span className="hidden lg:block"><MotionToggle /></span><ThemeToggle /></div>
           </div>
           <div className="border-t border-neutral-900/90"><TopNav /></div>
         </div>

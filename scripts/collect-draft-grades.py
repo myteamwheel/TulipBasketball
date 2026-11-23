@@ -169,7 +169,7 @@ previous = json.loads(OUT.read_text())["picks"] if OUT.exists() else []
 old_ids = {p["id"] for p in previous if not p["auction"]}
 if not old_ids.issubset({p["id"] for p in selections}):
     raise ValueError("Previous selections missing; retaining prior archive")
-result = {"checked":today.isoformat(),"picks":selections}
+result = {"checked":today.isoformat(),"checkedAt":datetime.now(timezone.utc).isoformat(),"picks":selections}
 temp = OUT.with_suffix(".tmp")
 temp.write_text(json.dumps(result,ensure_ascii=False,separators=(",",":"))+"\n")
 temp.replace(OUT)

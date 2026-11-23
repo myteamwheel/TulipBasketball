@@ -2,6 +2,7 @@
 
 import type { DraftContribution } from "@/lib/draftContributions";
 import { useMemo, useState } from "react";
+import { formatDateTimeEastern } from "@/lib/format";
 import { pickLabel, rankManagers, type Grade, type GradedPick, type Lens } from "@/lib/draftGrades";
 
 const PAGE = 16;
@@ -50,12 +51,13 @@ function Leaderboards({picks: picksAll,lens,setLens,currentManagers}:{picks:Grad
       payoff:reaches.length ? reaches.reduce((n,d)=>n+d.score!,0)/reaches.length : null};
   });
   return <section id="draft-leaders" className="scroll-mt-40 space-y-4">
-    <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-2xl font-bold">Drafter leaderboard</h2><p className={muted}>Current managers only, credited for selections they personally made. Tied picks share honors.</p></div>
+    <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-2xl font-bold">Drafter leaderboard</h2><p className={muted}>Current managers only, credited for selections they personally made. Small samples are marked. Manager rankings use displayed scores; individual pick rankings use the uncapped calculation to distinguish scores displayed as 100 or 0.</p></div>
       <label className="text-xs">Rank using<select className={control} value={lens} onChange={e=>setLens(e.target.value as Lens)}><option value="outcome">Grade now</option><option value="entry">Grade at draft</option></select></label></div>
     <div className="grid gap-2 sm:grid-cols-3">{[["Best pick",awards(best)],["Worst pick",awards(worst)],["Most F selections",maxF ? managers.filter(m=>m.fs===maxF).map(m=>m.name).join(" · ")+` (${maxF})` : "None"]].map(([label,v])=><div key={label} className={box+" p-3"}><h3 className={'text-xs font-semibold '+muted}>{label}</h3><p className="mt-1 font-semibold">{v}</p></div>)}</div>
-    <div className={box+" overflow-hidden"}><table className="w-full text-left text-sm"><caption className="p-3 text-left font-semibold">Best to worst by average score</caption><thead className="bg-[var(--surface-muted)] text-xs"><tr>{["Manager","Graded / picks","Avg / 100","Fs"].map(c=><th key={c} className="p-2 sm:p-3">{c}</th>)}</tr></thead>
-      <tbody>{managers.map(m=><tr key={m.owner} className="border-t border-[var(--border)]"><th className="break-all p-2 text-left font-semibold sm:p-3">{m.name}</th><td className="p-2">{m.graded} / {m.count}</td><td className="p-2 font-bold">{m.average?.toFixed(1) ?? "—"}</td><td className="p-2">{m.fs}</td></tr>)}</tbody></table></div>
+    <div className={box+" overflow-x-auto"}><table className="w-full text-left text-sm"><caption className="p-3 text-left font-semibold">Best to worst by average score</caption><thead className="bg-[var(--surface-muted)] text-xs"><tr>{["Manager","Graded / picks","Avg / 100","Fs"].map(c=><th key={c} className="p-2 sm:p-3">{c}</th>)}</tr></thead>
+      <tbody>{managers.map(m=><tr key={m.owner} className="border-t border-[var(--border)]"><th className="break-all p-2 text-left font-semibold sm:p-3">{m.name}{m.graded > 0 && m.graded < 5 ? <span className="ml-1 text-xs font-normal text-[var(--text-muted)]">small sample</span> : null}</th><td className="p-2">{m.graded} / {m.count}</td><td className="p-2 font-bold">{m.average?.toFixed(1) ?? "—"}</td><td className="p-2">{m.fs}</td></tr>)}</tbody></table></div>
     <div className={box+" overflow-x-auto"}><table className="w-full text-left text-sm"><caption className="p-3 text-left font-semibold">Drafting style · current managers <label className="ml-2 text-xs font-normal">Sort <select className={control} value={styleSort} onChange={e=>setStyleSort(e.target.value)}><option value="deviation">Most off-script</option><option value="safe">Most consensus-aligned</option><option value="best">Best reach outcomes</option><option value="worst">Worst reach outcomes</option></select></label></caption><thead className="bg-[var(--surface-muted)] text-xs"><tr>{["Manager","Compared","Avg deviation","Reaches","Reach grade now"].map(c=><th key={c} className="p-2">{c}</th>)}</tr></thead><tbody>{managerStyles.sort((a,b)=>{ const x=styleSort === "best" || styleSort === "worst" ? a.payoff : a.deviation; const y=styleSort === "best" || styleSort === "worst" ? b.payoff : b.deviation; return x === null ? (y === null ? 0 : 1) : y === null ? -1 : (styleSort === "safe" || styleSort === "worst" ? x-y : y-x); }).map(m=><tr key={m.owner} className="border-t border-[var(--border)]"><th className="p-2 text-left">{m.name}</th><td className="p-2">{m.sample}</td><td className="p-2">{m.deviation?.toFixed(1) ?? "—"} spots</td><td className="p-2">{m.reachCount}</td><td className="p-2">{m.payoff?.toFixed(1) ?? "—"}</td></tr>)}</tbody></table><p className={'p-3 text-xs '+muted}>Consensus is estimated from KTC values before the draft among players selected in that draft. Average deviation is the absolute difference between draft order and KTC order. Reaches were selected earlier than their KTC order. A lower deviation suggests a safer, more consensus-aligned drafter. Reach grade is the average current score for reaches with a current grade. Counts show the sample; this is not Sleeper mock ADP.</p></div>
+    <div className={box+" p-4"}><h3 className="font-bold">Top draft picks</h3><p className={'text-xs '+muted}>Sorted by the uncapped calculation. Displayed grades stop at 100.</p><ol className="mt-2 space-y-2">{ranked.slice(0,5).map((p,index)=><li key={p.id} className="text-sm">{index+1}. <strong>{p.name}</strong> · {p.year} {pickLabel(p)} · {p.manager} · {p[lens]!.letter} {p[lens]!.score}/100</li>)}</ol></div>
     <div className="grid gap-3 sm:grid-cols-2">{[["Best drafter by year",years.map(y=>[String(y),leaders(picks.filter(p=>p.year===y),lens)])],["Best drafter by rookie round",rounds.map(r=>["Round "+r,leaders(rookie.filter(p=>p.round===r),lens)])]].map(([title,items])=><div key={String(title)} className={box+" p-4"}><h3 className="font-bold">{String(title)}</h3><p className={'mb-2 text-xs '+muted}>By average score · graded picks in parentheses</p>{(items as string[][]).length===0 && <p className={muted}>No rookie rounds in this season.</p>}{(items as string[][]).map(([key,val])=><div key={key} className="grid grid-cols-[4.25rem_1fr] gap-2 border-t border-[var(--border)] py-2 text-sm"><strong>{key}</strong><span>{val}</span></div>)}</div>)}</div>
   </section>;
 }
@@ -70,46 +72,48 @@ function PickCard({p,today,rows,contribution,contributionChecked,contributionCov
     <p className={'mb-3 text-sm '+muted}>Picked by <strong>{p.manager ?? "Unknown selector"}</strong>{p.team && p.team!==p.manager ? " · "+p.team : ""}</p>
     <div className="grid grid-cols-2 overflow-hidden rounded-lg border border-[var(--border)]">
       {([["At draft",p.entry,p.at],["Now",p.outcome,p.current]] as const).map(([title,g,quote])=><div key={title} className="min-w-0 border-r border-[var(--border)] bg-[var(--surface-muted)] p-2 last:border-0 sm:p-3">
-        <div className={'text-xs font-semibold '+muted}>{title}</div><div className="my-1 flex items-center gap-2"><Badge g={g}/><span className="text-sm">{g ? g.score+"/100" : "Unrated"}</span></div>
-        <p className="text-sm font-semibold">{quote ? format(quote.value)+" KTC" : "KTC unavailable"}</p><p className={'text-xs '+muted}>{quote?.date ?? "No dated quote"}</p></div>)}
+        <div className={'text-xs font-semibold '+muted}>{title}{title === "Now" && Date.parse(today) - Date.parse(p.start) < 2 * 365.25 * 86400000 ? " · provisional" : ""}</div><div className="my-1 flex items-center gap-2"><Badge g={g}/><span className="text-sm">{g ? g.score+"/100" : "Unrated"}</span></div>
+        <p className="text-sm font-semibold">{quote ? format(quote.value)+(quote.value === 0 ? " · unranked / zero estimate" : " KTC") : "KTC unavailable"}</p><p className={'text-xs '+muted}>{quote?.date ?? "No dated quote"}</p></div>)}
     </div>
     <div className="mt-3 rounded-lg bg-[var(--surface-muted)] p-3 text-sm">
       <p className="font-semibold">Next four picks · hindsight</p>
-      {better.length ? <><p className={muted}>{better.length} of {comparable.length} comparable selections have higher current KTC value.</p><ul className="mt-1 space-y-1">{better.map(candidate=><li key={candidate.id}><strong>{candidate.name}</strong> · {pickLabel(candidate)} · {format(candidate.current!.value)} KTC · +{format(candidate.current!.value-p.current!.value)} · {candidate.outcome ? candidate.outcome.letter + " " + candidate.outcome.score + "/100" : "Unrated"}</li>)}</ul></> :
+      {better.length ? <><p className={muted}>{better.length} of {comparable.length} comparable selections have higher current KTC value.</p><ul className="mt-1 space-y-1">{better.map(candidate=><li key={candidate.id}><strong>{candidate.name}</strong> · {pickLabel(candidate)} · {format(candidate.current!.value)} KTC · +{format(candidate.current!.value-p.current!.value)} · {candidate.outcome ? candidate.outcome.letter + " " + candidate.outcome.score + "/100" : "Unrated"}{candidate.current!.value <= p.current!.value * 1.1 ? " · gap below penalty threshold" : candidate.pos === p.pos ? " · same position" : ""}</li>)}</ul></> :
         <p className={muted}>{!p.current ? "Current value unavailable for this selection." : !alternatives.length ? "No later picks in this draft." : !comparable.length ? "Current values unavailable for the next picks." : "No higher current KTC value among the next four picks with available values."}</p>}
-      {p.outcome && p.outcome.penalty > 0 && <p className={'mt-1 text-xs '+muted}>Nearby alternatives reduced this score by {p.outcome.penalty} points.</p>}
+      {p.outcome && p.outcome.penalty > 0 && <p className={'mt-1 text-xs '+muted}>Nearby alternatives reduced this score by {p.outcome.penalty} {p.outcome.penalty === 1 ? "point" : "points"}.</p>}
       {comparable.length < alternatives.length && <p className={'text-xs '+muted}>{alternatives.length-comparable.length} of the next {alternatives.length} picks lack a current value.</p>}
     </div>
-    <dl className="mt-3 grid grid-cols-2 gap-3 text-sm"><div><dt className={'text-xs '+muted}>KTC at two years</dt><dd className="font-semibold">{p.two ? format(p.two.value) : p.due>today ? "Not due yet" : "Unavailable"}</dd><dd className={'text-xs '+muted}>{p.two ? (p.two.date!==p.due ? "Approx. · " : "")+p.two.date : (p.due>today ? "Due " : "Target ")+p.due}</dd></div>
-      <div><dt className={'text-xs '+muted}>Fantasy points / game</dt><dd className="font-semibold">{p.games ? (p.points/p.games).toFixed(2) : "—"}</dd><dd className={'text-xs '+muted}>{format(p.games)} {p.games === 1 ? "game" : "games"} since draft</dd></div>
+    {p.outcome?.breakdown ? <details className="mt-3 text-sm"><summary className="min-h-11 cursor-pointer py-2 font-semibold">See how the current grade was calculated</summary><div className={'space-y-1 '+muted}><p>Estimated value of this draft slot · {format(p.outcome.breakdown.benchmark)} KTC</p><p>Market and history score · {p.outcome.breakdown.marketScore.toFixed(1)}/100 · {p.outcome.breakdown.historyQuotes} anniversary {p.outcome.breakdown.historyQuotes === 1 ? "quote" : "quotes"} used</p><p>Production adjustment · {p.outcome.breakdown.productionAdjustment >= 0 ? "+" : ""}{p.outcome.breakdown.productionAdjustment.toFixed(1)} points</p><p>Nearby-pick deduction · −{p.outcome.penalty} points</p><p>Calculated score · {p.outcome.breakdown.rawScore.toFixed(1)} before the 0–100 display limit</p><p>Nearby values must be more than 10% higher to affect the grade. Same-position picks within two places have greater weight.</p></div></details> : null}
+    <dl className="mt-3 grid grid-cols-2 gap-3 text-sm"><div><dt className={'text-xs '+muted}>Fantasy points / game</dt><dd className="font-semibold">{p.games ? (p.points/p.games).toFixed(2) : "—"}</dd><dd className={'text-xs '+muted}>{format(p.games)} {p.games === 1 ? "game" : "games"} since draft</dd></div>
       <div><dt className={'text-xs '+muted}>Total fantasy points</dt><dd className="font-semibold">{p.games ? format(Math.round(p.points * 100) / 100) : "—"}</dd></div></dl>
-    <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-      {([[1,p.one],[3,p.three]] as const).map(([years,quote]) => {
-        const due = new Date(p.start + "T00:00:00Z");
-        due.setUTCFullYear(due.getUTCFullYear() + years);
-        const date = due.toISOString().slice(0,10);
-        return <div key={years}><p className={'text-xs '+muted}>KTC at {years} {years === 1 ? "year" : "years"}</p><p className="font-semibold">{quote ? format(quote.value) : date > today ? "Not due yet" : "Unavailable"}</p><p className={'text-xs '+muted}>{quote ? (quote.date !== date ? "Approx. · " : "") + quote.date : (date > today ? "Due " : "Target ") + date}</p></div>;
-      })}
-    </div>
+    <details className="mt-3 text-sm"><summary className="min-h-11 cursor-pointer py-2 font-semibold">KTC value timeline</summary>
+      <div className="grid grid-cols-2 gap-2">
+        {([[1,p.one],[2,p.two],[3,p.three]] as const).map(([years,quote]) => {
+          const due = new Date(p.start + "T00:00:00Z");
+          due.setUTCFullYear(due.getUTCFullYear() + years);
+          const date = due.toISOString().slice(0,10);
+          return <div key={years}><p className={'text-xs '+muted}>At {years} {years === 1 ? "year" : "years"}</p><p className="font-semibold">{quote ? format(quote.value)+(quote.value === 0 ? " · unranked / zero estimate" : "") : date > today ? "Not due yet" : "Unavailable"}</p><p className={'text-xs '+muted}>{quote ? (quote.date !== date ? "Approx. · " : "") + quote.date : (date > today ? "Due " : "Target ") + date}</p></div>;
+        })}
+      </div>
+    </details>
     <div className="mt-3 rounded-lg bg-[var(--surface-muted)] p-3 text-sm">
       <p className="font-semibold">For the drafting manager</p>
-      <p>{contribution?.starts ? `${contribution.starts} recorded starts · ${format(contribution.points)} starting points` : "No starts found in the available matchup records."}</p>
-      {contribution?.seasons.map(season=><p key={season.year} className={muted}>{season.year} · {season.starts} starts · {format(season.points)} points</p>)}
-      <p className={'text-xs '+muted}>Latest completed matchup data: {contributionCoverage}. Checked {contributionChecked}. Includes starts after reacquisition. Records may be incomplete.</p>
+      <p>{contribution?.starts ? `${contribution.starts} recorded ${contribution.starts === 1 ? "start" : "starts"} · ${format(contribution.points)} starting points` : "No starts found in the available matchup records."}</p>
+      {contribution?.seasons.map(season=><p key={season.year} className={muted}>{season.year} · {season.starts} {season.starts === 1 ? "start" : "starts"} · {format(season.points)} points</p>)}
+      <p className={'text-xs '+muted}>Latest completed matchup data: {contributionCoverage}. Checked {contributionChecked}. Includes starts after reacquisition. Only recorded starting lineups count.</p>{contribution?.coverage.length ? <p className={'text-xs '+muted}>Available lineup weeks · {contribution.coverage.map(c => c.year + ": " + c.weeks).join(" · ")}. Missing weeks cannot be counted.</p> : <p className={'text-xs '+muted}>No matching lineup records were available for this manager.</p>}
     </div>
     <div className="mt-3 border-t border-[var(--border)] pt-3">
       <p className="text-sm font-semibold">Fantasy points per game by season</p>
-      <p className={'text-xs '+muted}>Regular-season averages since selection · league scoring</p>
+      <p className={'text-xs '+muted}>Regular-season averages since selection · shared 0–30 scale · games played shown</p>
       {p.seasons?.length ? <div className="mt-2 space-y-1">{p.seasons.map(season => {
         const avg = season.points / season.games;
-        const max = Math.max(...p.seasons!.map(s => s.points / s.games), 1);
-        return <div key={season.year} className="grid grid-cols-[3rem_1fr_3.5rem] items-center gap-2 text-xs"><span>{season.year}</span><div className="h-2 rounded-full bg-[var(--surface-raised)]"><div className="h-2 rounded-full bg-emerald-500" style={{width: Math.max(0,avg) / max * 100 + "%"}} /></div><span className="text-right font-semibold">{avg.toFixed(1)}</span></div>;
-      })}</div> : <p className={'mt-2 text-sm '+muted}>No games recorded since selection.</p>}
+        const max = 30;
+        return <div key={season.year} className="grid grid-cols-[5rem_1fr_3.5rem] items-center gap-2 text-xs"><span>{season.year} · {season.games}g{season.year === Number(today.slice(0,4)) && Number(today.slice(5,7)) >= 9 ? "*" : ""}</span><div className="h-2 rounded-full bg-[var(--surface-raised)]"><div className="h-2 rounded-full bg-emerald-500" style={{width: Math.min(max, Math.max(0,avg)) / max * 100 + "%"}} /></div><span className="text-right font-semibold">{avg.toFixed(1)} <span className="sr-only">in {season.games} games</span></span></div>;
+      })}</div> : <p className={'mt-2 text-sm '+muted}>No games recorded since selection.</p>}{p.seasons?.some(season => season.year === Number(today.slice(0,4)) && Number(today.slice(5,7)) >= 9) ? <p className={'text-xs '+muted}>* Season in progress as of the data update.</p> : null}
     </div>
   </article>;
 }
 
-export default function DraftGradesBoard({rows,checked,today,currentManagers,contributions,contributionChecked,contributionCoverage}:{rows:GradedPick[];checked:string;today:string;currentManagers:{id:string;name:string}[];contributions:Record<string,DraftContribution>;contributionChecked:string;contributionCoverage:string}) {
+export default function DraftGradesBoard({rows,checked,checkedAt,today,currentManagers,contributions,contributionChecked,contributionCoverage,marketAt,alerts}:{rows:GradedPick[];checked:string;checkedAt:string|null;today:string;currentManagers:{id:string;name:string}[];contributions:Record<string,DraftContribution>;contributionChecked:string;contributionCoverage:string;marketAt:string|null;alerts:string[]}) {
   const [year,setYear]=useState("all"),[owner,setOwner]=useState("all"),[search,setSearch]=useState(""),[order,setOrder]=useState("board"),[page,setPage]=useState(0),[lens,setLens]=useState<Lens>("outcome");
   const seasons=[...new Set(rows.map(p=>p.year))].sort((a,b)=>b-a);
   const season=useMemo(()=>rows.filter(p=>year==="all" || p.year===Number(year)),[rows,year]);
@@ -128,6 +132,7 @@ export default function DraftGradesBoard({rows,checked,today,currentManagers,con
   const pages=Math.max(1,Math.ceil(filtered.length/PAGE));
   return <div className="space-y-6"><header className="space-y-2"><h1 className="text-3xl font-bold tracking-tight">Draft Grades</h1>
     <p className={muted}>{rows.length} selections since {seasons.at(-1)}. Grades are estimates based on available market and production data, credited to the manager who selected the player.</p>
+    <p className={'text-sm '+muted}>Market updated {marketAt ? formatDateTimeEastern(marketAt) : "unavailable"} · draft data updated {checkedAt ? formatDateTimeEastern(checkedAt) : checked} · lineups through {contributionCoverage}, checked {contributionChecked}. <a href="/settings" className="underline">Data health</a></p>{alerts.length ? <p className="rounded-lg bg-[var(--warning-surface)] p-2 text-sm text-[var(--warning)]">{alerts.join(" ")}</p> : null}
     <a href="#draft-leaders" className="inline-block py-1 font-semibold text-[var(--info)] underline">See drafter leaderboard ↓</a></header>
     <details className={box+" p-3 text-sm"}><summary className="cursor-pointer font-semibold">How grades, KTC values and fantasy points work</summary><div className={'mt-2 max-w-3xl space-y-2 '+muted}>
       <p>Draft-day grades compare the player’s KTC value with a class-relative estimate of the pick’s value, using draft-day KTC rankings among players selected in this draft. This estimate is not Sleeper ADP and excludes undrafted players.</p>

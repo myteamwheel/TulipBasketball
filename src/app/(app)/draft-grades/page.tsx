@@ -1,5 +1,6 @@
 import archive from "@/data/draft-selections.json";
 import DraftGradesBoard from "@/components/DraftGradesBoard";
+import { getDataHealth } from "@/lib/dataHealth";
 import { currentDraftQuotes } from "@/lib/draftMarket";
 import { draftContributions, contributionChecked, contributionCoverage } from "@/lib/draftContributions";
 import { getLeagueHistory } from "@/lib/leagueHistory";
@@ -15,11 +16,14 @@ export default async function DraftGradesPage() {
   }));
   const history = await getLeagueHistory();
   const currentManagers = history.seasons[0]?.managers.filter(m => m.ownerId).map(m => ({ id: m.ownerId!, name: m.name })) ?? [];
-  const live = await currentDraftQuotes([...new Set(picks.map(p=>p.playerId))]);
+  const [live, health] = await Promise.all([
+    currentDraftQuotes([...new Set(picks.map(p=>p.playerId))]),
+    getDataHealth().catch(() => null),
+  ]);
   const today = new Date().toISOString().slice(0,10);
   const rows = gradeDrafts(picks.map(p=>{
     const quote = live.get(p.playerId);
     return quote && (!p.now || quote.date >= p.now.date) ? {...p, now:quote} : p;
   }),today);
-  return <DraftGradesBoard rows={rows} checked={archive.checked} today={today} currentManagers={currentManagers} contributions={draftContributions(picks, history)} contributionChecked={contributionChecked} contributionCoverage={contributionCoverage} />;
+  return <DraftGradesBoard rows={rows} checked={archive.checked} checkedAt={(archive as {checkedAt?:string}).checkedAt ?? null} today={today} currentManagers={currentManagers} contributions={draftContributions(picks, history)} contributionChecked={contributionChecked} contributionCoverage={contributionCoverage} marketAt={health?.marketAt ?? null} alerts={health?.alerts.map(a => a.message) ?? []} />;
 }

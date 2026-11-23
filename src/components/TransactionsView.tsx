@@ -1,3 +1,4 @@
+import { getDataHealth } from "@/lib/dataHealth";
 import { verifiedRetirement } from "@/lib/verifiedRetirements";
 import { fetchStatsGuyCurrentSnapshot, withStatsGuyCurrentFallback } from "@/lib/currentTradeValues";
 import matchupData from "@/data/trade-matchups.json";
@@ -237,7 +238,8 @@ export default async function TransactionsPage({ searchParams, review = false }:
       const later = trades.filter(next => next.date > trade.date && next.sides.some(s => s.got.some(a => a.id === asset.id || (asset.outcome?.playerId && a.playerId === asset.outcome.playerId)))).sort((a,b) => a.date.localeCompare(b.date));
       asset.journey = later.map(next => ({ tradeId: next.id, date: next.date, label: next.sides.map(s => s.name).join(' ↔ ') }));
     }
-    return <TradeReviewBoard trades={trades} initialTrade={params.trade} historyCoverage={history.seasons.map(s => ({ season: s.season, complete: s.complete, trades: trades.filter(t => t.season === s.season).length }))} checkedAt={history.checkedAt} chainComplete={history.chainComplete} />;
+    const health = await getDataHealth().catch(() => null);
+    return <TradeReviewBoard marketAt={health?.marketAt ?? null} alerts={health?.alerts.map(a => a.message) ?? []} trades={trades} initialTrade={params.trade} historyCoverage={history.seasons.map(s => ({ season: s.season, complete: s.complete, trades: trades.filter(t => t.season === s.season).length }))} checkedAt={history.checkedAt} chainComplete={history.chainComplete} />;
   }
 
   const renderAsset = (item: Asset, tone: "got" | "gave") => <li key={`${tone}:${item.label}`} className="rounded-md border border-neutral-800 bg-neutral-950 px-2.5 py-2">

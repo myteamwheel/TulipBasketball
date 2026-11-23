@@ -5,7 +5,7 @@ export type Selection = {
   owner: string | null; manager: string | null; team: string | null; profile: string | null;
   at: Quote | null; two: Quote | null; due: string; now: Quote | null; games: number; points: number; seasons?: {year:number; games:number; points:number}[]; one?: Quote | null; three?: Quote | null;
 };
-export type Grade = { letter: string; score: number; edge: number; penalty: number };
+export type Grade = { letter: string; score: number; edge: number; penalty: number; breakdown?: { benchmark: number; marketScore: number; productionAdjustment: number; historyQuotes: number; rawScore: number }; };
 export type GradedPick = Selection & { entry: Grade | null; outcome: Grade | null; current: Quote | null };
 export type Lens = "entry" | "outcome";
 
@@ -16,7 +16,7 @@ export function pickLabel(p: Selection) {
 function makeGrade(raw: number, penalty = 0): Grade {
   const adjusted = Math.max(0, Math.min(100, raw - penalty));
   const score = Math.round(adjusted);
-  return { score, edge: (adjusted - 80) / 100, penalty: Math.round(penalty * 10) / 10,
+  return { score, edge: (raw - penalty - 80) / 100, penalty: Math.round(penalty * 10) / 10,
     letter: score >= 90 ? "A" : score >= 80 ? "B" : score >= 70 ? "C" : score >= 60 ? "D" : "F" };
 }
 
@@ -73,7 +73,10 @@ export function gradeDrafts(picks: Selection[], asOf: string): GradedPick[] {
       const gap = Math.min(1, (value - current.value) / Math.max(2000, current.value));
       return sum + roundWeight * position * proximity * gap;
     }, 0) : 0;
-    const outcome = marketScore === null ? null : makeGrade(marketScore + productionAdjustment, Math.min(10, penalty));
+    const outcome = marketScore === null || benchmark === null ? null : {
+      ...makeGrade(marketScore + productionAdjustment, Math.min(10, penalty)),
+      breakdown: { benchmark, marketScore, productionAdjustment, historyQuotes: checkpoints.length, rawScore: marketScore + productionAdjustment - Math.min(10, penalty) },
+    };
     return { ...p, entry, current, outcome };
   }));
 }

@@ -47,3 +47,13 @@ test("a late pick with useful value is not an F because of a nearby star", () =>
   const revised = picks.map(x => alternatives.some(a=>a.id===x.id) ? {...x,now:{value:9999,date:asOf}} : x.id===p.id ? {...x,now:{value:3000,date:asOf}} : x);
   assert.ok(gradeDrafts(revised,asOf).find(x=>x.id===p.id)!.outcome!.score >= 60);
 });
+test("ranking retains distinctions when displayed grades both reach 100", () => {
+  const first = selected("Ken Walker");
+  assert.ok(first.current);
+  const changed = (value:number) => picks.map(p => p.id === first.id ? {...p,now:{value,date:asOf}} : p);
+  const high = gradeDrafts(changed(9999),asOf).find(p => p.id === first.id)!.outcome!;
+  const lower = gradeDrafts(changed(8500),asOf).find(p => p.id === first.id)!.outcome!;
+  assert.equal(high.score,100);
+  assert.equal(lower.score,100);
+  assert.ok(high.edge > lower.edge);
+});
